@@ -13,6 +13,8 @@ from pathlib import Path
 from io import BytesIO
 from unittest import mock
 
+from garmin_grafana.garmin_fetch import _norm_tag_value
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -71,6 +73,7 @@ def get_fit_activity_summary(fit_file: FitFile) -> List[Dict[str, Any]]:
             "Database_Name": garmin_fetch.INFLUXDB_DATABASE,
             "ActivityID": activity_id,
             "ActivitySelector": activity_selector,
+            "activity_type_tag": _norm_tag_value(activity_type),
         },
         "fields": {
             "Device_ID": file_data.get("serial_number"),
@@ -99,6 +102,7 @@ def get_fit_activity_summary(fit_file: FitFile) -> List[Dict[str, Any]]:
             "Database_Name": garmin_fetch.INFLUXDB_DATABASE,
             "ActivityID": activity_id,
             "ActivitySelector": activity_selector,
+            "activity_type_tag": _norm_tag_value(activity_type),
         },
         "fields": {
             "Device_ID": file_data.get("serial_number"),

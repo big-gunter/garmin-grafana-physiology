@@ -33,6 +33,21 @@ if env_override:
     logging.warning("System ENV variables are overridden with override-default-vars.env")
 
 # %%
+
+def _norm_tag_value(v: object) -> str | None:
+    if v is None:
+        return None
+    s = str(v).strip().lower()
+    if not s:
+        return None
+    s = s.replace(" ", "_")
+    # common normalizations
+    if s in {"inline_skating", "inline-skating", "skating", "inlineskating"}:
+        return "inline_skating"
+    if s in {"bike", "biking", "cycling"}:
+        return "cycling"
+    return s
+
 INFLUXDB_VERSION = os.getenv("INFLUXDB_VERSION",'1') # Your influxdb database version (accepted values are '1' or '3')
 assert INFLUXDB_VERSION in ['1','3'], "Only InfluxDB version 1 or 3 is allowed - please ensure to set this value to either 1 or 3"
 INFLUXDB_HOST = os.getenv("INFLUXDB_HOST",'your.influxdb.hostname') # Required
@@ -647,7 +662,8 @@ def get_activity_summary(date_str):
                     "Device": GARMIN_DEVICENAME,
                     "Database_Name": INFLUXDB_DATABASE,
                     "ActivityID": activity.get('activityId'),
-                    "ActivitySelector": datetime.strptime(activity["startTimeGMT"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.UTC).strftime('%Y%m%dT%H%M%SUTC-') + (activity.get('activityType') or {}).get('typeKey', "Unknown")
+                    "ActivitySelector": datetime.strptime(activity["startTimeGMT"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.UTC).strftime('%Y%m%dT%H%M%SUTC-') + (activity.get('activityType') or {}).get('typeKey', "Unknown"),
+                    "activity_type_tag": _norm_tag_value((activity.get("activityType") or {}).get("typeKey")),
                 },
                 "fields": {
                     "Activity_ID": activity.get('activityId'),
@@ -680,7 +696,8 @@ def get_activity_summary(date_str):
                     "Device": GARMIN_DEVICENAME,
                     "Database_Name": INFLUXDB_DATABASE,
                     "ActivityID": activity.get('activityId'),
-                    "ActivitySelector": datetime.strptime(activity["startTimeGMT"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.UTC).strftime('%Y%m%dT%H%M%SUTC-') + (activity.get('activityType') or {}).get('typeKey', "Unknown")
+                    "ActivitySelector": datetime.strptime(activity["startTimeGMT"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.UTC).strftime('%Y%m%dT%H%M%SUTC-') + (activity.get('activityType') or {}).get('typeKey', "Unknown"),
+                    "activity_type_tag": _norm_tag_value((activity.get("activityType") or {}).get("typeKey")),
                 },
                 "fields": {
                     "Activity_ID": activity.get('activityId'),
@@ -701,7 +718,7 @@ def fetch_activity_GPS(activityIDdict): # Uses FIT file by default, falls back t
         activity_type = activityIDdict[activityID]
         if (activityID in PARSED_ACTIVITY_ID_LIST) and (not FORCE_REPROCESS_ACTIVITIES):
             logging.info(f"Skipping : Activity ID {activityID} has already been processed within current runtime")
-            return []
+            continue
         if (activityID in PARSED_ACTIVITY_ID_LIST) and (FORCE_REPROCESS_ACTIVITIES):
             logging.info(f"Re-processing : Activity ID {activityID} (FORCE_REPROCESS_ACTIVITIES is on)")
         try:
@@ -734,7 +751,8 @@ def fetch_activity_GPS(activityIDdict): # Uses FIT file by default, falls back t
                                     "Device": GARMIN_DEVICENAME,
                                     "Database_Name": INFLUXDB_DATABASE,
                                     "ActivityID": activityID,
-                                    "ActivitySelector": activity_start_time.strftime('%Y%m%dT%H%M%SUTC-') + activity_type
+                                    "ActivitySelector": activity_start_time.strftime('%Y%m%dT%H%M%SUTC-') + activity_type,
+                                    "sport_tag": _norm_tag_value(activity_type),
                                 },
                                 "fields": {
                                     "ActivityName": activity_type,
@@ -769,7 +787,9 @@ def fetch_activity_GPS(activityIDdict): # Uses FIT file by default, falls back t
                                     "Device": GARMIN_DEVICENAME,
                                     "Database_Name": INFLUXDB_DATABASE,
                                     "ActivityID": activityID,
-                                    "ActivitySelector": activity_start_time.strftime('%Y%m%dT%H%M%SUTC-') + activity_type
+                                    "ActivitySelector": activity_start_time.strftime('%Y%m%dT%H%M%SUTC-') + activity_type,
+                                    "sport_tag": _norm_tag_value(session_record.get("sport")),
+                                    "sub_sport_tag": _norm_tag_value(session_record.get("sub_sport")),
                                 },
                                 "fields": {
                                     "Index": int(session_record.get('message_index', -1)) + 1,
@@ -821,7 +841,8 @@ def fetch_activity_GPS(activityIDdict): # Uses FIT file by default, falls back t
                                     "Device": GARMIN_DEVICENAME,
                                     "Database_Name": INFLUXDB_DATABASE,
                                     "ActivityID": activityID,
-                                    "ActivitySelector": activity_start_time.strftime('%Y%m%dT%H%M%SUTC-') + activity_type
+                                    "ActivitySelector": activity_start_time.strftime('%Y%m%dT%H%M%SUTC-') + activity_type,
+                                    "sport_tag": _norm_tag_value(lap_record.get("sport")),
                                 },
                                 "fields": {
                                     "Index": int(lap_record.get('message_index', -1)) + 1,
