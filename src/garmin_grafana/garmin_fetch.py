@@ -55,9 +55,23 @@ def _bool_env(name: str, default: bool = False) -> bool:
         return default
     return str(v).strip().lower() in {"true", "t", "1", "yes", "y"}
 
+USERPROFILE_WRITE_ONCE_PER_DAY = _bool_env("USERPROFILE_WRITE_ONCE_PER_DAY", default=True)
+
 def _csv_env(name: str, default: str) -> list[str]:
     raw = os.getenv(name, default)
     return [s.strip() for s in str(raw).split(",") if s.strip()]
+
+def _safe_b64decode_env(name: str) -> str | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return None
+    try:
+        return base64.b64decode(raw).decode("utf-8")
+    except Exception:
+        logging.exception(f"Failed to base64 decode env var {name}")
+        return None
+
+USERPROFILE_WRITE_ONCE_PER_DAY = _bool_env("USERPROFILE_WRITE_ONCE_PER_DAY", default=True)
 
 INFLUXDB_VERSION = os.getenv("INFLUXDB_VERSION", "1")  # accepted values are '1' or '3'
 assert INFLUXDB_VERSION in ["1", "3"], "Only InfluxDB version 1 or 3 is allowed - please ensure to set this value to either 1 or 3"
@@ -68,14 +82,10 @@ INFLUXDB_PASSWORD = os.getenv("INFLUXDB_PASSWORD", "influxdb_access_password")  
 INFLUXDB_DATABASE = os.getenv("INFLUXDB_DATABASE", "GarminStats")  # Required
 INFLUXDB_V3_ACCESS_TOKEN = os.getenv("INFLUXDB_V3_ACCESS_TOKEN", "")  # required only for InfluxDB V3
 
-TOKEN_DIR = os.getenv("TOKEN_DIR", "~/.garminconnect")  # optional
+TOKEN_DIR = os.path.expanduser(os.getenv("TOKEN_DIR", "~/.garminconnect"))  # optional
 GARMINCONNECT_EMAIL = os.environ.get("GARMINCONNECT_EMAIL", None)  # optional
 
-GARMINCONNECT_PASSWORD = (
-    base64.b64decode(os.getenv("GARMINCONNECT_BASE64_PASSWORD")).decode("utf-8")
-    if os.getenv("GARMINCONNECT_BASE64_PASSWORD") is not None
-    else None
-)
+GARMINCONNECT_PASSWORD = _safe_b64decode_env("GARMINCONNECT_BASE64_PASSWORD")
 
 GARMINCONNECT_IS_CN = _bool_env("GARMINCONNECT_IS_CN", default=False)  # optional if Chinese account
 GARMIN_DEVICENAME = os.getenv("GARMIN_DEVICENAME", "Unknown")  # optional, attempts to set automatically if not given
@@ -115,6 +125,11 @@ FORCE_REPROCESS_ACTIVITIES = _bool_env("FORCE_REPROCESS_ACTIVITIES", default=Tru
 
 USER_TIMEZONE = os.getenv("USER_TIMEZONE", "")  # optional
 PARSED_ACTIVITY_ID_LIST = []
+# --- gender write guard ---
+# ensures UserProfile is written only once per day
+USER_PROFILE_WRITTEN_DATES: set[str] = set()
+# FIT-derived gender overrides profile gender
+FIT_GENDER_CACHE: dict[str, str] = {}
 IGNORE_ERRORS = _bool_env("IGNORE_ERRORS", default=False)
 
 # %%
@@ -211,7 +226,7 @@ def garmin_login():
             logging.info(
                 "login to Garmin Connect successful using stored session tokens. Please restart the script. Saved logins will be used automatically"
             )
-            exit()  # terminating script
+            sys.exit(0)  # terminating script
 
         except (FileNotFoundError, GarthHTTPError, GarminConnectAuthenticationError, requests.exceptions.HTTPError) as err:
             logging.error(str(err))
@@ -229,43 +244,51 @@ def _norm_gender(v: object) -> str:
         return "female"
     return "unknown"
 
+def _gender_code(g: str) -> int:
+    return 1 if g == "male" else 2 if g == "female" else 0
+
 def _get_user_gender_from_garmin() -> str:
-    """
-    Attempt to extract gender from Garmin profile dict. Falls back to env override, then unknown.
-    """
     if USER_GENDER_OVERRIDE:
         return _norm_gender(USER_GENDER_OVERRIDE)
 
     try:
-        prof = (garmin_obj.garth.profile or {})
+        # garminconnect library commonly exposes get_user_profile()
+        prof = garmin_obj.get_user_profile() if garmin_obj is not None else {}
+        if isinstance(prof, dict):
+            # try common keys
+            for key in ("gender", "sex"):
+                if key in prof:
+                    return _norm_gender(prof.get(key))
+            if "userProfile" in prof and isinstance(prof["userProfile"], dict):
+                return _norm_gender(prof["userProfile"].get("gender") or prof["userProfile"].get("sex"))
     except Exception:
-        prof = {}
-
-    for k in ("gender", "sex", "userGender", "genderType"):
-        v = prof.get(k) if isinstance(prof, dict) else None
-        if v not in (None, "", "null"):
-            return _norm_gender(v)
-
-    user_profile = prof.get("userProfile") if isinstance(prof, dict) else None
-    if isinstance(user_profile, dict):
-        for k in ("gender", "sex", "userGender"):
-            v = user_profile.get(k)
-            if v:
-                return _norm_gender(v)
+        logging.exception("Unable to extract gender from Garmin user profile")
 
     return "unknown"
 
-def write_user_profile_point(date_str: str) -> list[dict]:
-    gender = _get_user_gender_from_garmin()
-    tags = {"Device": GARMIN_DEVICENAME, "Database_Name": INFLUXDB_DATABASE, "gender": gender}
+def write_user_profile_point(date_str: str, gender: str | None = None) -> list[dict]:
+    """
+    Canonical daily UserProfile writer.
 
-    if TAG_MEASUREMENTS_WITH_USER_EMAIL:
-        try:
-            tags["User_ID"] = garmin_obj.garth.profile.get("userName", "Unknown")
-        except Exception:
-            tags["User_ID"] = "Unknown"
+    Critical rules:
+      - No 'source' tag (prevents duplicate daily series).
+      - Same timestamp/tagset => later writes overwrite earlier values.
+      - 'gender' string field only written when known.
+    """
+    g = _norm_gender(gender) if gender is not None else _get_user_gender_from_garmin()
 
-    fields = {"gender_is_known": 0 if gender == "unknown" else 1}
+    tags = {
+        "Device": GARMIN_DEVICENAME,
+        "Database_Name": INFLUXDB_DATABASE,
+    }
+
+    fields: dict[str, object] = {
+        "gender_code": _gender_code(g),
+        "gender_is_known": 0 if g == "unknown" else 1,
+    }
+
+    if g != "unknown":
+        fields["gender"] = g  # only when known
 
     return [
         {
@@ -276,20 +299,66 @@ def write_user_profile_point(date_str: str) -> list[dict]:
         }
     ]
 
+def _clean_point(point: dict) -> dict | None:
+    """
+    Guardrails for Influx writes:
+      - ensure tags/fields exist
+      - drop None fields
+      - drop point if fields become empty
+    """
+    if not isinstance(point, dict):
+        return None
+    fields = point.get("fields") or {}
+    if not isinstance(fields, dict):
+        fields = {}
+    fields = {k: v for k, v in fields.items() if v is not None}
+    if not fields:
+        return None
+    point["fields"] = fields
+
+    tags = point.get("tags") or {}
+    if not isinstance(tags, dict):
+        tags = {}
+    # ensure tag values are strings (Influx expects tag values as strings)
+    tags = {str(k): ("" if v is None else str(v)) for k, v in tags.items()}
+    point["tags"] = tags
+    return point
+
 def write_points_to_influxdb(points):
     write_chunk_size = 20000
     try:
-        if len(points) != 0:
-            if TAG_MEASUREMENTS_WITH_USER_EMAIL:
-                for item in points:
-                    item.setdefault("tags", {})
-                    item["tags"].update({"User_ID": garmin_obj.garth.profile.get("userName", "Unknown")})
-            for i in range(0, len(points), write_chunk_size):
-                if INFLUXDB_VERSION == "1":
-                    influxdbclient.write_points(points[i : i + write_chunk_size])
-                else:
-                    influxdbclient.write(record=points[i : i + write_chunk_size])
-            logging.info("Success : updated influxDB database with new points")
+        if not points:
+            return
+
+        # clean & de-null
+        cleaned = []
+        for p in points:
+            cp = _clean_point(p)
+            if cp is not None:
+                cleaned.append(cp)
+
+        if not cleaned:
+            return
+
+        if TAG_MEASUREMENTS_WITH_USER_EMAIL:
+            user_id = "Unknown"
+            try:
+                if garmin_obj is not None and isinstance(garmin_obj.garth.profile, dict):
+                    user_id = garmin_obj.garth.profile.get("userName", "Unknown")
+            except Exception:
+                pass
+            for item in cleaned:
+                item.setdefault("tags", {})
+                item["tags"].update({"User_ID": user_id})
+
+        for i in range(0, len(cleaned), write_chunk_size):
+            batch = cleaned[i : i + write_chunk_size]
+            if INFLUXDB_VERSION == "1":
+                influxdbclient.write_points(batch)
+            else:
+                influxdbclient.write(record=batch)
+
+        logging.info("Success : updated influxDB database with new points")
     except (InfluxDBClientError, InfluxDBError) as err:
         logging.error("Write failed : Unable to connect with database! " + str(err))
 
@@ -322,6 +391,57 @@ def _query_scalar_influx_v1(q: str) -> float | None:
         logging.exception(f"Influx scalar query failed: {q}")
         return None
 
+def _userprofile_exists_for_day_v1(date_str: str) -> bool:
+    """
+    True if any UserProfile point exists for that UTC day (for this DB+Device).
+    InfluxDB v1 InfluxQL.
+    """
+    if INFLUXDB_VERSION != "1":
+        return False
+
+    try:
+        day_start = _dt_utc(date_str)
+        day_end = day_start + timedelta(days=1)
+        q = (
+            'SELECT count("gender_is_known") AS c '
+            'FROM "UserProfile" '
+            f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
+            f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+        )
+        res = influxdbclient.query(q)
+        pts = list(res.get_points())
+        if not pts:
+            return False
+        c = pts[0].get("c")
+        return (c is not None) and (float(c) > 0)
+    except Exception:
+        logging.exception("UserProfile existence query failed")
+        return False
+
+def _userprofile_known_for_day_v1(date_str: str) -> bool:
+    """
+    True if a UserProfile point exists for that UTC day with gender_is_known = 1.
+    """
+    try:
+        day_start = _dt_utc(date_str)
+        day_end = day_start + timedelta(days=1)
+        q = (
+            'SELECT count("gender_is_known") AS c '
+            'FROM "UserProfile" '
+            f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
+            f'AND "gender_is_known" = 1 '
+            f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+        )
+        res = influxdbclient.query(q)
+        pts = list(res.get_points())
+        if not pts:
+            return False
+        c = pts[0].get("c")
+        return (c is not None) and (float(c) > 0)
+    except Exception:
+        logging.exception("UserProfile known-gender existence query failed")
+        return False
+    
 def _percentile_activity_maxhr_42d(asof_date: str) -> float | None:
     start = (_dt_utc(asof_date) - timedelta(days=41)).strftime("%Y-%m-%d")
     start_iso, end_iso = _range_utc(start, 42)
@@ -409,7 +529,6 @@ def compute_and_write_physiology(asof_date: str) -> None:
         "RHR_7d_median": float(rhr7),
         **{k: float(v) for k, v in zones.items()},
     }
-    # Remove None fields to avoid partial-write errors in some configurations
     fields = {k: v for k, v in fields.items() if v is not None}
 
     point = {
@@ -428,6 +547,7 @@ def get_daily_stats(date_str):
     stats_json = garmin_obj.get_stats(date_str) or {}
     wellness_start = stats_json.get("wellnessStartTimeGmt")
 
+    # keep original behavior (skip today)
     if wellness_start and datetime.strptime(date_str, "%Y-%m-%d") < datetime.today():
         points_list.append(
             {
@@ -1000,7 +1120,29 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                 if len(all_records_list) == 0:
                     raise FileNotFoundError(f"No records found in FIT file for Activity ID {activityID} - Discarding FIT file")
 
-                activity_start_time = all_records_list[0]["timestamp"].replace(tzinfo=pytz.UTC)
+                # Guardrail: determine activity_start_time before using it anywhere
+                ts0 = all_records_list[0].get("timestamp")
+                if not ts0:
+                    raise FileNotFoundError(f"First record missing timestamp in FIT for Activity ID {activityID} - Discarding FIT file")
+                activity_start_time = ts0.replace(tzinfo=pytz.UTC)
+
+                # FIT gender extraction (guardrails)
+                all_user_list = [m.get_values() for m in fitfile.get_messages("user_profile")]
+                fit_gender = "unknown"
+                if all_user_list:
+                    for up in all_user_list:
+                        g = up.get("gender") or up.get("sex")
+                        if g is not None:
+                            fit_gender = _norm_gender(g)
+                            break
+
+                # Write UserProfile from FIT (overwrites daily point because tagset+time match)
+                try:
+                    act_date = activity_start_time.strftime("%Y-%m-%d")
+                    if fit_gender != "unknown":
+                        write_points_to_influxdb(write_user_profile_point(act_date, gender=fit_gender))
+                except Exception:
+                    logging.exception("Failed writing UserProfile (gender) from FIT")
 
                 for parsed_record in all_records_list:
                     ts = parsed_record.get("timestamp")
@@ -1467,7 +1609,7 @@ def get_blood_pressure(date_str):
                 points_list.append(
                     {
                         "measurement": "BloodPressure",
-                        "time": pytz.UTC.localize(datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%f")),
+                        "time": pytz.UTC.localize(datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%f")).isoformat(),
                         "tags": {
                             "Device": GARMIN_DEVICENAME,
                             "Database_Name": INFLUXDB_DATABASE,
@@ -1523,7 +1665,7 @@ def get_solar_intensity(date_str):
                 points_list.append(
                     {
                         "measurement": "SolarIntensity",
-                        "time": pytz.UTC.localize(datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%f")),
+                        "time": pytz.UTC.localize(datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%f")).isoformat(),
                         "tags": {"Device": GARMIN_DEVICENAME, "Database_Name": INFLUXDB_DATABASE},
                         "fields": data_fields,
                     }
@@ -1614,7 +1756,14 @@ def daily_fetch_write(date_str):
 
     # --- user profile metadata (gender etc) ---
     try:
-        write_points_to_influxdb(write_user_profile_point(date_str))
+        if USERPROFILE_WRITE_ONCE_PER_DAY and _userprofile_exists_for_day_v1(date_str):
+            logging.info(f"UserProfile already exists for {date_str}; skipping daily write")
+        else:
+            g = _get_user_gender_from_garmin()
+            if g == "unknown":
+                logging.info(f"UserProfile gender unknown from garmin_profile for {date_str}; skipping write")
+            else:
+                write_points_to_influxdb(write_user_profile_point(date_str, gender=g))
     except Exception:
         logging.exception(f"UserProfile write failed for {date_str}")
 
@@ -1766,7 +1915,7 @@ if __name__ == "__main__":
     if MANUAL_START_DATE:
         fetch_write_bulk(MANUAL_START_DATE, MANUAL_END_DATE)
         logging.info(f"Bulk update success : Fetched all available health metrics for date range {MANUAL_START_DATE} to {MANUAL_END_DATE}")
-        exit(0)
+        sys.exit(0)
     else:
         try:
             if INFLUXDB_VERSION == "1":
