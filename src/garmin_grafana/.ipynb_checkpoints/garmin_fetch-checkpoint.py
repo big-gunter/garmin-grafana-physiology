@@ -391,6 +391,161 @@ def _query_scalar_influx_v1(q: str) -> float | None:
         logging.exception(f"Influx scalar query failed: {q}")
         return None
 
+import math
+
+def _query_last_row_influx_v1(q: str) -> dict | None:
+    try:
+        res = influxdbclient.query(q)
+        pts = list(res.get_points())
+        return pts[0] if pts else None
+    except Exception:
+        logging.exception(f"Influx last-row query failed: {q}")
+        return None
+
+def _get_gender_for_day_v1(date_str: str) -> str:
+    # Prefer the gender written (string field) when known, otherwise fallback to unknown.
+    day_start = _dt_utc(date_str)
+    day_end = day_start + timedelta(days=1)
+    q = (
+        'SELECT last("gender") AS gender '
+        'FROM "UserProfile" '
+        f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
+        "AND gender_is_known = 1 "
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+    )
+    row = _query_last_row_influx_v1(q) or {}
+    return _norm_gender(row.get("gender"))
+
+def _get_physiology_for_day_v1(date_str: str) -> tuple[float | None, float | None]:
+    # returns (rhr, hrmax_est)
+    day_start = _dt_utc(date_str)
+    day_end = day_start + timedelta(days=1)
+    q = (
+        'SELECT last("RHR_7d_median") AS rhr, last("HRmax_est") AS hrmax '
+        'FROM "PhysiologyDaily" '
+        f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+    )
+    row = _query_last_row_influx_v1(q) or {}
+    rhr = row.get("rhr")
+    hrmax = row.get("hrmax")
+    return (float(rhr) if rhr is not None else None, float(hrmax) if hrmax is not None else None)
+
+def _get_activities_for_day_v1(date_str: str) -> list[dict]:
+    day_start = _dt_utc(date_str)
+    day_end = day_start + timedelta(days=1)
+    q = (
+        'SELECT "elapsedDuration","movingDuration","averageHR","activityName","Activity_ID" '
+        'FROM "ActivitySummary" '
+        f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
+        "AND activityName != 'END' "
+        "AND elapsedDuration > 0 "
+        "AND averageHR > 0 "
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+    )
+    try:
+        res = influxdbclient.query(q)
+        return list(res.get_points())
+    except Exception:
+        logging.exception("ActivitySummary day query failed")
+        return []
+
+def _get_trainingload_prev_day_v1(date_str: str) -> tuple[float | None, float | None]:
+    # Returns (ATL_7_yday, CTL_42_yday)
+    yday = (_dt_utc(date_str) - timedelta(days=1)).strftime("%Y-%m-%d")
+    day_start = _dt_utc(yday)
+    day_end = day_start + timedelta(days=1)
+    q = (
+        'SELECT last("ATL_7") AS atl, last("CTL_42") AS ctl '
+        'FROM "TrainingLoadDaily" '
+        f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+    )
+    row = _query_last_row_influx_v1(q) or {}
+    atl = row.get("atl")
+    ctl = row.get("ctl")
+    return (float(atl) if atl is not None else None, float(ctl) if ctl is not None else None)
+
+def _bannister_trimp(dur_seconds: float, hr_avg: float, rhr: float, hrmax: float, gender: str) -> float:
+    if dur_seconds <= 0 or hr_avg <= 0 or hrmax <= rhr:
+        return 0.0
+    hrr = hrmax - rhr
+    hrratio = (hr_avg - rhr) / hrr
+    # clamp
+    if hrratio < 0:
+        hrratio = 0.0
+    elif hrratio > 1:
+        hrratio = 1.0
+
+    dur_min = dur_seconds / 60.0
+
+    g = _norm_gender(gender)
+    if g not in {"male","female"}:
+        return 0.0
+    if g == "female":
+        k, b = 0.86, 1.67
+    else:
+        #hard-fail instead
+        k, b = 0.64, 1.92
+
+    return dur_min * hrratio * k * math.exp(b * hrratio)
+
+def compute_and_write_training_load(date_str: str) -> None:
+    if INFLUXDB_VERSION != "1":
+        logging.warning("Training load computation currently implemented for InfluxDB v1 only.")
+        return
+
+    gender = _get_gender_for_day_v1(date_str)
+    rhr, hrmax = _get_physiology_for_day_v1(date_str)
+    if rhr is None or hrmax is None:
+        logging.info(f"TrainingLoadDaily: missing PhysiologyDaily inputs for {date_str} (rhr={rhr}, hrmax={hrmax})")
+        return
+
+    acts = _get_activities_for_day_v1(date_str)
+    trimp_total = 0.0
+    for a in acts:
+        dur = a.get("elapsedDuration")
+        hr = a.get("averageHR")
+        if dur is None or hr is None:
+            continue
+        trimp_total += _bannister_trimp(float(dur), float(hr), float(rhr), float(hrmax), gender)
+
+    # EWMA
+    atl_prev, ctl_prev = _get_trainingload_prev_day_v1(date_str)
+
+    a7 = 1.0 - math.exp(-1.0 / 7.0)
+    a42 = 1.0 - math.exp(-1.0 / 42.0)
+
+    if atl_prev is None:
+        atl = trimp_total
+    else:
+        atl = atl_prev + a7 * (trimp_total - atl_prev)
+
+    if ctl_prev is None:
+        ctl = trimp_total
+    else:
+        ctl = ctl_prev + a42 * (trimp_total - ctl_prev)
+
+    tsb = ctl - atl
+
+    point = {
+        "measurement": "TrainingLoadDaily",
+        "time": _dt_utc(date_str).isoformat(),
+        "tags": {"Device": GARMIN_DEVICENAME, "Database_Name": INFLUXDB_DATABASE},
+        "fields": {
+            "TRIMP": float(trimp_total),
+            "ATL_7": float(atl),
+            "CTL_42": float(ctl),
+            "TSB": float(tsb),
+            "RHR_used": float(rhr),
+            "HRmax_used": float(hrmax),
+            "gender_used": gender,
+        },
+    }
+    write_points_to_influxdb([point])
+    logging.info(f"TrainingLoadDaily written for {date_str}: TRIMP={trimp_total:.2f}, ATL_7={atl:.2f}, CTL_42={ctl:.2f}, TSB={tsb:.2f}")
+
+
 def _userprofile_exists_for_day_v1(date_str: str) -> bool:
     """
     True if any UserProfile point exists for that UTC day (for this DB+Device).
@@ -1817,6 +1972,11 @@ def daily_fetch_write(date_str):
         compute_and_write_physiology(date_str)
     except Exception:
         logging.exception(f"PhysiologyDaily computation failed for {date_str}")
+        
+    try:
+        compute_and_write_training_load(date_str)
+    except Exception:
+        logging.exception(f"TrainingLoadDaily computation failed for {date_str}")
 
 # %%
 def fetch_write_bulk(start_date_str, end_date_str):

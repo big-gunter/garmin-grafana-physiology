@@ -61,7 +61,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "garmin_influxdb"
+        "uid": "${DS_GARMIN-INFLUXDB}"
       },
       "fieldConfig": {
         "defaults": {
@@ -133,14 +133,14 @@
       "pluginVersion": "12.4.0",
       "targets": [
         {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
           "query": "SELECT percentile(\"maxHR\", 95)\nFROM \"ActivitySummary\"\nWHERE $timeFilter AND \"activity_type_tag\" =~ /${SportGroup:raw}/",
           "rawQuery": true,
           "refId": "A",
-          "resultFormat": "time_series",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
+          "resultFormat": "time_series"
         }
       ],
       "title": "Max HR - 95th percentile",
@@ -149,7 +149,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "garmin_influxdb"
+        "uid": "${DS_GARMIN-INFLUXDB}"
       },
       "fieldConfig": {
         "defaults": {
@@ -195,7 +195,7 @@
       "gridPos": {
         "h": 5,
         "w": 3,
-        "x": 4,
+        "x": 3,
         "y": 0
       },
       "id": 1,
@@ -217,14 +217,14 @@
       "pluginVersion": "12.4.0",
       "targets": [
         {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
           "query": "SELECT max(\"maxHR\")\nFROM \"ActivitySummary\"\nWHERE $timeFilter AND \"activity_type_tag\" =~ /${SportGroup:raw}/",
           "rawQuery": true,
           "refId": "A",
-          "resultFormat": "time_series",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
+          "resultFormat": "time_series"
         }
       ],
       "title": "Max HR Observed",
@@ -233,7 +233,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "garmin_influxdb"
+        "uid": "${DS_GARMIN-INFLUXDB}"
       },
       "fieldConfig": {
         "defaults": {
@@ -258,9 +258,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 5,
-        "x": 7,
+        "h": 5,
+        "w": 2,
+        "x": 6,
         "y": 0
       },
       "id": 12,
@@ -284,14 +284,14 @@
       "pluginVersion": "12.4.0",
       "targets": [
         {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
           "query": "SELECT last(\"HRmax_est\") FROM \"PhysiologyDaily\" WHERE $timeFilter",
           "rawQuery": true,
           "refId": "A",
-          "resultFormat": "time_series",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
+          "resultFormat": "time_series"
         }
       ],
       "title": "HRmax Estimate",
@@ -300,7 +300,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "garmin_influxdb"
+        "uid": "${DS_GARMIN-INFLUXDB}"
       },
       "fieldConfig": {
         "defaults": {
@@ -325,9 +325,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 5,
-        "x": 12,
+        "h": 5,
+        "w": 2,
+        "x": 8,
         "y": 0
       },
       "id": 14,
@@ -351,14 +351,14 @@
       "pluginVersion": "12.4.0",
       "targets": [
         {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
           "query": "SELECT last(\"HRR\") FROM \"PhysiologyDaily\" WHERE $timeFilter",
           "rawQuery": true,
           "refId": "A",
-          "resultFormat": "time_series",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
+          "resultFormat": "time_series"
         }
       ],
       "title": "HRR",
@@ -367,7 +367,275 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "garmin_influxdb"
+        "uid": "${DS_GARMIN-INFLUXDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 2,
+        "x": 10,
+        "y": 0
+      },
+      "id": 13,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
+          "query": "SELECT last(\"RHR_7d_median\") FROM \"PhysiologyDaily\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "title": "RHR 7d Median",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_GARMIN-INFLUXDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-BlPu"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 2,
+        "x": 12,
+        "y": 0
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
+          "query": "SELECT last(\"avgOvernightHrv\")\nFROM \"SleepSummary\"\nWHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "title": "HRV Static",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_GARMIN-INFLUXDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-RdYlGr"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 2,
+        "x": 14,
+        "y": 0
+      },
+      "id": 8,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
+          "query": "SELECT last(\"VO2_max_value\")\nFROM \"VO2_Max\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "title": "Garmin VO2 Max ",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_GARMIN-INFLUXDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-RdYlGr"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 2,
+        "x": 16,
+        "y": 0
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
+          "query": "SELECT last(\"VO2_max_value_cycling\")\nFROM \"VO2_Max\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "title": "Garmin VO2 Max (Cycling)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_GARMIN-INFLUXDB}"
       },
       "fieldConfig": {
         "defaults": {
@@ -394,9 +662,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 14,
-        "w": 6,
-        "x": 17,
+        "h": 5,
+        "w": 2,
+        "x": 18,
         "y": 0
       },
       "id": 4,
@@ -422,7 +690,7 @@
         {
           "datasource": {
             "type": "influxdb",
-            "uid": "garmin_influxdb"
+            "uid": "${DS_GARMIN-INFLUXDB}"
           },
           "query": "SELECT last(\"restingHeartRate\")\nFROM \"DailyStats\"\nWHERE $timeFilter",
           "rawQuery": true,
@@ -430,14 +698,14 @@
           "resultFormat": "time_series"
         },
         {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
           "query": "SELECT moving_average(mean(\"restingHeartRate\"), 28)\nFROM \"DailyStats\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
           "rawQuery": true,
           "refId": "A",
-          "resultFormat": "time_series",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
+          "resultFormat": "time_series"
         }
       ],
       "title": "Resting HR - Static Comparison (28 days)",
@@ -446,7 +714,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "garmin_influxdb"
+        "uid": "${DS_GARMIN-INFLUXDB}"
       },
       "fieldConfig": {
         "defaults": {
@@ -513,7 +781,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 7,
+        "w": 8,
         "x": 0,
         "y": 5
       },
@@ -529,7 +797,7 @@
           "alias": "Zone 1",
           "datasource": {
             "type": "influxdb",
-            "uid": "garmin_influxdb"
+            "uid": "${DS_GARMIN-INFLUXDB}"
           },
           "query": "SELECT\n  last(\"Z1_Low\")  AS \"HR Low\",\n  last(\"Z1_High\") AS \"HR High1\"\nFROM \"PhysiologyDaily\"\nWHERE $timeFilter",
           "rawQuery": true,
@@ -540,7 +808,7 @@
           "alias": "Zone 2",
           "datasource": {
             "type": "influxdb",
-            "uid": "garmin_influxdb"
+            "uid": "${DS_GARMIN-INFLUXDB}"
           },
           "query": "SELECT\n  last(\"Z2_Low\")  AS \"HR Low\",\n  last(\"Z2_High\") AS \"HR High1\"\nFROM \"PhysiologyDaily\"\nWHERE $timeFilter",
           "rawQuery": true,
@@ -551,7 +819,7 @@
           "alias": "Zone 3",
           "datasource": {
             "type": "influxdb",
-            "uid": "garmin_influxdb"
+            "uid": "${DS_GARMIN-INFLUXDB}"
           },
           "query": "SELECT\n  last(\"Z3_Low\")  AS \"HR Low\",\n  last(\"Z3_High\") AS \"HR High1\"\nFROM \"PhysiologyDaily\"\nWHERE $timeFilter",
           "rawQuery": true,
@@ -562,7 +830,7 @@
           "alias": "Zone 4",
           "datasource": {
             "type": "influxdb",
-            "uid": "garmin_influxdb"
+            "uid": "${DS_GARMIN-INFLUXDB}"
           },
           "query": "SELECT\n  last(\"Z4_Low\")  AS \"HR Low\",\n  last(\"Z4_High\") AS \"HR High1\"\nFROM \"PhysiologyDaily\"\nWHERE $timeFilter",
           "rawQuery": true,
@@ -573,7 +841,7 @@
           "alias": "Zone 5",
           "datasource": {
             "type": "influxdb",
-            "uid": "garmin_influxdb"
+            "uid": "${DS_GARMIN-INFLUXDB}"
           },
           "query": "SELECT\n  last(\"Z5_Low\")  AS \"HR Low\",\n  last(\"Z5_High\") AS \"HR High1\"\nFROM \"PhysiologyDaily\"\nWHERE $timeFilter",
           "rawQuery": true,
@@ -657,12 +925,196 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "garmin_influxdb"
+        "uid": "${DS_GARMIN-INFLUXDB}"
       },
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "continuous-BlPu"
+            "mode": "continuous-plasma"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "ActivitySummary.max": {
+                  "index": 3,
+                  "text": "Max HR"
+                },
+                "DailyStats.last": {
+                  "index": 0,
+                  "text": "Overnight RHR"
+                },
+                "SleepSummary.last": {
+                  "index": 1,
+                  "text": "Overnight HRV"
+                },
+                "VO2_Max.last": {
+                  "index": 2,
+                  "text": "V02 Max"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 9,
+        "x": 8,
+        "y": 5
+      },
+      "id": 11,
+      "options": {
+        "cellHeight": "lg",
+        "frameIndex": 1,
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "alias": "",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
+          "query": "SELECT last(\"restingHeartRate\") FROM \"DailyStats\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
+          "query": "SELECT last(\"avgOvernightHrv\") FROM \"SleepSummary\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "B",
+          "resultFormat": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
+          "query": "SELECT last(\"VO2_max_value\") FROM \"VO2_Max\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "C",
+          "resultFormat": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
+          "query": "SELECT max(\"maxHR\") FROM \"ActivitySummary\" WHERE $timeFilter AND \"activity_type_tag\" =~ /${SportGroup:raw}/",
+          "rawQuery": true,
+          "refId": "E",
+          "resultFormat": "time_series"
+        }
+      ],
+      "title": "Current Metrics",
+      "transformations": [
+        {
+          "id": "reduce",
+          "options": {
+            "includeTimeField": false,
+            "labelsToFields": false,
+            "mode": "seriesToRows",
+            "reducers": [
+              "lastNotNull"
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "includeByName": {},
+            "indexByName": {},
+            "orderBy": [
+              {
+                "desc": false,
+                "type": "name"
+              }
+            ],
+            "orderByMode": "auto",
+            "renameByName": {
+              "Field": "Element",
+              "Last *": "Value"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_GARMIN-INFLUXDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-RdYlGr"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "scheme",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 5,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "thresholds": {
@@ -683,115 +1135,44 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 5,
-        "x": 7,
-        "y": 6
+        "w": 17,
+        "x": 0,
+        "y": 13
       },
-      "id": 6,
+      "id": 7,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "pluginVersion": "12.4.0",
       "targets": [
         {
-          "query": "SELECT last(\"avgOvernightHrv\")\nFROM \"SleepSummary\"\nWHERE $timeFilter",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "time_series",
           "datasource": {
             "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
-        }
-      ],
-      "title": "HRV Static",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "influxdb",
-        "uid": "garmin_influxdb"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
+            "uid": "${DS_GARMIN-INFLUXDB}"
           },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 5,
-        "x": 12,
-        "y": 6
-      },
-      "id": 13,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "12.4.0",
-      "targets": [
-        {
-          "query": "SELECT last(\"RHR_7d_median\") FROM \"PhysiologyDaily\" WHERE $timeFilter",
+          "query": "SELECT last(\"VO2_max_value\")\nFROM \"VO2_Max\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
           "rawQuery": true,
           "refId": "A",
-          "resultFormat": "time_series",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
+          "resultFormat": "time_series"
         }
       ],
-      "title": "RHR 7d Median",
-      "type": "stat"
+      "title": "Garmin VO2 Max",
+      "type": "timeseries"
     },
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "garmin_influxdb"
+        "uid": "${DS_GARMIN-INFLUXDB}"
       },
       "fieldConfig": {
         "defaults": {
@@ -853,7 +1234,7 @@
         "h": 7,
         "w": 17,
         "x": 0,
-        "y": 13
+        "y": 19
       },
       "id": 9,
       "options": {
@@ -872,14 +1253,14 @@
       "pluginVersion": "12.4.0",
       "targets": [
         {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
           "query": "SELECT last(\"VO2_max_value_cycling\")\nFROM \"VO2_Max\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
           "rawQuery": true,
           "refId": "A",
-          "resultFormat": "time_series",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
+          "resultFormat": "time_series"
         }
       ],
       "title": "Garmin VO2 Max (Cycling)",
@@ -888,388 +1269,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "garmin_influxdb"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "continuous-plasma"
-          },
-          "custom": {
-            "align": "center",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "footer": {
-              "reducers": []
-            },
-            "inspect": false
-          },
-          "mappings": [
-            {
-              "options": {
-                "ActivitySummary.max": {
-                  "index": 3,
-                  "text": "Max HR"
-                },
-                "DailyStats.last": {
-                  "index": 0,
-                  "text": "Overnight RHR"
-                },
-                "SleepSummary.last": {
-                  "index": 1,
-                  "text": "Overnight HRV"
-                },
-                "VO2_Max.last": {
-                  "index": 2,
-                  "text": "V02 Max"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 13,
-        "x": 0,
-        "y": 20
-      },
-      "id": 11,
-      "options": {
-        "cellHeight": "lg",
-        "frameIndex": 1,
-        "showHeader": true
-      },
-      "pluginVersion": "12.4.0",
-      "targets": [
-        {
-          "alias": "",
-          "query": "SELECT last(\"restingHeartRate\") FROM \"DailyStats\" WHERE $timeFilter",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "time_series",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
-        },
-        {
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          },
-          "query": "SELECT last(\"avgOvernightHrv\") FROM \"SleepSummary\" WHERE $timeFilter",
-          "rawQuery": true,
-          "refId": "B",
-          "resultFormat": "time_series"
-        },
-        {
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          },
-          "query": "SELECT last(\"VO2_max_value\") FROM \"VO2_Max\" WHERE $timeFilter",
-          "rawQuery": true,
-          "refId": "C",
-          "resultFormat": "time_series"
-        },
-        {
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          },
-          "query": "SELECT max(\"maxHR\") FROM \"ActivitySummary\" WHERE $timeFilter AND \"activity_type_tag\" =~ /${SportGroup:raw}/",
-          "rawQuery": true,
-          "refId": "E",
-          "resultFormat": "time_series"
-        }
-      ],
-      "title": "Current Metrics",
-      "transformations": [
-        {
-          "id": "reduce",
-          "options": {
-            "includeTimeField": false,
-            "labelsToFields": false,
-            "mode": "seriesToRows",
-            "reducers": [
-              "lastNotNull"
-            ]
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {},
-            "includeByName": {},
-            "indexByName": {},
-            "orderBy": [
-              {
-                "desc": false,
-                "type": "name"
-              }
-            ],
-            "orderByMode": "auto",
-            "renameByName": {
-              "Field": "Element",
-              "Last *": "Value"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "influxdb",
-        "uid": "garmin_influxdb"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "continuous-RdYlGr"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 5,
-        "x": 0,
-        "y": 28
-      },
-      "id": 8,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "12.4.0",
-      "targets": [
-        {
-          "query": "SELECT last(\"VO2_max_value\")\nFROM \"VO2_Max\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "time_series",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
-        }
-      ],
-      "title": "Garmin VO2 Max ",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "influxdb",
-        "uid": "garmin_influxdb"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "continuous-RdYlGr"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 4,
-        "x": 5,
-        "y": 28
-      },
-      "id": 10,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "12.4.0",
-      "targets": [
-        {
-          "query": "SELECT last(\"VO2_max_value_cycling\")\nFROM \"VO2_Max\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "time_series",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
-        }
-      ],
-      "title": "Garmin VO2 Max (Cycling)",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "influxdb",
-        "uid": "garmin_influxdb"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "continuous-RdYlGr"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "scheme",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 5,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 17,
-        "x": 0,
-        "y": 34
-      },
-      "id": 7,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.4.0",
-      "targets": [
-        {
-          "query": "SELECT last(\"VO2_max_value\")\nFROM \"VO2_Max\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "time_series",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
-        }
-      ],
-      "title": "Garmin VO2 Max",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "influxdb",
-        "uid": "garmin_influxdb"
+        "uid": "${DS_GARMIN-INFLUXDB}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1335,7 +1335,7 @@
         "h": 7,
         "w": 17,
         "x": 0,
-        "y": 40
+        "y": 26
       },
       "id": 3,
       "options": {
@@ -1359,14 +1359,14 @@
       "pluginVersion": "12.4.0",
       "targets": [
         {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
           "query": "SELECT mean(\"restingHeartRate\")\nFROM \"DailyStats\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
           "rawQuery": true,
           "refId": "A",
-          "resultFormat": "time_series",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
+          "resultFormat": "time_series"
         }
       ],
       "title": "Resting HR Time Series",
@@ -1375,7 +1375,7 @@
     {
       "datasource": {
         "type": "influxdb",
-        "uid": "garmin_influxdb"
+        "uid": "${DS_GARMIN-INFLUXDB}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1441,7 +1441,7 @@
         "h": 7,
         "w": 17,
         "x": 0,
-        "y": 47
+        "y": 33
       },
       "id": 5,
       "options": {
@@ -1460,14 +1460,14 @@
       "pluginVersion": "12.4.0",
       "targets": [
         {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_GARMIN-INFLUXDB}"
+          },
           "query": "SELECT mean(\"avgOvernightHrv\")\nFROM \"SleepSummary\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
           "rawQuery": true,
           "refId": "A",
-          "resultFormat": "time_series",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          }
+          "resultFormat": "time_series"
         }
       ],
       "title": "HRV baseline (overnight)",
@@ -1527,13 +1527,13 @@
     ]
   },
   "time": {
-    "from": "now-42d",
+    "from": "now-90d",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Garmin Training Metrics",
   "uid": "ad26w7q",
-  "version": 20,
+  "version": 2,
   "weekStart": ""
 }
