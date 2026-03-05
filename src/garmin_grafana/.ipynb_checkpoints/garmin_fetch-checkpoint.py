@@ -1563,28 +1563,6 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                 fitfile = FitFile(fit_file_buffer)
                 fitfile.parse()
 
-                # DEBUG: dump FIT user_metrics keys/values (first message only)
-                # DEBUG: list message types present in this FIT
-                # DEBUG: discover which message type contains user metrics (age, vo2, lthr, max_hr, etc.)
-                # DEBUG unknown_79: dump field def_nums + values
-                try:
-                    msgs = list(fitfile.get_messages("unknown_79"))
-                    if not msgs:
-                        logging.info("FIT unknown_79: none found")
-                    else:
-                        m = msgs[0]
-                        dump = []
-                        for f in m.fields:
-                            dump.append({
-                                "def_num": getattr(f, "def_num", None),
-                                "name": getattr(f, "name", None),
-                                "value": getattr(f, "value", None),
-                                "units": getattr(f, "units", None),
-                            })
-                        logging.info(f"FIT unknown_79 first msg fields: {dump}")
-                except Exception:
-                    logging.exception("FIT unknown_79 debug dump failed")
-
                 all_records_list = [record.get_values() for record in fitfile.get_messages("record")]
                 all_sessions_list = [record.get_values() for record in fitfile.get_messages("session")]
                 all_lengths_list = [record.get_values() for record in fitfile.get_messages("length")]
@@ -1612,6 +1590,43 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                     raise FileNotFoundError(f"First record missing timestamp in FIT for Activity ID {activityID} - Discarding FIT file")
                 activity_start_time = ts0.replace(tzinfo=pytz.UTC)
 
+                fit_age_years = None
+                fit_lthr = None
+                fit_ltpower = None
+                
+                try:
+                    for msg in fitfile.get_messages("unknown_79"):
+                        by_def = {getattr(f, "def_num", None): getattr(f, "value", None) for f in msg.fields}
+                
+                        if fit_age_years is None and by_def.get(1) is not None:
+                            fit_age_years = int(float(by_def[1]))
+                
+                        if fit_lthr is None and by_def.get(11) is not None:
+                            fit_lthr = int(float(by_def[11]))
+                
+                        if fit_ltpower is None and by_def.get(12) is not None:
+                            fit_ltpower = int(float(by_def[12]))
+                
+                        if fit_age_years is not None and fit_lthr is not None and fit_ltpower is not None:
+                            break
+                
+                    logging.info(f"FIT unknown_79 derived: age={fit_age_years}, lthr={fit_lthr}, ltpower={fit_ltpower}")
+                
+                except Exception:
+                    logging.exception("FIT unknown_79 extraction failed")
+
+                fit_birth_year = None
+                try:
+                    yy = all_user_list[0].get("unknown_24")
+                    if yy is not None:
+                        yy = int(float(yy))
+                        # pivot using activity year
+                        ref_year = int(activity_start_time.strftime("%Y"))
+                        yy_now = ref_year % 100
+                        fit_birth_year = (2000 + yy) if yy <= yy_now else (1900 + yy)
+                except Exception:
+                    pass
+                
                 # FIT user_profile extraction (gender + birth year + birthdate)
                 all_user_list = []
                 for msg in fitfile.get_messages("user_profile"):
@@ -1691,9 +1706,9 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                     # persist to UserProfileMaster (birth_year drives age; gender drives TRIMP/Bannister)
                     maybe_update_userprofile_master(
                         birth_year=fit_birth_year,
-                        age_years=fit_age_years,  # <-- NEW
-                        gender=fit_gender if fit_gender in {"male","female"} else None,
-                        source="fit_user_metrics" if fit_age_years is not None else "fit_user_profile",
+                        age_years=fit_age_years,
+                        gender=fit_gender if fit_gender in {"male", "female"} else None,
+                        source="fit_unknown_79",
                         activity_id=int(activityID),
                     )
                 except Exception:
@@ -1706,9 +1721,9 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                 
                     maybe_update_userprofile_master(
                         birth_year=fit_birth_year,
-                        age_years=fit_age_years,  # <-- NEW
-                        gender=fit_gender if fit_gender in {"male","female"} else None,
-                        source="fit_user_metrics" if fit_age_years is not None else "fit_user_profile",
+                        age_years=fit_age_years,
+                        gender=fit_gender if fit_gender in {"male", "female"} else None,
+                        source="fit_unknown_79",
                         activity_id=int(activityID),
                     )
                 except Exception:
