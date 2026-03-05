@@ -540,13 +540,6 @@ def _age_from_birth_year(birth_year: int, date_str: str | None = None) -> int:
     return max(yr - int(birth_year), 0)
     
 def maybe_update_userprofile_master(*, birth_year=None, age_years=None, gender=None, source="unknown", activity_id=None):
-    """
-    Writes incremental improvements to UserProfileMaster. Stores:
-      - birth_year (optional)
-      - age_years (optional; can come from user_metrics)
-      - gender fields (optional)
-    """
-
     def _to_int(x):
         try:
             return int(float(x))
@@ -563,24 +556,22 @@ def maybe_update_userprofile_master(*, birth_year=None, age_years=None, gender=N
     new_by  = _to_int(birth_year)
     new_age = _to_int(age_years)
 
-    # If we have birth_year but not age, compute an approximate age (year-based).
+    # if we have birth_year but no age, compute an approximate age (year-only)
     if new_age is None and new_by is not None:
         new_age = _age_from_birth_year(new_by, None)
 
     g = gender
 
-    write_birth  = new_by is not None and new_by != stored_by
-    write_age    = new_age is not None and new_age != stored_age
+    write_birth  = (new_by is not None) and (new_by != stored_by)
+    write_age    = (new_age is not None) and (new_age != stored_age)
     write_gender = (g in {"male", "female"}) and (not stored_gender_known)
 
     if not (write_birth or write_age or write_gender):
         return
 
     fields: dict[str, object] = {}
-
     if write_birth:
         fields["birth_year"] = int(new_by)
-
     if write_age:
         fields["age_years"] = int(new_age)
 
@@ -1594,16 +1585,18 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                 fit_lthr = None
                 fit_ltpower = None
                 
+                fit_age_years = None
+                fit_lthr = None
+                fit_ltpower = None
+                
                 try:
                     for msg in fitfile.get_messages("unknown_79"):
                         by_def = {getattr(f, "def_num", None): getattr(f, "value", None) for f in msg.fields}
                 
                         if fit_age_years is None and by_def.get(1) is not None:
                             fit_age_years = int(float(by_def[1]))
-                
                         if fit_lthr is None and by_def.get(11) is not None:
                             fit_lthr = int(float(by_def[11]))
-                
                         if fit_ltpower is None and by_def.get(12) is not None:
                             fit_ltpower = int(float(by_def[12]))
                 
@@ -1611,7 +1604,6 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                             break
                 
                     logging.info(f"FIT unknown_79 derived: age={fit_age_years}, lthr={fit_lthr}, ltpower={fit_ltpower}")
-                
                 except Exception:
                     logging.exception("FIT unknown_79 extraction failed")
 
