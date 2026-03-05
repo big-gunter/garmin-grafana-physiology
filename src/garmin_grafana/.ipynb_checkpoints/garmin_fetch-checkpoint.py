@@ -266,7 +266,7 @@ def _get_user_gender_from_garmin() -> str:
 
     return "unknown"
 
-def write_user_profile_point(date_str: str, gender: str | None = None) -> list[dict]:
+def write_user_profile_point(date_str: str, gender: str | None = None, birth_year: int | None = None) -> list[dict]:
     """
     Canonical daily UserProfile writer.
 
@@ -274,6 +274,7 @@ def write_user_profile_point(date_str: str, gender: str | None = None) -> list[d
       - No 'source' tag (prevents duplicate daily series).
       - Same timestamp/tagset => later writes overwrite earlier values.
       - 'gender' string field only written when known.
+      - 'birth_year' stored as field when provided.
     """
     g = _norm_gender(gender) if gender is not None else _get_user_gender_from_garmin()
 
@@ -288,7 +289,13 @@ def write_user_profile_point(date_str: str, gender: str | None = None) -> list[d
     }
 
     if g != "unknown":
-        fields["gender"] = g  # only when known
+        fields["gender"] = g
+
+    if birth_year is not None:
+        try:
+            fields["birth_year"] = int(birth_year)
+        except Exception:
+            pass
 
     return [
         {
@@ -298,7 +305,7 @@ def write_user_profile_point(date_str: str, gender: str | None = None) -> list[d
             "fields": fields,
         }
     ]
-
+    
 def _clean_point(point: dict) -> dict | None:
     """
     Guardrails for Influx writes:
@@ -393,6 +400,91 @@ def _query_scalar_influx_v1(q: str) -> float | None:
 
 import math
 
+USER_AGE = int(os.getenv("USER_AGE", "0"))  # 0 = auto/unknown
+
+def _get_age_years(asof_date: str | None = None) -> int:
+    """
+    Returns age in years.
+
+    Priority:
+      1) USER_AGE env (if > 0)
+      2) Garmin profile birthDate (YYYY-MM-DD)
+      3) UserProfile.birth_year from InfluxDB (daily point; FIT-derived if present)
+      4) 0 (unknown)
+
+    Notes:
+      - If asof_date is provided, age is calculated as-of that date (UTC day).
+      - If asof_date is omitted, uses today's local date.
+    """
+    # 1) Explicit override
+    if USER_AGE and USER_AGE > 0:
+        return USER_AGE
+
+    # Choose "today" reference
+    try:
+        ref = _date.today() if not asof_date else datetime.strptime(asof_date, "%Y-%m-%d").date()
+    except Exception:
+        ref = _date.today()
+
+    # 2) Garmin profile birthDate
+    try:
+        prof = (garmin_obj.garth.profile or {}) if garmin_obj is not None else {}
+        b = None
+        if isinstance(prof, dict):
+            b = prof.get("birthDate") or prof.get("birthdate") or prof.get("dateOfBirth")
+            if not b and isinstance(prof.get("userProfile"), dict):
+                b = prof["userProfile"].get("birthDate") or prof["userProfile"].get("birthdate") or prof["userProfile"].get("dateOfBirth")
+
+        if b:
+            y, m, d = [int(x) for x in str(b).split("-")[:3]]
+            age = ref.year - y - ((ref.month, ref.day) < (m, d))
+            return max(age, 0)
+    except Exception:
+        logging.exception("Unable to derive age from Garmin profile")
+
+    # 3) FIT/UserProfile birth_year (Influx v1)
+    try:
+        if INFLUXDB_VERSION == "1":
+            # Prefer the as-of day; if missing, fall back to "most recent known birth_year".
+            by = None
+            if asof_date:
+                by = _get_birth_year_for_day_v1(asof_date)
+
+            if by is None:
+                q = (
+                    'SELECT last("birth_year") AS by '
+                    'FROM "UserProfile" '
+                    f'WHERE "birth_year" > 0 '
+                    f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+                )
+                row = _query_last_row_influx_v1(q) or {}
+                by = row.get("by")
+                if by is not None:
+                    by = int(float(by))
+
+            if by:
+                age = ref.year - int(by)
+                return max(age, 0)
+    except Exception:
+        logging.exception("Unable to derive age from UserProfile.birth_year")
+
+    return 0
+
+def _hrmax_age_based(age_years: int, method: str = "tanaka") -> float | None:
+    """
+    Age-based HRmax fallback.
+    tanaka: 208 - 0.7*age (often better than 220-age)
+    fox:    220 - age
+    """
+    if age_years <= 0:
+        return None
+    method = (method or "tanaka").strip().lower()
+    if method == "fox":
+        return float(220 - age_years)
+    return float(208 - 0.7 * age_years)  # tanaka default
+
+HRMAX_FALLBACK_METHOD = os.getenv("HRMAX_FALLBACK_METHOD", "tanaka")  # tanaka|fox
+
 def _query_last_row_influx_v1(q: str) -> dict | None:
     try:
         res = influxdbclient.query(q)
@@ -403,16 +495,11 @@ def _query_last_row_influx_v1(q: str) -> dict | None:
         return None
 
 def _get_gender_for_day_v1(date_str: str) -> str:
-    """
-    Prefer numeric gender_code (stable schema) when gender_is_known=1.
-    Falls back to unknown.
-    """
-    day_start = _dt_utc(date_str)
-    day_end = day_start + timedelta(days=1)
+    start_z, end_z = _day_bounds_z(date_str)
     q = (
         'SELECT last("gender_code") AS gc '
         'FROM "UserProfile" '
-        f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND gender_is_known = 1 "
         f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
     )
@@ -430,15 +517,22 @@ def _get_gender_for_day_v1(date_str: str) -> str:
         return "female"
     return "unknown"
 
+def _iso_z(dt: datetime) -> str:
+    # InfluxQL-friendly RFC3339 with Z (avoid +00:00)
+    return dt.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def _day_bounds_z(date_str: str) -> tuple[str, str]:
+    day_start = _dt_utc(date_str)
+    day_end = day_start + timedelta(days=1)
+    return _iso_z(day_start), _iso_z(day_end)
 
 def _get_physiology_for_day_v1(date_str: str) -> tuple[float | None, float | None]:
     # returns (rhr, hrmax_est)
-    day_start = _dt_utc(date_str)
-    day_end = day_start + timedelta(days=1)
+    start_z, end_z = _day_bounds_z(date_str)
     q = (
         'SELECT last("RHR_7d_median") AS rhr, last("HRmax_est") AS hrmax '
         'FROM "PhysiologyDaily" '
-        f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
     )
     row = _query_last_row_influx_v1(q) or {}
@@ -452,8 +546,7 @@ def _get_activities_for_day_v1(date_str: str) -> list[dict]:
     One row per activity_id (deduped) using last() per Activity_ID.
     Avoids any chance of counting multiple points for the same activity.
     """
-    day_start = _dt_utc(date_str)
-    day_end = day_start + timedelta(days=1)
+    start_z, end_z = _day_bounds_z(date_str)
 
     q = (
         'SELECT last("elapsedDuration") AS elapsedDuration, '
@@ -462,7 +555,7 @@ def _get_activities_for_day_v1(date_str: str) -> list[dict]:
         '       last("activityName")    AS activityName, '
         '       last("Activity_ID")     AS Activity_ID '
         'FROM "ActivitySummary" '
-        f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND activityName != 'END' "
         "AND elapsedDuration > 0 "
         "AND averageHR > 0 "
@@ -481,12 +574,11 @@ def _get_activities_for_day_v1(date_str: str) -> list[dict]:
 def _get_trainingload_prev_day_v1(date_str: str) -> tuple[float | None, float | None]:
     # Returns (ATL_7_yday, CTL_42_yday)
     yday = (_dt_utc(date_str) - timedelta(days=1)).strftime("%Y-%m-%d")
-    day_start = _dt_utc(yday)
-    day_end = day_start + timedelta(days=1)
+    start_z, end_z = _day_bounds_z(yday)
     q = (
         'SELECT last("ATL_7") AS atl, last("CTL_42") AS ctl '
         'FROM "TrainingLoadDaily" '
-        f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
     )
     row = _query_last_row_influx_v1(q) or {}
@@ -617,12 +709,11 @@ def _userprofile_exists_for_day_v1(date_str: str) -> bool:
         return False
 
     try:
-        day_start = _dt_utc(date_str)
-        day_end = day_start + timedelta(days=1)
+        start_z, end_z = _day_bounds_z(date_str)
         q = (
             'SELECT count("gender_is_known") AS c '
             'FROM "UserProfile" '
-            f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
+            f"WHERE time >= '{start_z}' AND time < '{end_z}' "
             f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
         )
         res = influxdbclient.query(q)
@@ -640,12 +731,11 @@ def _userprofile_known_for_day_v1(date_str: str) -> bool:
     True if a UserProfile point exists for that UTC day with gender_is_known = 1.
     """
     try:
-        day_start = _dt_utc(date_str)
-        day_end = day_start + timedelta(days=1)
+        start_z, end_z = _day_bounds_z(date_str)
         q = (
             'SELECT count("gender_is_known") AS c '
             'FROM "UserProfile" '
-            f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
+            f"WHERE time >= '{start_z}' AND time < '{end_z}' "
             f'AND "gender_is_known" = 1 '
             f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
         )
@@ -661,35 +751,66 @@ def _userprofile_known_for_day_v1(date_str: str) -> bool:
     
 def _percentile_activity_maxhr_42d(asof_date: str) -> float | None:
     start = (_dt_utc(asof_date) - timedelta(days=41)).strftime("%Y-%m-%d")
-    start_iso, end_iso = _range_utc(start, 42)
+    start_dt = _dt_utc(start)
+    end_dt = start_dt + timedelta(days=42)
+    start_z, end_z = _iso_z(start_dt), _iso_z(end_dt)
+
     q = (
-        f'SELECT percentile("maxHR", 95) '
-        f'FROM "ActivitySummary" '
-        f"WHERE time >= '{start_iso}' AND time < '{end_iso}' AND \"maxHR\" > 0"
+        'SELECT percentile("maxHR", 95) '
+        'FROM "ActivitySummary" '
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+        'AND "maxHR" > 0 '
+        "AND activityName != 'END' "
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
     )
     return _query_scalar_influx_v1(q)
 
-def _percentile_peak_1min_hr_42d(asof_date: str) -> float | None:
-    start = (_dt_utc(asof_date) - timedelta(days=41)).strftime("%Y-%m-%d")
-    start_iso, end_iso = _range_utc(start, 42)
+def _count_activity_maxhr_window(asof_date: str, window_days: int) -> int:
+    start = (_dt_utc(asof_date) - timedelta(days=window_days - 1)).strftime("%Y-%m-%d")
+    start_iso, end_iso = _range_utc(start, window_days)
     q = (
-        "SELECT percentile(mean_hr, 90) "
-        "FROM ("
-        f'  SELECT mean("HeartRate") AS mean_hr '
-        f'  FROM "HeartRateIntraday" '
-        f"  WHERE time >= '{start_iso}' AND time < '{end_iso}' "
-        "  GROUP BY time(1m) fill(none)"
-        ")"
+        'SELECT count("maxHR") AS c '
+        'FROM "ActivitySummary" '
+        f"WHERE time >= '{start_iso}' AND time < '{end_iso}' "
+        'AND "maxHR" > 0 AND activityName != \'END\' '
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
     )
-    val = _query_scalar_influx_v1(q)
-    if val is not None:
-        return val
-    q2 = (
-        f'SELECT percentile("HeartRate", 90) '
-        f'FROM "HeartRateIntraday" '
-        f"WHERE time >= '{start_iso}' AND time < '{end_iso}' AND \"HeartRate\" > 0"
+    v = _query_scalar_influx_v1(q)
+    return int(v) if v is not None else 0
+
+def _p95_activity_maxhr_window(asof_date: str, window_days: int) -> float | None:
+    start = (_dt_utc(asof_date) - timedelta(days=window_days - 1)).strftime("%Y-%m-%d")
+    start_iso, end_iso = _range_utc(start, window_days)
+    q = (
+        'SELECT percentile("maxHR", 95) '
+        'FROM "ActivitySummary" '
+        f"WHERE time >= '{start_iso}' AND time < '{end_iso}' "
+        'AND "maxHR" > 0 AND activityName != \'END\' '
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
     )
-    return _query_scalar_influx_v1(q2)
+    return _query_scalar_influx_v1(q)
+
+def _estimate_hrmax_activity_backoff(asof_date: str, windows: list[int] = [42, 84], min_points: int = 5) -> tuple[float | None, str]:
+    """
+    Returns (hrmax_est, source_label)
+    - Uses activity-only p95 maxHR over 42d, then 84d if needed.
+    - Only accepts a window if it has at least min_points maxHR samples.
+    - If no activity samples over the largest window, returns age-based fallback.
+    """
+    for w in windows:
+        n = _count_activity_maxhr_window(asof_date, w)
+        if n >= min_points:
+            p95 = _p95_activity_maxhr_window(asof_date, w)
+            if p95 is not None and p95 > 0:
+                return float(p95), f"activity_p95_{w}d(n={n})"
+
+    # No sufficient activity samples in any window -> age-based fallback
+    age = _get_age_years(asof_date)
+    hrmax_f = _hrmax_age_based(age, method=HRMAX_FALLBACK_METHOD)
+    if hrmax_f is not None:
+        return float(hrmax_f), f"age_fallback_{HRMAX_FALLBACK_METHOD}(age={age})"
+
+    return None, "no_hrmax_available"
 
 def _median_rhr_7d(asof_date: str) -> float | None:
     start = (_dt_utc(asof_date) - timedelta(days=6)).strftime("%Y-%m-%d")
@@ -721,32 +842,46 @@ def _hrr_zones(rhr: float, hrmax: float) -> dict[str, float]:
         "Z5_High": bpm(1.00),
     }
 
+def _get_birth_year_for_day_v1(date_str: str) -> int | None:
+    start_z, end_z = _day_bounds_z(date_str)
+    q = (
+        'SELECT last("birth_year") AS by '
+        'FROM "UserProfile" '
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+    )
+    row = _query_last_row_influx_v1(q) or {}
+    by = row.get("by")
+    if by is None:
+        return None
+    try:
+        return int(float(by))
+    except Exception:
+        return None
+
 def compute_and_write_physiology(asof_date: str) -> None:
     if INFLUXDB_VERSION != "1":
         logging.warning("PhysiologyDaily computation currently implemented for InfluxDB v1 only.")
         return
 
-    p95_act = _percentile_activity_maxhr_42d(asof_date)
-    p90_1m = _percentile_peak_1min_hr_42d(asof_date)
     rhr7 = _median_rhr_7d(asof_date)
-
-    if rhr7 is None or (p95_act is None and p90_1m is None):
-        logging.info(
-            f"PhysiologyDaily: insufficient data for {asof_date} (rhr7={rhr7}, p95_act={p95_act}, p90_1m={p90_1m})"
-        )
+    if rhr7 is None:
+        logging.info(f"PhysiologyDaily: insufficient RHR data for {asof_date}")
         return
 
-    hrmax_est = max([v for v in (p95_act, p90_1m) if v is not None])
+    hrmax_est, hrmax_src = _estimate_hrmax_activity_backoff(asof_date, windows=[42, 84], min_points=5)
+    if hrmax_est is None:
+        logging.info(f"PhysiologyDaily: no HRmax estimate available for {asof_date} (source={hrmax_src})")
+        return
+
     zones = _hrr_zones(rhr7, hrmax_est)
 
     fields = {
-        "HRmax_p95_42d": float(p95_act) if p95_act is not None else None,
-        "HRpeak1m_p90_42d": float(p90_1m) if p90_1m is not None else None,
         "HRmax_est": float(hrmax_est),
+        "HRmax_est_source": str(hrmax_src),
         "RHR_7d_median": float(rhr7),
         **{k: float(v) for k, v in zones.items()},
     }
-    fields = {k: v for k, v in fields.items() if v is not None}
 
     point = {
         "measurement": "PhysiologyDaily",
@@ -756,7 +891,7 @@ def compute_and_write_physiology(asof_date: str) -> None:
     }
 
     write_points_to_influxdb([point])
-    logging.info(f"PhysiologyDaily written for {asof_date}: HRmax_est={hrmax_est:.1f}, RHR_7d_median={rhr7:.1f}")
+    logging.info(f"PhysiologyDaily written for {asof_date}: HRmax_est={hrmax_est:.1f} ({hrmax_src}), RHR_7d_median={rhr7:.1f}")
 
 # %%
 def get_daily_stats(date_str):
@@ -1343,23 +1478,43 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                     raise FileNotFoundError(f"First record missing timestamp in FIT for Activity ID {activityID} - Discarding FIT file")
                 activity_start_time = ts0.replace(tzinfo=pytz.UTC)
 
-                # FIT gender extraction (guardrails)
+                # FIT user_profile extraction (gender + birth year)
                 all_user_list = [m.get_values() for m in fitfile.get_messages("user_profile")]
+                
                 fit_gender = "unknown"
+                fit_birth_year = None
+                
                 if all_user_list:
                     for up in all_user_list:
                         g = up.get("gender") or up.get("sex")
-                        if g is not None:
+                        yob = up.get("birth_year") or up.get("year_of_birth")
+                
+                        if g is not None and fit_gender == "unknown":
                             fit_gender = _norm_gender(g)
+                
+                        if yob is not None and fit_birth_year is None:
+                            try:
+                                fit_birth_year = int(yob)
+                            except Exception:
+                                fit_birth_year = None
+                
+                        # stop once we have both
+                        if fit_gender in {"male", "female"} and fit_birth_year is not None:
                             break
 
-                # Write UserProfile from FIT (overwrites daily point because tagset+time match)
+                # Write UserProfile from FIT (daily point; overwrites same-day point because tagset+time match)
                 try:
                     act_date = activity_start_time.strftime("%Y-%m-%d")
-                    if fit_gender != "unknown":
-                        write_points_to_influxdb(write_user_profile_point(act_date, gender=fit_gender))
+                    if fit_gender != "unknown" or fit_birth_year is not None:
+                        write_points_to_influxdb(
+                            write_user_profile_point(
+                                act_date,
+                                gender=fit_gender if fit_gender != "unknown" else None,
+                                birth_year=fit_birth_year,
+                            )
+                        )
                 except Exception:
-                    logging.exception("Failed writing UserProfile (gender) from FIT")
+                    logging.exception("Failed writing UserProfile (gender/birth_year) from FIT")
 
                 for parsed_record in all_records_list:
                     ts = parsed_record.get("timestamp")
