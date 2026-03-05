@@ -1587,7 +1587,13 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                 activity_start_time = ts0.replace(tzinfo=pytz.UTC)
 
                 # FIT user_profile extraction (gender + birth year + birthdate)
-                all_user_list = [m.get_values() for m in fitfile.get_messages("user_profile")]
+                all_user_list = []
+                for msg in fitfile.get_messages("user_profile"):
+                    d = {}
+                    for f in msg.fields:
+                        # f.name is the decoded field name; f.value is the decoded value
+                        d[f.name] = f.value
+                    all_user_list.append(d)
 
                 # DEBUG: log the keys present in FIT user_profile
                 if all_user_list:
@@ -1605,8 +1611,9 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                         g = up.get("gender") or up.get("sex")
                         # Try common keys first
                         yob = (
-                            up.get("birth_year")
-                            or up.get("year_of_birth")
+                            up.get("year_of_birth")
+                            or up.get("birth_year")
+                            or up.get("yearofbirth")
                             or up.get("birthyear")
                             or up.get("yob")
                         )
