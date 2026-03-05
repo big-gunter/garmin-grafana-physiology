@@ -1637,6 +1637,8 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                 if all_user_list:
                     for up in all_user_list:
                         g = up.get("gender") or up.get("sex")
+                        if g:
+                            fit_gender = _norm_gender(g)
                         # Try common keys first
                         yob = (
                             up.get("year_of_birth")
