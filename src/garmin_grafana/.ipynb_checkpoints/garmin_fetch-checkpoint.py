@@ -533,9 +533,13 @@ def _birth_year_from_any(v: object) -> int | None:
 
     return None
 
-def _age_from_birth_year(birth_year: int) -> int:
-    return max(_date.today().year - int(birth_year), 0)
-
+def _age_from_birth_year(birth_year: int, date_str: str | None = None) -> int:
+    if date_str:
+        yr = int(date_str[:4])  # "YYYY-MM-DD"
+    else:
+        yr = _date.today().year
+    return max(yr - int(birth_year), 0)
+    
 def maybe_update_userprofile_master(
     *,
     birth_year: int | None = None,
@@ -560,7 +564,8 @@ def maybe_update_userprofile_master(
         # nothing to do for age
         new_age = None
     else:
-        new_age = _age_from_birth_year(by)
+        # Master is written as "now", so no date_str needed here
+        new_age = _age_from_birth_year(by, None)
 
     # normalize incoming gender
     g = _norm_gender(gender) if gender is not None else "unknown"
@@ -1631,18 +1636,19 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                 except Exception:
                     logging.exception("UserProfileMaster update from FIT user_profile failed")
                 
-                # Guardrail update (master)
+                # Guardrail update (master): prefer FIT user_profile, fall back to Garmin profile
                 try:
-                    by = _get_birth_year_from_garmin_profile()
-                    g  = _get_user_gender_from_garmin()
+                    by = fit_birth_year or _get_birth_year_from_garmin_profile()
+                    g  = (fit_gender if fit_gender in {"male", "female"} else None) or _get_user_gender_from_garmin()
+                
                     maybe_update_userprofile_master(
                         birth_year=by,
                         gender=g if g != "unknown" else None,
-                        source="garmin_profile",
-                        activity_id=None,
+                        source="fit_user_profile" if fit_birth_year is not None else "garmin_profile",
+                        activity_id=int(activityID),
                     )
                 except Exception:
-                    logging.exception("UserProfileMaster update from Garmin profile failed")
+                    logging.exception("UserProfileMaster update from FIT/Garmin profile failed")
 
                 for parsed_record in all_records_list:
                     ts = parsed_record.get("timestamp")
