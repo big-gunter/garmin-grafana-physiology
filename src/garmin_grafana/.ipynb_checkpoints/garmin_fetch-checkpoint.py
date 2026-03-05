@@ -452,7 +452,7 @@ def _get_age_years(asof_date: str | None = None) -> int:
 
             if by is None:
                 q = (
-                    'SELECT last("birth_year") AS by '
+                    'SELECT last("birth_year") '
                     'FROM "UserProfile" '
                     f'WHERE "birth_year" > 0 '
                     f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
@@ -845,17 +845,17 @@ def _hrr_zones(rhr: float, hrmax: float) -> dict[str, float]:
 def _get_birth_year_for_day_v1(date_str: str) -> int | None:
     start_z, end_z = _day_bounds_z(date_str)
     q = (
-        'SELECT last("birth_year") AS by '
+        'SELECT last("birth_year") '
         'FROM "UserProfile" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
     )
     row = _query_last_row_influx_v1(q) or {}
-    by = row.get("by")
-    if by is None:
+    v = row.get("last")  # Influx returns column name "last" when no alias is used
+    if v is None:
         return None
     try:
-        return int(float(by))
+        return int(float(v))
     except Exception:
         return None
 
