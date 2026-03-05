@@ -402,26 +402,33 @@ import math
 
 USER_AGE = int(os.getenv("USER_AGE", "0"))  # 0 = auto/unknown
 
-def _get_age_years() -> int:
-    # 1) explicit override
+def _get_age_years(date_str: str | None = None) -> int:
+    # 1) explicit env override
     if USER_AGE and USER_AGE > 0:
         return USER_AGE
 
-    # 2) stored master
-    try:
-        a = _stored_age_years_v1()
-        if a > 0:
-            return a
-    except Exception:
-        pass
-
-    # 3) garmin profile (best-effort)
-    try:
-        by = _get_birth_year_from_garmin_profile()
+    # 2) if a day is provided, try birth_year stored in Influx UserProfile
+    if date_str and INFLUXDB_VERSION == "1":
+        by = _get_birth_year_for_day_v1(date_str)
         if by:
-            return _age_from_birth_year(by)
+            age = _date.today().year - int(by)
+            return max(age, 0)
+
+    # 3) fall back to Garmin profile birthDate
+    try:
+        prof = (garmin_obj.garth.profile or {}) if garmin_obj is not None else {}
+        b = None
+        if isinstance(prof, dict):
+            b = prof.get("birthDate") or prof.get("birthdate") or prof.get("dateOfBirth")
+            if not b and isinstance(prof.get("userProfile"), dict):
+                b = prof["userProfile"].get("birthDate") or prof["userProfile"].get("birthdate")
+        if b:
+            y, m, d = [int(x) for x in str(b).split("-")[:3]]
+            today = _date.today()
+            age = today.year - y - ((today.month, today.day) < (m, d))
+            return max(age, 0)
     except Exception:
-        pass
+        logging.exception("Unable to derive age from Garmin profile")
 
     return 0
 
