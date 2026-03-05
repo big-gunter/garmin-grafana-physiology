@@ -1566,46 +1566,24 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                 # DEBUG: dump FIT user_metrics keys/values (first message only)
                 # DEBUG: list message types present in this FIT
                 # DEBUG: discover which message type contains user metrics (age, vo2, lthr, max_hr, etc.)
+                # DEBUG unknown_79: dump field def_nums + values
                 try:
-                    target_keys = {
-                        "age", "vo2", "vo2_max", "max_hr", "hr_max", "lthr", "lt_hr", "ltpower", "ltspeed",
-                        "birth", "year", "dob", "date_of_birth",
-                    }
-                
-                    hits = []
-                    for m in fitfile.get_messages():
-                        name = getattr(m, "name", None)
-                        if not name:
-                            continue
-                
-                        # only scan unknown_* plus a few likely candidates to keep logs reasonable
-                        if not (name.startswith("unknown_") or name in {"session", "activity", "user_profile"}):
-                            continue
-                
-                        d = {f.name: f.value for f in m.fields}
-                        keys_lower = {str(k).lower() for k in d.keys()}
-                
-                        # match: either exact key or substring match (e.g., "vo2_max")
-                        matched = []
-                        for tk in target_keys:
-                            for k in keys_lower:
-                                if tk in k:
-                                    matched.append(k)
-                        if matched:
-                            hits.append((name, sorted(set(matched)), d))
-                
-                    if not hits:
-                        logging.info("FIT scan: no messages containing age/vo2/lthr/max_hr/birth keys found.")
+                    msgs = list(fitfile.get_messages("unknown_79"))
+                    if not msgs:
+                        logging.info("FIT unknown_79: none found")
                     else:
-                        # print top few hits
-                        for i, (name, matched, d) in enumerate(hits[:10]):
-                            logging.info(f"FIT scan hit[{i}] msg={name} matched_keys={matched}")
-                            # keep the sample short: only show the matched fields
-                            sample = {k: v for k, v in d.items() if any(tk in str(k).lower() for tk in target_keys)}
-                            logging.info(f"FIT scan hit[{i}] matched_fields={sample}")
-                
+                        m = msgs[0]
+                        dump = []
+                        for f in m.fields:
+                            dump.append({
+                                "def_num": getattr(f, "def_num", None),
+                                "name": getattr(f, "name", None),
+                                "value": getattr(f, "value", None),
+                                "units": getattr(f, "units", None),
+                            })
+                        logging.info(f"FIT unknown_79 first msg fields: {dump}")
                 except Exception:
-                    logging.exception("FIT scan for user metrics failed")
+                    logging.exception("FIT unknown_79 debug dump failed")
 
                 all_records_list = [record.get_values() for record in fitfile.get_messages("record")]
                 all_sessions_list = [record.get_values() for record in fitfile.get_messages("session")]
