@@ -1564,17 +1564,12 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                 fitfile.parse()
 
                 # DEBUG: dump FIT user_metrics keys/values (first message only)
+                # DEBUG: list message types present in this FIT
                 try:
-                    um_msgs = list(fitfile.get_messages("user_metrics"))
-                    if not um_msgs:
-                        logging.info("FIT user_metrics: none found in FIT")
-                    else:
-                        msg = um_msgs[0]
-                        d = {f.name: f.value for f in msg.fields}
-                        logging.info(f"FIT user_metrics raw keys: {sorted(list(d.keys()))}")
-                        logging.info(f"FIT user_metrics raw sample: {d}")
+                    types = sorted({m.name for m in fitfile.get_messages() if getattr(m, "name", None)})
+                    logging.info(f"FIT message types present: {types}")
                 except Exception:
-                    logging.exception("FIT user_metrics debug dump failed")
+                    logging.exception("FIT message types dump failed")
 
                 all_records_list = [record.get_values() for record in fitfile.get_messages("record")]
                 all_sessions_list = [record.get_values() for record in fitfile.get_messages("session")]
