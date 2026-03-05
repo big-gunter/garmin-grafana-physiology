@@ -403,18 +403,33 @@ def _query_last_row_influx_v1(q: str) -> dict | None:
         return None
 
 def _get_gender_for_day_v1(date_str: str) -> str:
-    # Prefer the gender written (string field) when known, otherwise fallback to unknown.
+    """
+    Prefer numeric gender_code (stable schema) when gender_is_known=1.
+    Falls back to unknown.
+    """
     day_start = _dt_utc(date_str)
     day_end = day_start + timedelta(days=1)
     q = (
-        'SELECT last("gender") AS gender '
+        'SELECT last("gender_code") AS gc '
         'FROM "UserProfile" '
         f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
         "AND gender_is_known = 1 "
         f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
     )
     row = _query_last_row_influx_v1(q) or {}
-    return _norm_gender(row.get("gender"))
+    gc = row.get("gc")
+
+    try:
+        gc_i = int(float(gc)) if gc is not None else 0
+    except Exception:
+        gc_i = 0
+
+    if gc_i == 1:
+        return "male"
+    if gc_i == 2:
+        return "female"
+    return "unknown"
+
 
 def _get_physiology_for_day_v1(date_str: str) -> tuple[float | None, float | None]:
     # returns (rhr, hrmax_est)
@@ -431,24 +446,37 @@ def _get_physiology_for_day_v1(date_str: str) -> tuple[float | None, float | Non
     hrmax = row.get("hrmax")
     return (float(rhr) if rhr is not None else None, float(hrmax) if hrmax is not None else None)
 
+
 def _get_activities_for_day_v1(date_str: str) -> list[dict]:
+    """
+    One row per activity_id (deduped) using last() per Activity_ID.
+    Avoids any chance of counting multiple points for the same activity.
+    """
     day_start = _dt_utc(date_str)
     day_end = day_start + timedelta(days=1)
+
     q = (
-        'SELECT "elapsedDuration","movingDuration","averageHR","activityName","Activity_ID" '
+        'SELECT last("elapsedDuration") AS elapsedDuration, '
+        '       last("movingDuration")  AS movingDuration, '
+        '       last("averageHR")       AS averageHR, '
+        '       last("activityName")    AS activityName, '
+        '       last("Activity_ID")     AS Activity_ID '
         'FROM "ActivitySummary" '
         f"WHERE time >= '{day_start.isoformat()}' AND time < '{day_end.isoformat()}' "
         "AND activityName != 'END' "
         "AND elapsedDuration > 0 "
         "AND averageHR > 0 "
-        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}' "
+        'GROUP BY "Activity_ID"'
     )
+
     try:
         res = influxdbclient.query(q)
         return list(res.get_points())
     except Exception:
         logging.exception("ActivitySummary day query failed")
         return []
+
 
 def _get_trainingload_prev_day_v1(date_str: str) -> tuple[float | None, float | None]:
     # Returns (ATL_7_yday, CTL_42_yday)
@@ -495,37 +523,67 @@ def compute_and_write_training_load(date_str: str) -> None:
         logging.warning("Training load computation currently implemented for InfluxDB v1 only.")
         return
 
-    gender = _get_gender_for_day_v1(date_str)
+    gender = _norm_gender(_get_gender_for_day_v1(date_str))
+    if gender not in {"male", "female"}:
+        logging.info(f"TrainingLoadDaily: gender unknown for {date_str}; skipping write (Bannister requires male/female).")
+        return
+
     rhr, hrmax = _get_physiology_for_day_v1(date_str)
     if rhr is None or hrmax is None:
         logging.info(f"TrainingLoadDaily: missing PhysiologyDaily inputs for {date_str} (rhr={rhr}, hrmax={hrmax})")
         return
 
+    try:
+        rhr_f = float(rhr)
+        hrmax_f = float(hrmax)
+    except Exception:
+        logging.info(f"TrainingLoadDaily: invalid PhysiologyDaily inputs for {date_str} (rhr={rhr}, hrmax={hrmax})")
+        return
+
+    if rhr_f <= 0 or hrmax_f <= 0 or hrmax_f <= rhr_f:
+        logging.info(f"TrainingLoadDaily: nonsensical physiology for {date_str} (rhr={rhr_f}, hrmax={hrmax_f})")
+        return
+
     acts = _get_activities_for_day_v1(date_str)
+
     trimp_total = 0.0
+    act_count = 0
     for a in acts:
+        # guardrail: don't ever count the terminal END marker if it comes through
+        if str(a.get("activityName", "")).upper() == "END":
+            continue
+
         dur = a.get("elapsedDuration")
         hr = a.get("averageHR")
         if dur is None or hr is None:
             continue
-        trimp_total += _bannister_trimp(float(dur), float(hr), float(rhr), float(hrmax), gender)
 
-    # EWMA
+        try:
+            dur_f = float(dur)
+            hr_f = float(hr)
+        except Exception:
+            continue
+
+        t = _bannister_trimp(dur_f, hr_f, rhr_f, hrmax_f, gender)
+        if t > 0:
+            trimp_total += t
+            act_count += 1
+
+    if act_count == 0 and trimp_total == 0.0:
+        logging.info(f"TrainingLoadDaily: no usable activities for {date_str}; skipping write")
+        return
+
+    # EWMA (yesterday -> today)
     atl_prev, ctl_prev = _get_trainingload_prev_day_v1(date_str)
 
     a7 = 1.0 - math.exp(-1.0 / 7.0)
     a42 = 1.0 - math.exp(-1.0 / 42.0)
 
-    if atl_prev is None:
-        atl = trimp_total
-    else:
-        atl = atl_prev + a7 * (trimp_total - atl_prev)
+    atl_prev = float(atl_prev) if atl_prev is not None else None
+    ctl_prev = float(ctl_prev) if ctl_prev is not None else None
 
-    if ctl_prev is None:
-        ctl = trimp_total
-    else:
-        ctl = ctl_prev + a42 * (trimp_total - ctl_prev)
-
+    atl = trimp_total if atl_prev is None else (atl_prev + a7 * (trimp_total - atl_prev))
+    ctl = trimp_total if ctl_prev is None else (ctl_prev + a42 * (trimp_total - ctl_prev))
     tsb = ctl - atl
 
     point = {
@@ -537,14 +595,18 @@ def compute_and_write_training_load(date_str: str) -> None:
             "ATL_7": float(atl),
             "CTL_42": float(ctl),
             "TSB": float(tsb),
-            "RHR_used": float(rhr),
-            "HRmax_used": float(hrmax),
-            "gender_used": gender,
+            "RHR_used": float(rhr_f),
+            "HRmax_used": float(hrmax_f),
+            "gender_code_used": int(_gender_code(gender)),
+            "gender_is_known_used": 1,
+            "activities_used": int(act_count),
         },
     }
-    write_points_to_influxdb([point])
-    logging.info(f"TrainingLoadDaily written for {date_str}: TRIMP={trimp_total:.2f}, ATL_7={atl:.2f}, CTL_42={ctl:.2f}, TSB={tsb:.2f}")
 
+    write_points_to_influxdb([point])
+    logging.info(
+        f"TrainingLoadDaily written for {date_str}: TRIMP={trimp_total:.2f}, ATL_7={atl:.2f}, CTL_42={ctl:.2f}, TSB={tsb:.2f} (acts={act_count})"
+    )
 
 def _userprofile_exists_for_day_v1(date_str: str) -> bool:
     """
