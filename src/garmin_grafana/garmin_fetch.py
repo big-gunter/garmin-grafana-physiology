@@ -1588,6 +1588,13 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
 
                 # FIT user_profile extraction (gender + birth year + birthdate)
                 all_user_list = [m.get_values() for m in fitfile.get_messages("user_profile")]
+
+                # DEBUG: log the keys present in FIT user_profile
+                if all_user_list:
+                    logging.info(f"FIT user_profile raw keys: {sorted(list(all_user_list[0].keys()))}")
+                    logging.info(f"FIT user_profile raw sample: {all_user_list[0]}")
+                else:
+                    logging.info("FIT user_profile: none found in FIT")
                 
                 fit_gender = "unknown"
                 fit_birth_year = None
@@ -1596,15 +1603,39 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                 if all_user_list:
                     for up in all_user_list:
                         g = up.get("gender") or up.get("sex")
-                        yob = up.get("birth_year") or up.get("year_of_birth")
-                        bd  = up.get("birthdate") or up.get("birth_date") or up.get("date_of_birth")
-                
-                        if g is not None and fit_gender == "unknown":
-                            fit_gender = _norm_gender(g)
-                
+                        # Try common keys first
+                        yob = (
+                            up.get("birth_year")
+                            or up.get("year_of_birth")
+                            or up.get("birthyear")
+                            or up.get("yob")
+                        )
+                        
+                        bd = (
+                            up.get("birthdate")
+                            or up.get("birth_date")
+                            or up.get("date_of_birth")
+                            or up.get("dob")
+                        )
+                        
+                        # If still missing, search keys heuristically (FIT fields vary by device/SDK)
+                        if yob is None:
+                            for k, v in up.items():
+                                ks = str(k).lower()
+                                if "birth" in ks and "year" in ks:
+                                    yob = v
+                                    break
+                        
+                        if bd is None:
+                            for k, v in up.items():
+                                ks = str(k).lower()
+                                if "birth" in ks and ("date" in ks or "dob" in ks):
+                                    bd = v
+                                    break
+                        
                         if fit_birth_year is None:
                             fit_birth_year = _birth_year_from_any(yob)
-                
+                        
                         if fit_birth_year is None and fit_birthdate is None:
                             fit_birthdate = bd
                 
