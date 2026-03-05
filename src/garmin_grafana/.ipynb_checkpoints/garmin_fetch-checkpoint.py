@@ -414,7 +414,11 @@ def _get_age_years(date_str: str | None = None) -> int:
             by = _stored_birth_year_v1()
         if by:
             return _age_from_birth_year(by, date_str)
-
+    # after the "birth_year stored" block, add:
+    if INFLUXDB_VERSION == "1":
+        a = _stored_age_years_v1()
+        if a and a > 0:
+            return a
     # 3) fall back to Garmin profile birthDate
     try:
         prof = (garmin_obj.garth.profile or {}) if garmin_obj is not None else {}
@@ -691,6 +695,16 @@ def compute_and_write_training_load(date_str: str) -> None:
         return
 
     gender = _norm_gender(_get_gender_for_day_v1(date_str))
+    if gender not in {"male", "female"}:
+        # fallback to master
+        row = _get_userprofile_master_v1()
+        gc = row.get("gender_code")
+        try:
+            gc_i = int(float(gc)) if gc is not None else 0
+        except Exception:
+            gc_i = 0
+        gender = "male" if gc_i == 1 else "female" if gc_i == 2 else "unknown"
+    
     if gender not in {"male", "female"}:
         logging.info(f"TrainingLoadDaily: gender unknown for {date_str}; skipping write (Bannister requires male/female).")
         return
@@ -1606,18 +1620,6 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                     logging.info(f"FIT unknown_79 derived: age={fit_age_years}, lthr={fit_lthr}, ltpower={fit_ltpower}")
                 except Exception:
                     logging.exception("FIT unknown_79 extraction failed")
-
-                fit_birth_year = None
-                try:
-                    yy = all_user_list[0].get("unknown_24")
-                    if yy is not None:
-                        yy = int(float(yy))
-                        # pivot using activity year
-                        ref_year = int(activity_start_time.strftime("%Y"))
-                        yy_now = ref_year % 100
-                        fit_birth_year = (2000 + yy) if yy <= yy_now else (1900 + yy)
-                except Exception:
-                    pass
                 
                 # FIT user_profile extraction (gender + birth year + birthdate)
                 all_user_list = []
@@ -1627,13 +1629,6 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                         # f.name is the decoded field name; f.value is the decoded value
                         d[f.name] = f.value
                     all_user_list.append(d)
-
-                # DEBUG: log the keys present in FIT user_profile
-                if all_user_list:
-                    logging.info(f"FIT user_profile raw keys: {sorted(list(all_user_list[0].keys()))}")
-                    logging.info(f"FIT user_profile raw sample: {all_user_list[0]}")
-                else:
-                    logging.info("FIT user_profile: none found in FIT")
                 
                 fit_gender = "unknown"
                 fit_birth_year = None
@@ -2337,8 +2332,11 @@ def daily_fetch_write(date_str):
             logging.info(f"UserProfile already exists for {date_str}; skipping daily write")
         else:
             g = _get_user_gender_from_garmin()
+            if g == "unknown":
+                g = FIT_GENDER_CACHE.get(date_str, "unknown")
+    
             by = _stored_birth_year_v1() or _get_birth_year_from_garmin_profile()
-        
+    
             if g != "unknown" or by is not None:
                 write_points_to_influxdb(
                     write_user_profile_point(
@@ -2349,25 +2347,6 @@ def daily_fetch_write(date_str):
                 )
             else:
                 logging.info(f"UserProfile: no gender/birth_year available for {date_str}; skipping write")
-            
-            # birth year: prefer master; fall back to Garmin profile
-            by = None
-            if INFLUXDB_VERSION == "1":
-                by = _stored_birth_year_v1()
-            if by is None:
-                by = _get_birth_year_from_garmin_profile()
-            
-            if g != "unknown" or by is not None:
-                write_points_to_influxdb(
-                    write_user_profile_point(
-                        date_str,
-                        gender=g,          # can be "unknown" (it will store gender_code=0)
-                        birth_year=by,     # this is the key unlock for age → HRmax fallback
-                    )
-                )
-            else:
-                logging.info(f"UserProfile: no gender/birth_year available for {date_str}; skipping write")
-                
     except Exception:
         logging.exception(f"UserProfile write failed for {date_str}")
 
