@@ -540,49 +540,51 @@ def _age_from_birth_year(birth_year: int, date_str: str | None = None) -> int:
     return max(yr - int(birth_year), 0)
     
 def maybe_update_userprofile_master(*, birth_year=None, age_years=None, gender=None, source="unknown", activity_id=None):
-    row = _get_userprofile_master_v1()
-    stored_by  = row.get("birth_year")
-    stored_age = row.get("age_years")
+    """
+    Writes incremental improvements to UserProfileMaster. Stores:
+      - birth_year (optional)
+      - age_years (optional; can come from user_metrics)
+      - gender fields (optional)
+    """
 
     def _to_int(x):
-        try: return int(float(x))
-        except Exception: return None
+        try:
+            return int(float(x))
+        except Exception:
+            return None
 
-    stored_by_i  = _to_int(stored_by)
-    stored_age_i = _to_int(stored_age)
+    row = _get_userprofile_master_v1()
 
-    new_by  = _to_int(birth_year) if birth_year is not None else None
-    new_age = _to_int(age_years)  if age_years is not None else None
+    stored_by  = _to_int(row.get("birth_year"))
+    stored_age = _to_int(row.get("age_years"))
+    stored_gc  = _to_int(row.get("gender_code")) or 0
+    stored_gender_known = stored_gc in (1, 2)
 
-    # If we have birth_year but not age, compute age using *current year*
+    new_by  = _to_int(birth_year)
+    new_age = _to_int(age_years)
+
+    # If we have birth_year but not age, compute an approximate age (year-based).
     if new_age is None and new_by is not None:
         new_age = _age_from_birth_year(new_by, None)
 
-    write_birth = new_by is not None and new_by != stored_by_i
-    write_age   = new_age is not None and new_age != stored_age_i
+    g = gender
 
-    # existing gender logic unchanged...
-    # if any of write_birth/write_age/gender changed => write point including birth_year/age_years
-
-    row = _get_userprofile_master_v1()
-    stored_gc = row.get("gender_code")
-    try:
-        stored_gc_i = int(float(stored_gc)) if stored_gc is not None else 0
-    except Exception:
-        stored_gc_i = 0
-    stored_gender_known = stored_gc_i in (1, 2)
-
+    write_birth  = new_by is not None and new_by != stored_by
+    write_age    = new_age is not None and new_age != stored_age
     write_gender = (g in {"male", "female"}) and (not stored_gender_known)
 
-    if not (write_age or write_gender):
+    if not (write_birth or write_age or write_gender):
         return
 
     fields: dict[str, object] = {}
-    if write_age and by is not None and new_age is not None:
-        fields["birth_year"] = int(by)
+
+    if write_birth:
+        fields["birth_year"] = int(new_by)
+
+    if write_age:
         fields["age_years"] = int(new_age)
 
-    if write_gender and g in {"male", "female"}:
+    if write_gender:
         fields["gender_code"] = _gender_code(g)
         fields["gender"] = g
         fields["gender_is_known"] = 1
@@ -593,7 +595,6 @@ def maybe_update_userprofile_master(*, birth_year=None, age_years=None, gender=N
 
     point = {
         "measurement": "UserProfileMaster",
-        # Use "now" so each improvement becomes the new last()
         "time": datetime.now(pytz.UTC).isoformat(),
         "tags": {"Device": GARMIN_DEVICENAME, "Database_Name": INFLUXDB_DATABASE},
         "fields": fields,
