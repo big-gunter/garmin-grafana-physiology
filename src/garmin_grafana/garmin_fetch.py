@@ -406,19 +406,20 @@ def _get_age_years(date_str: str | None = None) -> int:
     # 1) explicit env override
     if USER_AGE and USER_AGE > 0:
         return USER_AGE
-
-    # 2) if a day is provided, try birth_year stored in Influx UserProfile
+    
+    # 2) master age (best available if you've populated it from unknown_79)
+    if INFLUXDB_VERSION == "1":
+        a = _stored_age_years_v1()
+        if a and a > 0:
+            return a
+    
+    # 3) if a day is provided, try birth_year stored in Influx UserProfile/master
     if date_str and INFLUXDB_VERSION == "1":
         by = _get_birth_year_for_day_v1(date_str)
         if not by:
             by = _stored_birth_year_v1()
         if by:
             return _age_from_birth_year(by, date_str)
-    # after the "birth_year stored" block, add:
-    if INFLUXDB_VERSION == "1":
-        a = _stored_age_years_v1()
-        if a and a > 0:
-            return a
     # 3) fall back to Garmin profile birthDate
     try:
         prof = (garmin_obj.garth.profile or {}) if garmin_obj is not None else {}
@@ -1595,13 +1596,9 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                     raise FileNotFoundError(f"First record missing timestamp in FIT for Activity ID {activityID} - Discarding FIT file")
                 activity_start_time = ts0.replace(tzinfo=pytz.UTC)
 
-                fit_age_years = None
                 fit_lthr = None
                 fit_ltpower = None
-                
-                fit_age_years = None
-                fit_lthr = None
-                fit_ltpower = None
+                # do NOT reset fit_age_years here
                 
                 try:
                     for msg in fitfile.get_messages("unknown_79"):
@@ -1691,6 +1688,20 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                     # cache gender by day (used by daily_fetch_write when garmin profile gender is missing)
                     if fit_gender in {"male", "female"}:
                         FIT_GENDER_CACHE[activity_day] = fit_gender
+                        
+                        # NEW: also update the day's UserProfile measurement in Influx
+                        try:
+                            by = _stored_birth_year_v1() or _get_birth_year_from_garmin_profile() or fit_birth_year
+                            write_points_to_influxdb(
+                                write_user_profile_point(
+                                    activity_day,
+                                    gender=fit_gender,
+                                    birth_year=by,
+                                )
+                            )
+                            logging.info(f"UserProfile updated from FIT for {activity_day}: gender={fit_gender}, birth_year={by}")
+                        except Exception:
+                            logging.exception("Failed writing UserProfile from FIT gender")
                 
                     # persist to UserProfileMaster (birth_year drives age; gender drives TRIMP/Bannister)
                     maybe_update_userprofile_master(
@@ -1702,21 +1713,6 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                     )
                 except Exception:
                     logging.exception("UserProfileMaster update from FIT user_profile failed")
-                
-                # Guardrail update (master): prefer FIT user_profile, fall back to Garmin profile
-                try:
-                    by = fit_birth_year or _get_birth_year_from_garmin_profile()
-                    g  = fit_gender if fit_gender in {"male", "female"} else _get_user_gender_from_garmin()
-                
-                    maybe_update_userprofile_master(
-                        birth_year=fit_birth_year,
-                        age_years=fit_age_years,
-                        gender=fit_gender if fit_gender in {"male", "female"} else None,
-                        source="fit_unknown_79",
-                        activity_id=int(activityID),
-                    )
-                except Exception:
-                    logging.exception("UserProfileMaster update from FIT/Garmin profile failed")
 
                 for parsed_record in all_records_list:
                     ts = parsed_record.get("timestamp")
