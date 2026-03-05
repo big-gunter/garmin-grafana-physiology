@@ -539,40 +539,30 @@ def _age_from_birth_year(birth_year: int, date_str: str | None = None) -> int:
         yr = _date.today().year
     return max(yr - int(birth_year), 0)
     
-def maybe_update_userprofile_master(
-    *,
-    birth_year: int | None = None,
-    gender: str | None = None,
-    source: str,
-    activity_id: int | None = None,
-) -> None:
-    """
-    Guardrail:
-      birth_year -> age_years -> if age_years > stored_age_years -> write
-      (and independently: if stored gender unknown and new gender known -> write)
-    """
-    if INFLUXDB_VERSION != "1":
-        return
+def maybe_update_userprofile_master(*, birth_year=None, age_years=None, gender=None, source="unknown", activity_id=None):
+    row = _get_userprofile_master_v1()
+    stored_by  = row.get("birth_year")
+    stored_age = row.get("age_years")
 
-    stored_age = _stored_age_years_v1()
-    stored_by = _stored_birth_year_v1()
+    def _to_int(x):
+        try: return int(float(x))
+        except Exception: return None
 
-    # normalize incoming birth_year
-    by = birth_year if (birth_year and birth_year > 0) else None
-    if by is None:
-        # nothing to do for age
-        new_age = None
-    else:
-        # Master is written as "now", so no date_str needed here
-        new_age = _age_from_birth_year(by, None)
+    stored_by_i  = _to_int(stored_by)
+    stored_age_i = _to_int(stored_age)
 
-    # normalize incoming gender
-    g = _norm_gender(gender) if gender is not None else "unknown"
+    new_by  = _to_int(birth_year) if birth_year is not None else None
+    new_age = _to_int(age_years)  if age_years is not None else None
 
-    # decide if we should write
-    write_age = (new_age is not None) and (new_age > stored_age)
-    # (optional) also allow write if birth_year earlier than stored birth_year
-    # write_age = write_age or (by is not None and stored_by is not None and by < stored_by)
+    # If we have birth_year but not age, compute age using *current year*
+    if new_age is None and new_by is not None:
+        new_age = _age_from_birth_year(new_by, None)
+
+    write_birth = new_by is not None and new_by != stored_by_i
+    write_age   = new_age is not None and new_age != stored_age_i
+
+    # existing gender logic unchanged...
+    # if any of write_birth/write_age/gender changed => write point including birth_year/age_years
 
     row = _get_userprofile_master_v1()
     stored_gc = row.get("gender_code")
@@ -1577,6 +1567,19 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                 all_lengths_list = [record.get_values() for record in fitfile.get_messages("length")]
                 all_laps_list = [record.get_values() for record in fitfile.get_messages("lap")]
 
+                fit_age_years = None
+                for msg in fitfile.get_messages("user_metrics"):
+                    # pull fields robustly (same approach as user_profile)
+                    d = {f.name: f.value for f in msg.fields}
+                    a = d.get("age")
+                    if a is None:
+                        continue
+                    try:
+                        fit_age_years = int(float(a))
+                        break
+                    except Exception:
+                        pass
+
                 if len(all_records_list) == 0:
                     raise FileNotFoundError(f"No records found in FIT file for Activity ID {activityID} - Discarding FIT file")
 
@@ -1663,13 +1666,13 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                         FIT_GENDER_CACHE[activity_day] = fit_gender
                 
                     # persist to UserProfileMaster (birth_year drives age; gender drives TRIMP/Bannister)
-                    if fit_birth_year is not None or fit_gender in {"male", "female"}:
-                        maybe_update_userprofile_master(
-                            birth_year=fit_birth_year,
-                            gender=fit_gender if fit_gender in {"male", "female"} else None,
-                            source="fit_user_profile",
-                            activity_id=int(activityID),
-                        )
+                    maybe_update_userprofile_master(
+                        birth_year=fit_birth_year,
+                        age_years=fit_age_years,  # <-- NEW
+                        gender=fit_gender if fit_gender in {"male","female"} else None,
+                        source="fit_user_metrics" if fit_age_years is not None else "fit_user_profile",
+                        activity_id=int(activityID),
+                    )
                 except Exception:
                     logging.exception("UserProfileMaster update from FIT user_profile failed")
                 
@@ -1679,9 +1682,10 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                     g  = fit_gender if fit_gender in {"male", "female"} else _get_user_gender_from_garmin()
                 
                     maybe_update_userprofile_master(
-                        birth_year=by,
-                        gender=g if g != "unknown" else None,
-                        source="fit_user_profile" if fit_birth_year is not None else "garmin_profile",
+                        birth_year=fit_birth_year,
+                        age_years=fit_age_years,  # <-- NEW
+                        gender=fit_gender if fit_gender in {"male","female"} else None,
+                        source="fit_user_metrics" if fit_age_years is not None else "fit_user_profile",
                         activity_id=int(activityID),
                     )
                 except Exception:
