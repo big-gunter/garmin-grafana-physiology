@@ -410,6 +410,8 @@ def _get_age_years(date_str: str | None = None) -> int:
     # 2) if a day is provided, try birth_year stored in Influx UserProfile
     if date_str and INFLUXDB_VERSION == "1":
         by = _get_birth_year_for_day_v1(date_str)
+        if not by:
+            by = _stored_birth_year_v1()   # <-- NEW master fallback
         if by:
             age = _date.today().year - int(by)
             return max(age, 0)
@@ -1609,6 +1611,25 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                 # If we only got a birthdate, derive birth_year
                 if fit_birth_year is None:
                     fit_birth_year = _birth_year_from_any(fit_birthdate)
+
+                # --- NEW: use FIT user_profile to populate master + per-day gender cache ---
+                try:
+                    activity_day = activity_start_time.strftime("%Y-%m-%d")
+                
+                    # cache gender by day (used by daily_fetch_write when garmin profile gender is missing)
+                    if fit_gender in {"male", "female"}:
+                        FIT_GENDER_CACHE[activity_day] = fit_gender
+                
+                    # persist to UserProfileMaster (birth_year drives age; gender drives TRIMP/Bannister)
+                    if fit_birth_year is not None or fit_gender in {"male", "female"}:
+                        maybe_update_userprofile_master(
+                            birth_year=fit_birth_year,
+                            gender=fit_gender if fit_gender in {"male", "female"} else None,
+                            source="fit_user_profile",
+                            activity_id=int(activityID),
+                        )
+                except Exception:
+                    logging.exception("UserProfileMaster update from FIT user_profile failed")
                 
                 # Guardrail update (master)
                 try:
@@ -2238,11 +2259,31 @@ def daily_fetch_write(date_str):
         if USERPROFILE_WRITE_ONCE_PER_DAY and _userprofile_exists_for_day_v1(date_str):
             logging.info(f"UserProfile already exists for {date_str}; skipping daily write")
         else:
+            # --- NEW: write UserProfile if we have either gender OR birth_year ---
             g = _get_user_gender_from_garmin()
+            
+            # fall back to FIT-cached gender (populated during activity FIT parsing)
             if g == "unknown":
-                logging.info(f"UserProfile gender unknown from garmin_profile for {date_str}; skipping write")
+                g = FIT_GENDER_CACHE.get(date_str, "unknown")
+            
+            # birth year: prefer master; fall back to Garmin profile
+            by = None
+            if INFLUXDB_VERSION == "1":
+                by = _stored_birth_year_v1()
+            if by is None:
+                by = _get_birth_year_from_garmin_profile()
+            
+            if g != "unknown" or by is not None:
+                write_points_to_influxdb(
+                    write_user_profile_point(
+                        date_str,
+                        gender=g,          # can be "unknown" (it will store gender_code=0)
+                        birth_year=by,     # this is the key unlock for age → HRmax fallback
+                    )
+                )
             else:
-                write_points_to_influxdb(write_user_profile_point(date_str, gender=g))
+                logging.info(f"UserProfile: no gender/birth_year available for {date_str}; skipping write")
+                
     except Exception:
         logging.exception(f"UserProfile write failed for {date_str}")
 
