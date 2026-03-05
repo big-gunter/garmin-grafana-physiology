@@ -402,71 +402,26 @@ import math
 
 USER_AGE = int(os.getenv("USER_AGE", "0"))  # 0 = auto/unknown
 
-def _get_age_years(asof_date: str | None = None) -> int:
-    """
-    Returns age in years.
-
-    Priority:
-      1) USER_AGE env (if > 0)
-      2) Garmin profile birthDate (YYYY-MM-DD)
-      3) UserProfile.birth_year from InfluxDB (daily point; FIT-derived if present)
-      4) 0 (unknown)
-
-    Notes:
-      - If asof_date is provided, age is calculated as-of that date (UTC day).
-      - If asof_date is omitted, uses today's local date.
-    """
-    # 1) Explicit override
+def _get_age_years() -> int:
+    # 1) explicit override
     if USER_AGE and USER_AGE > 0:
         return USER_AGE
 
-    # Choose "today" reference
+    # 2) stored master
     try:
-        ref = _date.today() if not asof_date else datetime.strptime(asof_date, "%Y-%m-%d").date()
+        a = _stored_age_years_v1()
+        if a > 0:
+            return a
     except Exception:
-        ref = _date.today()
+        pass
 
-    # 2) Garmin profile birthDate
+    # 3) garmin profile (best-effort)
     try:
-        prof = (garmin_obj.garth.profile or {}) if garmin_obj is not None else {}
-        b = None
-        if isinstance(prof, dict):
-            b = prof.get("birthDate") or prof.get("birthdate") or prof.get("dateOfBirth")
-            if not b and isinstance(prof.get("userProfile"), dict):
-                b = prof["userProfile"].get("birthDate") or prof["userProfile"].get("birthdate") or prof["userProfile"].get("dateOfBirth")
-
-        if b:
-            y, m, d = [int(x) for x in str(b).split("-")[:3]]
-            age = ref.year - y - ((ref.month, ref.day) < (m, d))
-            return max(age, 0)
+        by = _get_birth_year_from_garmin_profile()
+        if by:
+            return _age_from_birth_year(by)
     except Exception:
-        logging.exception("Unable to derive age from Garmin profile")
-
-    # 3) FIT/UserProfile birth_year (Influx v1)
-    try:
-        if INFLUXDB_VERSION == "1":
-            # Prefer the as-of day; if missing, fall back to "most recent known birth_year".
-            by = None
-            if asof_date:
-                by = _get_birth_year_for_day_v1(asof_date)
-
-            if by is None:
-                q = (
-                    'SELECT last("birth_year") '
-                    'FROM "UserProfile" '
-                    f'WHERE "birth_year" > 0 '
-                    f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
-                )
-                row = _query_last_row_influx_v1(q) or {}
-                by = row.get("by")
-                if by is not None:
-                    by = int(float(by))
-
-            if by:
-                age = ref.year - int(by)
-                return max(age, 0)
-    except Exception:
-        logging.exception("Unable to derive age from UserProfile.birth_year")
+        pass
 
     return 0
 
@@ -517,6 +472,131 @@ def _get_gender_for_day_v1(date_str: str) -> str:
         return "female"
     return "unknown"
 
+def _get_userprofile_master_v1() -> dict:
+    q = (
+        'SELECT last("age_years") AS age_years, last("birth_year") AS birth_year, last("gender_code") AS gender_code '
+        'FROM "UserProfileMaster" '
+        f"WHERE \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+    )
+    return _query_last_row_influx_v1(q) or {}
+
+def _stored_age_years_v1() -> int:
+    row = _get_userprofile_master_v1()
+    v = row.get("age_years")
+    try:
+        return int(float(v)) if v is not None else 0
+    except Exception:
+        return 0
+
+def _stored_birth_year_v1() -> int | None:
+    row = _get_userprofile_master_v1()
+    v = row.get("birth_year")
+    try:
+        by = int(float(v)) if v is not None else 0
+        return by if by > 0 else None
+    except Exception:
+        return None
+
+def _birth_year_from_any(v: object) -> int | None:
+    """
+    Accepts:
+      - int year (e.g., 1984)
+      - string '1984'
+      - string 'YYYY-MM-DD'
+    Returns birth_year or None.
+    """
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s:
+        return None
+
+    # YYYY-MM-DD
+    if "-" in s:
+        parts = s.split("-")
+        if len(parts) >= 1 and parts[0].isdigit():
+            y = int(parts[0])
+            return y if 1900 <= y <= _date.today().year else None
+
+    if s.isdigit():
+        y = int(s)
+        return y if 1900 <= y <= _date.today().year else None
+
+    return None
+
+def _age_from_birth_year(birth_year: int) -> int:
+    return max(_date.today().year - int(birth_year), 0)
+
+def maybe_update_userprofile_master(
+    *,
+    birth_year: int | None = None,
+    gender: str | None = None,
+    source: str,
+    activity_id: int | None = None,
+) -> None:
+    """
+    Guardrail:
+      birth_year -> age_years -> if age_years > stored_age_years -> write
+      (and independently: if stored gender unknown and new gender known -> write)
+    """
+    if INFLUXDB_VERSION != "1":
+        return
+
+    stored_age = _stored_age_years_v1()
+    stored_by = _stored_birth_year_v1()
+
+    # normalize incoming birth_year
+    by = birth_year if (birth_year and birth_year > 0) else None
+    if by is None:
+        # nothing to do for age
+        new_age = None
+    else:
+        new_age = _age_from_birth_year(by)
+
+    # normalize incoming gender
+    g = _norm_gender(gender) if gender is not None else "unknown"
+
+    # decide if we should write
+    write_age = (new_age is not None) and (new_age > stored_age)
+    # (optional) also allow write if birth_year earlier than stored birth_year
+    # write_age = write_age or (by is not None and stored_by is not None and by < stored_by)
+
+    row = _get_userprofile_master_v1()
+    stored_gc = row.get("gender_code")
+    try:
+        stored_gc_i = int(float(stored_gc)) if stored_gc is not None else 0
+    except Exception:
+        stored_gc_i = 0
+    stored_gender_known = stored_gc_i in (1, 2)
+
+    write_gender = (g in {"male", "female"}) and (not stored_gender_known)
+
+    if not (write_age or write_gender):
+        return
+
+    fields: dict[str, object] = {}
+    if write_age and by is not None and new_age is not None:
+        fields["birth_year"] = int(by)
+        fields["age_years"] = int(new_age)
+
+    if write_gender and g in {"male", "female"}:
+        fields["gender_code"] = _gender_code(g)
+        fields["gender"] = g
+        fields["gender_is_known"] = 1
+
+    fields["source"] = source
+    if activity_id is not None:
+        fields["activity_id"] = int(activity_id)
+
+    point = {
+        "measurement": "UserProfileMaster",
+        # Use "now" so each improvement becomes the new last()
+        "time": datetime.now(pytz.UTC).isoformat(),
+        "tags": {"Device": GARMIN_DEVICENAME, "Database_Name": INFLUXDB_DATABASE},
+        "fields": fields,
+    }
+    write_points_to_influxdb([point])
+    
 def _iso_z(dt: datetime) -> str:
     # InfluxQL-friendly RFC3339 with Z (avoid +00:00)
     return dt.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -858,6 +938,21 @@ def _get_birth_year_for_day_v1(date_str: str) -> int | None:
         return int(float(v))
     except Exception:
         return None
+
+def _get_birth_year_from_garmin_profile() -> int | None:
+    try:
+        prof = garmin_obj.get_user_profile() if garmin_obj is not None else {}
+        b = None
+        if isinstance(prof, dict):
+            b = prof.get("birthDate") or prof.get("birthdate") or prof.get("dateOfBirth")
+            if not b and isinstance(prof.get("userProfile"), dict):
+                b = prof["userProfile"].get("birthDate") or prof["userProfile"].get("birthdate")
+        return _birth_year_from_any(b)
+    except Exception:
+        logging.exception("Unable to extract birth year from Garmin user profile")
+        return None
+
+
 
 def compute_and_write_physiology(asof_date: str) -> None:
     if INFLUXDB_VERSION != "1":
@@ -1478,43 +1573,48 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                     raise FileNotFoundError(f"First record missing timestamp in FIT for Activity ID {activityID} - Discarding FIT file")
                 activity_start_time = ts0.replace(tzinfo=pytz.UTC)
 
-                # FIT user_profile extraction (gender + birth year)
+                # FIT user_profile extraction (gender + birth year + birthdate)
                 all_user_list = [m.get_values() for m in fitfile.get_messages("user_profile")]
                 
                 fit_gender = "unknown"
                 fit_birth_year = None
+                fit_birthdate = None  # if present as YYYY-MM-DD or similar
                 
                 if all_user_list:
                     for up in all_user_list:
                         g = up.get("gender") or up.get("sex")
                         yob = up.get("birth_year") or up.get("year_of_birth")
+                        bd  = up.get("birthdate") or up.get("birth_date") or up.get("date_of_birth")
                 
                         if g is not None and fit_gender == "unknown":
                             fit_gender = _norm_gender(g)
                 
-                        if yob is not None and fit_birth_year is None:
-                            try:
-                                fit_birth_year = int(yob)
-                            except Exception:
-                                fit_birth_year = None
+                        if fit_birth_year is None:
+                            fit_birth_year = _birth_year_from_any(yob)
                 
-                        # stop once we have both
+                        if fit_birth_year is None and fit_birthdate is None:
+                            fit_birthdate = bd
+                
+                        # if we got something usable, stop
                         if fit_gender in {"male", "female"} and fit_birth_year is not None:
                             break
-
-                # Write UserProfile from FIT (daily point; overwrites same-day point because tagset+time match)
+                
+                # If we only got a birthdate, derive birth_year
+                if fit_birth_year is None:
+                    fit_birth_year = _birth_year_from_any(fit_birthdate)
+                
+                # Guardrail update (master)
                 try:
-                    act_date = activity_start_time.strftime("%Y-%m-%d")
-                    if fit_gender != "unknown" or fit_birth_year is not None:
-                        write_points_to_influxdb(
-                            write_user_profile_point(
-                                act_date,
-                                gender=fit_gender if fit_gender != "unknown" else None,
-                                birth_year=fit_birth_year,
-                            )
-                        )
+                    by = _get_birth_year_from_garmin_profile()
+                    g  = _get_user_gender_from_garmin()
+                    maybe_update_userprofile_master(
+                        birth_year=by,
+                        gender=g if g != "unknown" else None,
+                        source="garmin_profile",
+                        activity_id=None,
+                    )
                 except Exception:
-                    logging.exception("Failed writing UserProfile (gender/birth_year) from FIT")
+                    logging.exception("UserProfileMaster update from Garmin profile failed")
 
                 for parsed_record in all_records_list:
                     ts = parsed_record.get("timestamp")
