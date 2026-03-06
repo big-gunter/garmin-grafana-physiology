@@ -2455,29 +2455,29 @@ def daily_fetch_write(date_str, *, run_rollups_inline: bool = True):
             logging.exception(f"TrainingLoadDaily computation failed for {date_str}")
 
 def compute_rollups_range(start_date: str, end_date: str) -> None:
-"""
-Compute rollups in chronological order so:
-  - HRmax windows have historical data present
-  - ATL/CTL can use yesterday's value
-"""
-start = datetime.strptime(start_date, "%Y-%m-%d")
-end = datetime.strptime(end_date, "%Y-%m-%d")
-current = start
-while current <= end:
-    d = current.strftime("%Y-%m-%d")
-
-    try:
-        compute_and_write_physiology(d)
-    except Exception:
-        logging.exception(f"PhysiologyDaily computation failed for {d}")
-
-    try:
-        compute_and_write_training_load(d)
-    except Exception:
-        logging.exception(f"TrainingLoadDaily computation failed for {d}")
-
-    current += timedelta(days=1)
-            
+    """
+    Compute rollups in chronological order so:
+      - HRmax windows have historical data present
+      - ATL/CTL can use yesterday's value
+    """
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+    current = start
+    while current <= end:
+        d = current.strftime("%Y-%m-%d")
+    
+        try:
+            compute_and_write_physiology(d)
+        except Exception:
+            logging.exception(f"PhysiologyDaily computation failed for {d}")
+    
+        try:
+            compute_and_write_training_load(d)
+        except Exception:
+            logging.exception(f"TrainingLoadDaily computation failed for {d}")
+    
+        current += timedelta(days=1)
+                
 # %%
 def fetch_write_bulk(start_date_str, end_date_str, *, local_timediff: timedelta):
     global garmin_obj
