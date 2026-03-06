@@ -505,7 +505,10 @@ def _get_gender_for_day_v1(date_str: str) -> str:
 
 def _get_userprofile_master_v1() -> dict:
     q = (
-        'SELECT last("age_years") AS age_years, last("birth_year") AS birth_year, last("gender_code") AS gender_code '
+        'SELECT last("age_years") AS age_years, '
+        '       last("birth_year") AS birth_year, '
+        '       last("gender_code") AS gender_code, '
+        '       last("lthr_bpm") AS lthr_bpm '
         'FROM "UserProfileMaster" '
         f"WHERE \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
     )
@@ -580,21 +583,16 @@ def maybe_update_userprofile_master(*, birth_year=None, age_years=None, gender=N
 
     row = _get_userprofile_master_v1()
 
-    stored_by  = _to_int(row.get("birth_year"))
-    stored_age = _to_int(row.get("age_years"))
-    stored_gc  = _to_int(row.get("gender_code")) or 0
+    stored_by   = _to_int(row.get("birth_year"))
+    stored_age  = _to_int(row.get("age_years"))
+    stored_gc   = _to_int(row.get("gender_code")) or 0
+    stored_lthr = _to_int(row.get("lthr_bpm"))
+
     stored_gender_known = stored_gc in (1, 2)
 
-    stored_lthr = _to_int(row.get("lthr_bpm"))
+    new_by   = _to_int(birth_year)
+    new_age  = _to_int(age_years)
     new_lthr = _to_int(lthr)
-    write_lthr = (new_lthr is not None) and (new_lthr != stored_lthr)
-    if not (write_birth or write_age or write_gender or write_lthr):
-        return
-
-    fields = {}
-    
-    new_by  = _to_int(birth_year)
-    new_age = _to_int(age_years)
 
     # if we have birth_year but no age, compute an approximate age (year-only)
     if new_age is None and new_by is not None:
@@ -605,11 +603,13 @@ def maybe_update_userprofile_master(*, birth_year=None, age_years=None, gender=N
     write_birth  = (new_by is not None) and (new_by != stored_by)
     write_age    = (new_age is not None) and (new_age != stored_age)
     write_gender = (g in {"male", "female"}) and (not stored_gender_known)
+    write_lthr   = (new_lthr is not None) and (new_lthr > 0) and (new_lthr != stored_lthr)
 
-    if not (write_birth or write_age or write_gender):
+    if not (write_birth or write_age or write_gender or write_lthr):
         return
 
     fields: dict[str, object] = {}
+
     if write_birth:
         fields["birth_year"] = int(new_by)
     if write_age:
@@ -758,9 +758,9 @@ def compute_and_write_training_load(date_str: str) -> None:
         logging.warning("Training load computation currently implemented for InfluxDB v1 only.")
         return
 
+    # gender resolution
     gender = _norm_gender(_get_gender_for_day_v1(date_str))
     if gender not in {"male", "female"}:
-        # fallback to master
         row = _get_userprofile_master_v1()
         gc = row.get("gender_code")
         try:
@@ -768,11 +768,12 @@ def compute_and_write_training_load(date_str: str) -> None:
         except Exception:
             gc_i = 0
         gender = "male" if gc_i == 1 else "female" if gc_i == 2 else "unknown"
-    
+
     if gender not in {"male", "female"}:
         logging.info(f"TrainingLoadDaily: gender unknown for {date_str}; skipping write (Bannister requires male/female).")
         return
 
+    # physiology inputs
     rhr, hrmax = _get_physiology_for_day_v1(date_str)
     if rhr is None or hrmax is None:
         logging.info(f"TrainingLoadDaily: missing PhysiologyDaily inputs for {date_str} (rhr={rhr}, hrmax={hrmax})")
@@ -789,16 +790,18 @@ def compute_and_write_training_load(date_str: str) -> None:
         logging.info(f"TrainingLoadDaily: nonsensical physiology for {date_str} (rhr={rhr_f}, hrmax={hrmax_f})")
         return
 
+    # threshold HR (optional for TSS track)
     lthr_bpm = _stored_lthr_bpm_v1()
     if lthr_bpm is None:
-        logging.info(f"TrainingLoadDaily: missing LTHR (UserProfileMaster.lthr_bpm); skipping TSS for {date_str}")
-    
+        logging.info(f"TrainingLoadDaily: missing LTHR (UserProfileMaster.lthr_bpm); TSS track will be null for {date_str}")
+
     acts = _get_activities_for_day_v1(date_str)
 
     trimp_total = 0.0
+    tss_total = 0.0
     act_count = 0
+
     for a in acts:
-        # guardrail: don't ever count the terminal END marker if it comes through
         if str(a.get("activityName", "")).upper() == "END":
             continue
 
@@ -818,22 +821,25 @@ def compute_and_write_training_load(date_str: str) -> None:
             trimp_total += t
             act_count += 1
 
+        if lthr_bpm is not None:
+            tss_total += _hr_tss(dur_f, hr_f, float(lthr_bpm))
+
     if act_count == 0 and trimp_total == 0.0:
         logging.info(f"TrainingLoadDaily: no usable activities for {date_str}; skipping write")
         return
 
-    # EWMA (yesterday -> today)
-    atl_prev, ctl_prev = _get_trainingload_prev_day_v1(date_str)
-
+    # EWMA constants
     a7  = 1.0 - math.exp(-1.0 / 7.0)
     a42 = 1.0 - math.exp(-1.0 / 42.0)
-    
+
     prev = _get_trainingload_prev_day_v1(date_str)
-    
+
+    # TRIMP garages
     atl_trimp = trimp_total if prev["atl_trimp"] is None else (prev["atl_trimp"] + a7  * (trimp_total - prev["atl_trimp"]))
     ctl_trimp = trimp_total if prev["ctl_trimp"] is None else (prev["ctl_trimp"] + a42 * (trimp_total - prev["ctl_trimp"]))
     tsb_trimp = ctl_trimp - atl_trimp
-    
+
+    # TSS garages (only if lthr exists)
     if lthr_bpm is not None:
         atl_tss = tss_total if prev["atl_tss"] is None else (prev["atl_tss"] + a7  * (tss_total - prev["atl_tss"]))
         ctl_tss = tss_total if prev["ctl_tss"] is None else (prev["ctl_tss"] + a42 * (tss_total - prev["ctl_tss"]))
@@ -848,12 +854,15 @@ def compute_and_write_training_load(date_str: str) -> None:
         "fields": {
             "TRIMP": float(trimp_total),
             "TSS": float(tss_total) if lthr_bpm is not None else None,
+
             "ATL_7_TRIMP": float(atl_trimp),
             "CTL_42_TRIMP": float(ctl_trimp),
             "TSB_TRIMP": float(tsb_trimp),
+
             "ATL_7_TSS": float(atl_tss) if atl_tss is not None else None,
             "CTL_42_TSS": float(ctl_tss) if ctl_tss is not None else None,
             "TSB_TSS": float(tsb_tss) if tsb_tss is not None else None,
+
             "lthr_used": float(lthr_bpm) if lthr_bpm is not None else None,
             "RHR_used": float(rhr_f),
             "HRmax_used": float(hrmax_f),
@@ -865,7 +874,10 @@ def compute_and_write_training_load(date_str: str) -> None:
 
     write_points_to_influxdb([point])
     logging.info(
-        f"TrainingLoadDaily written for {date_str}: TRIMP={trimp_total:.2f}, ATL_7={atl:.2f}, CTL_42={ctl:.2f}, TSB={tsb:.2f} (acts={act_count})"
+        f"TrainingLoadDaily written for {date_str}: "
+        f"TRIMP={trimp_total:.2f}, ATL_TRIMP={atl_trimp:.2f}, CTL_TRIMP={ctl_trimp:.2f}, TSB_TRIMP={tsb_trimp:.2f}; "
+        + (f"TSS={tss_total:.1f}, ATL_TSS={atl_tss:.1f}, CTL_TSS={ctl_tss:.1f}, TSB_TSS={tsb_tss:.1f}; " if atl_tss is not None else "TSS=null; ")
+        + f"acts={act_count}"
     )
 
 def run_rollups_for_range(start_date: str, end_date: str) -> None:
