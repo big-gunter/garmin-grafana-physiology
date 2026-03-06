@@ -1736,8 +1736,21 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
 
                     # If FIT did not provide birth_year, approximate from FIT age + activity year
                     if fit_birth_year is None and fit_age_years is not None:
+                        # Approx birth year from FIT age + activity date (birthday-aware)
+                        # If birthday has NOT happened yet as of activity date, birth year is (year - age - 1)
+                        # If birthday HAS happened, birth year is (year - age)
                         try:
-                            fit_birth_year = int(activity_start_time.strftime("%Y")) - int(fit_age_years)
+                            y = activity_start_time.year
+                            a = int(fit_age_years)
+                        
+                            # If FIT user_profile contains birthdate, use it (best)
+                            # Otherwise, assume birthday not yet occurred to avoid off-by-one (more correct for most of the year)
+                            if fit_birthdate:
+                                yy, mm, dd = [int(x) for x in str(fit_birthdate).split("-")[:3]]
+                                had_bday = (activity_start_time.month, activity_start_time.day) >= (mm, dd)
+                                fit_birth_year = y - a if had_bday else (y - a - 1)
+                            else:
+                                fit_birth_year = y - a - 1
                         except Exception:
                             pass
                 
