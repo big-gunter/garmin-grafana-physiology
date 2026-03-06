@@ -555,6 +555,15 @@ def _birth_year_from_any(v: object) -> int | None:
 
     return None
 
+def _stored_lthr_bpm_v1() -> int | None:
+    row = _get_userprofile_master_v1()
+    v = row.get("lthr_bpm")
+    try:
+        x = int(float(v)) if v is not None else 0
+        return x if x > 0 else None
+    except Exception:
+        return None
+
 def _age_from_birth_year(birth_year: int, date_str: str | None = None) -> int:
     if date_str:
         yr = int(str(date_str)[:4])   # YYYY from YYYY-MM-DD
@@ -562,7 +571,7 @@ def _age_from_birth_year(birth_year: int, date_str: str | None = None) -> int:
         yr = _date.today().year
     return max(yr - int(birth_year), 0)
     
-def maybe_update_userprofile_master(*, birth_year=None, age_years=None, gender=None, source="unknown", activity_id=None):
+def maybe_update_userprofile_master(*, birth_year=None, age_years=None, gender=None, lthr=None, source="unknown", activity_id=None):
     def _to_int(x):
         try:
             return int(float(x))
@@ -576,6 +585,14 @@ def maybe_update_userprofile_master(*, birth_year=None, age_years=None, gender=N
     stored_gc  = _to_int(row.get("gender_code")) or 0
     stored_gender_known = stored_gc in (1, 2)
 
+    stored_lthr = _to_int(row.get("lthr_bpm"))
+    new_lthr = _to_int(lthr)
+    write_lthr = (new_lthr is not None) and (new_lthr != stored_lthr)
+    if not (write_birth or write_age or write_gender or write_lthr):
+        return
+
+    fields = {}
+    
     new_by  = _to_int(birth_year)
     new_age = _to_int(age_years)
 
@@ -602,6 +619,9 @@ def maybe_update_userprofile_master(*, birth_year=None, age_years=None, gender=N
         fields["gender_code"] = _gender_code(g)
         fields["gender"] = g
         fields["gender_is_known"] = 1
+
+    if write_lthr:
+        fields["lthr_bpm"] = int(new_lthr)
 
     fields["source"] = source
     if activity_id is not None:
@@ -668,21 +688,28 @@ def _get_activities_for_day_v1(date_str: str) -> list[dict]:
         logging.exception("ActivitySummary day query failed")
         return []
 
-
-def _get_trainingload_prev_day_v1(date_str: str) -> tuple[float | None, float | None]:
-    # Returns (ATL_7_yday, CTL_42_yday)
+def _get_trainingload_prev_day_v1(date_str: str) -> dict:
     yday = (_dt_utc(date_str) - timedelta(days=1)).strftime("%Y-%m-%d")
     start_z, end_z = _day_bounds_z(yday)
     q = (
-        'SELECT last("ATL_7") AS atl, last("CTL_42") AS ctl '
+        'SELECT last("ATL_7_TRIMP") AS atl_trimp, last("CTL_42_TRIMP") AS ctl_trimp, '
+        '       last("ATL_7_TSS")   AS atl_tss,   last("CTL_42_TSS")   AS ctl_tss '
         'FROM "TrainingLoadDaily" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
     )
     row = _query_last_row_influx_v1(q) or {}
-    atl = row.get("atl")
-    ctl = row.get("ctl")
-    return (float(atl) if atl is not None else None, float(ctl) if ctl is not None else None)
+    def f(x):
+        try:
+            return float(x) if x is not None else None
+        except Exception:
+            return None
+    return {
+        "atl_trimp": f(row.get("atl_trimp")),
+        "ctl_trimp": f(row.get("ctl_trimp")),
+        "atl_tss": f(row.get("atl_tss")),
+        "ctl_tss": f(row.get("ctl_tss")),
+    }
 
 def _bannister_trimp(dur_seconds: float, hr_avg: float, rhr: float, hrmax: float, gender: str) -> float:
     if dur_seconds <= 0 or hr_avg <= 0 or hrmax <= rhr:
@@ -707,6 +734,24 @@ def _bannister_trimp(dur_seconds: float, hr_avg: float, rhr: float, hrmax: float
         k, b = 0.64, 1.92
 
     return dur_min * hrratio * k * math.exp(b * hrratio)
+
+def _hr_tss(dur_seconds: float, hr_avg: float, hr_thresh: float) -> float:
+    """
+    HR-based TSS-like score. Requires an estimated threshold HR (LTHR).
+    Uses intensity factor IF = hr_avg / hr_thresh, then TSS = hours * IF^2 * 100.
+
+    This is deliberately analogous to power TSS (hours * IF^2 * 100).
+    """
+    if dur_seconds <= 0 or hr_avg <= 0 or hr_thresh <= 0:
+        return 0.0
+    if hr_avg < 30:  # guard
+        return 0.0
+
+    hours = dur_seconds / 3600.0
+    IF = hr_avg / hr_thresh
+    # clamp to avoid absurd spikes from bad hr_thresh
+    IF = max(0.3, min(IF, 1.5))
+    return 100.0 * hours * (IF ** 2)
 
 def compute_and_write_training_load(date_str: str) -> None:
     if INFLUXDB_VERSION != "1":
@@ -744,6 +789,10 @@ def compute_and_write_training_load(date_str: str) -> None:
         logging.info(f"TrainingLoadDaily: nonsensical physiology for {date_str} (rhr={rhr_f}, hrmax={hrmax_f})")
         return
 
+    lthr_bpm = _stored_lthr_bpm_v1()
+    if lthr_bpm is None:
+        logging.info(f"TrainingLoadDaily: missing LTHR (UserProfileMaster.lthr_bpm); skipping TSS for {date_str}")
+    
     acts = _get_activities_for_day_v1(date_str)
 
     trimp_total = 0.0
@@ -776,15 +825,21 @@ def compute_and_write_training_load(date_str: str) -> None:
     # EWMA (yesterday -> today)
     atl_prev, ctl_prev = _get_trainingload_prev_day_v1(date_str)
 
-    a7 = 1.0 - math.exp(-1.0 / 7.0)
+    a7  = 1.0 - math.exp(-1.0 / 7.0)
     a42 = 1.0 - math.exp(-1.0 / 42.0)
-
-    atl_prev = float(atl_prev) if atl_prev is not None else None
-    ctl_prev = float(ctl_prev) if ctl_prev is not None else None
-
-    atl = trimp_total if atl_prev is None else (atl_prev + a7 * (trimp_total - atl_prev))
-    ctl = trimp_total if ctl_prev is None else (ctl_prev + a42 * (trimp_total - ctl_prev))
-    tsb = ctl - atl
+    
+    prev = _get_trainingload_prev_day_v1(date_str)
+    
+    atl_trimp = trimp_total if prev["atl_trimp"] is None else (prev["atl_trimp"] + a7  * (trimp_total - prev["atl_trimp"]))
+    ctl_trimp = trimp_total if prev["ctl_trimp"] is None else (prev["ctl_trimp"] + a42 * (trimp_total - prev["ctl_trimp"]))
+    tsb_trimp = ctl_trimp - atl_trimp
+    
+    if lthr_bpm is not None:
+        atl_tss = tss_total if prev["atl_tss"] is None else (prev["atl_tss"] + a7  * (tss_total - prev["atl_tss"]))
+        ctl_tss = tss_total if prev["ctl_tss"] is None else (prev["ctl_tss"] + a42 * (tss_total - prev["ctl_tss"]))
+        tsb_tss = ctl_tss - atl_tss
+    else:
+        atl_tss = ctl_tss = tsb_tss = None
 
     point = {
         "measurement": "TrainingLoadDaily",
@@ -792,9 +847,14 @@ def compute_and_write_training_load(date_str: str) -> None:
         "tags": {"Device": GARMIN_DEVICENAME, "Database_Name": INFLUXDB_DATABASE},
         "fields": {
             "TRIMP": float(trimp_total),
-            "ATL_7": float(atl),
-            "CTL_42": float(ctl),
-            "TSB": float(tsb),
+            "TSS": float(tss_total) if lthr_bpm is not None else None,
+            "ATL_7_TRIMP": float(atl_trimp),
+            "CTL_42_TRIMP": float(ctl_trimp),
+            "TSB_TRIMP": float(tsb_trimp),
+            "ATL_7_TSS": float(atl_tss) if atl_tss is not None else None,
+            "CTL_42_TSS": float(ctl_tss) if ctl_tss is not None else None,
+            "TSB_TSS": float(tsb_tss) if tsb_tss is not None else None,
+            "lthr_used": float(lthr_bpm) if lthr_bpm is not None else None,
             "RHR_used": float(rhr_f),
             "HRmax_used": float(hrmax_f),
             "gender_code_used": int(_gender_code(gender)),
@@ -1781,6 +1841,7 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                         birth_year=fit_birth_year,
                         age_years=fit_age_years,
                         gender=fit_gender if fit_gender in {"male", "female"} else None,
+                        lthr=fit_lthr,
                         source="fit_unknown_79",
                         activity_id=int(activityID),
                     )
@@ -2648,7 +2709,7 @@ if __name__ == "__main__":
         except Exception as err:
             logging.error(err)
             logging.warning(
-                "No previously synced data found in local InfluxDB database, defaulting to 7 day initial fetching. Use specific start date ENV variable to bulk update past data"
+                "No previously synced data found in local InfluxDB database, defaulting to 42 day initial fetching. Use specific start date ENV variable to bulk update past data"
             )
             last_influxdb_sync_time_UTC = (datetime.today() - timedelta(days=42)).astimezone(pytz.timezone("UTC"))
 
