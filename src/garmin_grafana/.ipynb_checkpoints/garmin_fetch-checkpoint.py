@@ -829,9 +829,11 @@ def compute_and_write_training_load(date_str: str) -> None:
     # IMPORTANT: no early-return on rest days
     # If act_count==0, trimp_total/tss_total stay 0.0, which drives decay correctly.
 
-    if act_count == 0 and trimp_total == 0.0:
-        logging.info(f"TrainingLoadDaily: no usable activities for {date_str}; skipping write")
-        return
+    if act_count == 0:
+        logging.info(f"TrainingLoadDaily: no usable activities for {date_str}; writing zero-load day")
+        trimp_total = 0.0
+        tss_total = 0.0
+        # DO NOT return
 
     prev = _get_trainingload_prev_day_v1(date_str)
 
