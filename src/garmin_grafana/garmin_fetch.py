@@ -1733,6 +1733,13 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                 # --- NEW: use FIT user_profile to populate master + per-day gender cache ---
                 try:
                     activity_day = activity_start_time.strftime("%Y-%m-%d")
+
+                    # If FIT did not provide birth_year, approximate from FIT age + activity year
+                    if fit_birth_year is None and fit_age_years is not None:
+                        try:
+                            fit_birth_year = int(activity_start_time.strftime("%Y")) - int(fit_age_years)
+                        except Exception:
+                            pass
                 
                     # cache gender by day (used by daily_fetch_write when garmin profile gender is missing)
                     if fit_gender in {"male", "female"}:
@@ -1740,7 +1747,11 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                         
                         # NEW: also update the day's UserProfile measurement in Influx
                         try:
-                            by = _stored_birth_year_v1() or _get_birth_year_from_garmin_profile() or fit_birth_year
+                            by = (
+                                fit_birth_year
+                                or _stored_birth_year_v1()
+                                or _get_birth_year_from_garmin_profile()
+                            )
                             write_points_to_influxdb(
                                 write_user_profile_point(
                                     activity_day,
