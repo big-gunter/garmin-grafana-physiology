@@ -806,40 +806,42 @@ def compute_and_write_training_load(date_str: str) -> None:
             continue
 
         dur = a.get("elapsedDuration")
-        hr = a.get("averageHR")
+        hr  = a.get("averageHR")
         if dur is None or hr is None:
             continue
 
         try:
             dur_f = float(dur)
-            hr_f = float(hr)
+            hr_f  = float(hr)
         except Exception:
             continue
 
+        # TRIMP
         t = _bannister_trimp(dur_f, hr_f, rhr_f, hrmax_f, gender)
         if t > 0:
             trimp_total += t
             act_count += 1
 
+        # TSS (only if LTHR available)
         if lthr_bpm is not None:
             tss_total += _hr_tss(dur_f, hr_f, float(lthr_bpm))
+
+    # IMPORTANT: no early-return on rest days
+    # If act_count==0, trimp_total/tss_total stay 0.0, which drives decay correctly.
 
     if act_count == 0 and trimp_total == 0.0:
         logging.info(f"TrainingLoadDaily: no usable activities for {date_str}; skipping write")
         return
 
-    # EWMA constants
+    prev = _get_trainingload_prev_day_v1(date_str)
+
     a7  = 1.0 - math.exp(-1.0 / 7.0)
     a42 = 1.0 - math.exp(-1.0 / 42.0)
 
-    prev = _get_trainingload_prev_day_v1(date_str)
-
-    # TRIMP garages
     atl_trimp = trimp_total if prev["atl_trimp"] is None else (prev["atl_trimp"] + a7  * (trimp_total - prev["atl_trimp"]))
     ctl_trimp = trimp_total if prev["ctl_trimp"] is None else (prev["ctl_trimp"] + a42 * (trimp_total - prev["ctl_trimp"]))
     tsb_trimp = ctl_trimp - atl_trimp
 
-    # TSS garages (only if lthr exists)
     if lthr_bpm is not None:
         atl_tss = tss_total if prev["atl_tss"] is None else (prev["atl_tss"] + a7  * (tss_total - prev["atl_tss"]))
         ctl_tss = tss_total if prev["ctl_tss"] is None else (prev["ctl_tss"] + a42 * (tss_total - prev["ctl_tss"]))
@@ -876,8 +878,10 @@ def compute_and_write_training_load(date_str: str) -> None:
     logging.info(
         f"TrainingLoadDaily written for {date_str}: "
         f"TRIMP={trimp_total:.2f}, ATL_TRIMP={atl_trimp:.2f}, CTL_TRIMP={ctl_trimp:.2f}, TSB_TRIMP={tsb_trimp:.2f}; "
-        + (f"TSS={tss_total:.1f}, ATL_TSS={atl_tss:.1f}, CTL_TSS={ctl_tss:.1f}, TSB_TSS={tsb_tss:.1f}; " if atl_tss is not None else "TSS=null; ")
-        + f"acts={act_count}"
+        f"TSS={tss_total:.1f}, ATL_TSS={(atl_tss if atl_tss is not None else float('nan')):.1f}, "
+        f"CTL_TSS={(ctl_tss if ctl_tss is not None else float('nan')):.1f}, "
+        f"TSB_TSS={(tsb_tss if tsb_tss is not None else float('nan')):.1f}; "
+        f"acts={act_count}"
     )
 
 def run_rollups_for_range(start_date: str, end_date: str) -> None:
