@@ -122,6 +122,7 @@ TAG_MEASUREMENTS_WITH_USER_EMAIL = _bool_env("TAG_MEASUREMENTS_WITH_USER_EMAIL",
 
 # Keep existing default behaviour: env unset => True
 FORCE_REPROCESS_ACTIVITIES = _bool_env("FORCE_REPROCESS_ACTIVITIES", default=True)  # optional
+ROLLUPS_AFTER_INGEST = _bool_env("ROLLUPS_AFTER_INGEST", default=True)
 
 USER_TIMEZONE = os.getenv("USER_TIMEZONE", "")  # optional
 PARSED_ACTIVITY_ID_LIST = []
@@ -379,6 +380,23 @@ def _range_utc(start_date: str, days: int) -> tuple[str, str]:
     start = _dt_utc(start_date)
     end = start + timedelta(days=days)
     return start.isoformat(), end.isoformat()
+
+def _today_local_date_str(local_timediff: timedelta) -> str:
+    # local_timediff is the offset you already computed in __main__
+    return (datetime.now(pytz.UTC) + local_timediff).strftime("%Y-%m-%d")
+
+def _should_rollups_after_ingest(start_date: str, end_date: str, local_timediff: timedelta) -> bool:
+    """
+    AUTO mode:
+      - If range spans > 1 day => treat as backfill (rollups after ingest)
+      - If end_date is before local 'today' => backfill (rollups after ingest)
+      - Otherwise (typically 1 day, newest) => live mode (rollups inline)
+    """
+    if start_date != end_date:
+        return True
+
+    today_local = _today_local_date_str(local_timediff)
+    return end_date < today_local
 
 def _query_scalar_influx_v1(q: str) -> float | None:
     try:
@@ -789,6 +807,37 @@ def compute_and_write_training_load(date_str: str) -> None:
     logging.info(
         f"TrainingLoadDaily written for {date_str}: TRIMP={trimp_total:.2f}, ATL_7={atl:.2f}, CTL_42={ctl:.2f}, TSB={tsb:.2f} (acts={act_count})"
     )
+
+def run_rollups_for_range(start_date: str, end_date: str) -> None:
+    """
+    Run rollups in chronological order so:
+      - PhysiologyDaily gets correct trailing 7d RHR median
+      - TrainingLoadDaily ATL/CTL/TSB get correct EWMAs (yesterday -> today)
+    """
+    if INFLUXDB_VERSION != "1":
+        logging.warning("Rollups currently implemented for InfluxDB v1 only.")
+        return
+
+    logging.info(f"Rollups: running physiology + training load for {start_date} -> {end_date} (chronological)")
+
+    # chronological loop
+    d0 = datetime.strptime(start_date, "%Y-%m-%d")
+    d1 = datetime.strptime(end_date, "%Y-%m-%d")
+    cur = d0
+    while cur <= d1:
+        ds = cur.strftime("%Y-%m-%d")
+
+        try:
+            compute_and_write_physiology(ds)
+        except Exception:
+            logging.exception(f"PhysiologyDaily computation failed for {ds}")
+
+        try:
+            compute_and_write_training_load(ds)
+        except Exception:
+            logging.exception(f"TrainingLoadDaily computation failed for {ds}")
+
+        cur += timedelta(days=1)
 
 def _userprofile_exists_for_day_v1(date_str: str) -> bool:
     """
@@ -2293,7 +2342,7 @@ def get_lifestyle_data(date_str):
     return points_list
 
 # %%
-def daily_fetch_write(date_str):
+def daily_fetch_write(date_str, *, run_rollups_inline: bool = True):
     if REQUEST_INTRADAY_DATA_REFRESH and (
         datetime.strptime(date_str, "%Y-%m-%d") <= (datetime.today() - timedelta(days=IGNORE_INTRADAY_DATA_REFRESH_DAYS))
     ):
@@ -2393,113 +2442,168 @@ def daily_fetch_write(date_str):
     if "lifestyle" in FETCH_SELECTION:
         write_points_to_influxdb(get_lifestyle_data(date_str))
 
-    # --- physiology rollups (after ingestion for the day) ---
-    try:
-        compute_and_write_physiology(date_str)
-    except Exception:
-        logging.exception(f"PhysiologyDaily computation failed for {date_str}")
-        
-    try:
-        compute_and_write_training_load(date_str)
-    except Exception:
-        logging.exception(f"TrainingLoadDaily computation failed for {date_str}")
+    # --- physiology/training rollups ---
+    if run_rollups_inline:
+        try:
+            compute_and_write_physiology(date_str)
+        except Exception:
+            logging.exception(f"PhysiologyDaily computation failed for {date_str}")
 
+        try:
+            compute_and_write_training_load(date_str)
+        except Exception:
+            logging.exception(f"TrainingLoadDaily computation failed for {date_str}")
+
+def compute_rollups_range(start_date: str, end_date: str) -> None:
+"""
+Compute rollups in chronological order so:
+  - HRmax windows have historical data present
+  - ATL/CTL can use yesterday's value
+"""
+start = datetime.strptime(start_date, "%Y-%m-%d")
+end = datetime.strptime(end_date, "%Y-%m-%d")
+current = start
+while current <= end:
+    d = current.strftime("%Y-%m-%d")
+
+    try:
+        compute_and_write_physiology(d)
+    except Exception:
+        logging.exception(f"PhysiologyDaily computation failed for {d}")
+
+    try:
+        compute_and_write_training_load(d)
+    except Exception:
+        logging.exception(f"TrainingLoadDaily computation failed for {d}")
+
+    current += timedelta(days=1)
+            
 # %%
-def fetch_write_bulk(start_date_str, end_date_str):
+def fetch_write_bulk(start_date_str, end_date_str, *, local_timediff: timedelta):
     global garmin_obj
     consecutive_500_errors = 0
     logging.info("Fetching data for the given period in reverse chronological order")
     time.sleep(3)
     write_points_to_influxdb(get_last_sync())
 
-    for current_date in iter_days(start_date_str, end_date_str):
-        repeat_loop = True
-        while repeat_loop:
-            try:
-                daily_fetch_write(current_date)
-                if consecutive_500_errors > 0:
-                    logging.info(
-                        f"Successfully fetched data after {consecutive_500_errors} consecutive 500 errors - resetting error counter"
-                    )
-                    consecutive_500_errors = 0
+    rollups_after = _should_rollups_after_ingest(start_date_str, end_date_str, local_timediff)
+    if rollups_after:
+        logging.info("Mode: backfill (rollups after ingest)")
+    else:
+        logging.info("Mode: live (rollups inline)")
 
-                logging.info(f"Success : Fetched all available health metrics for date {current_date} (skipped any if unavailable)")
-                if RATE_LIMIT_CALLS_SECONDS > 0:
-                    logging.info(f"Waiting : for {RATE_LIMIT_CALLS_SECONDS} seconds")
-                    time.sleep(RATE_LIMIT_CALLS_SECONDS)
-                repeat_loop = False
-
-            except GarminConnectTooManyRequestsError as err:
-                logging.error(err)
-                logging.info(f"Too many requests (429) : Failed to fetch one or more metrics - will retry for date {current_date}")
-                logging.info(f"Waiting : for {FETCH_FAILED_WAIT_SECONDS} seconds")
-                time.sleep(FETCH_FAILED_WAIT_SECONDS)
-                repeat_loop = True
-
-            except (requests.exceptions.HTTPError, GarthHTTPError) as err:
-                is_500_error = False
-                if isinstance(err, requests.exceptions.HTTPError):
-                    if hasattr(err, "response") and err.response is not None and err.response.status_code == 500:
-                        is_500_error = True
-                elif isinstance(err, GarthHTTPError):
-                    if getattr(err, "status_code", None) == 500:
-                        is_500_error = True
-                    elif hasattr(err, "response") and err.response is not None and err.response.status_code == 500:
-                        is_500_error = True
-
-                if is_500_error:
-                    consecutive_500_errors += 1
-                    logging.error(f"HTTP 500 error ({consecutive_500_errors}/{MAX_CONSECUTIVE_500_ERRORS}) for date {current_date}: {err}")
-                    if consecutive_500_errors >= MAX_CONSECUTIVE_500_ERRORS:
-                        logging.warning(
-                            f"Received {consecutive_500_errors} consecutive HTTP 500 errors. Logging error and continuing backward in time to fetch remaining data."
+    try:
+        for current_date in iter_days(start_date_str, end_date_str):
+            repeat_loop = True
+            while repeat_loop:
+                try:
+                    daily_fetch_write(current_date, run_rollups_inline=(not rollups_after))
+                    if consecutive_500_errors > 0:
+                        logging.info(
+                            f"Successfully fetched data after {consecutive_500_errors} consecutive 500 errors - resetting error counter"
                         )
-                        logging.warning(f"Skipping date {current_date} due to persistent 500 errors from Garmin API")
-                        logging.info(f"Waiting : for {RATE_LIMIT_CALLS_SECONDS} seconds before continuing")
+                        consecutive_500_errors = 0
+    
+                    logging.info(f"Success : Fetched all available health metrics for date {current_date} (skipped any if unavailable)")
+                    if RATE_LIMIT_CALLS_SECONDS > 0:
+                        logging.info(f"Waiting : for {RATE_LIMIT_CALLS_SECONDS} seconds")
+                        time.sleep(RATE_LIMIT_CALLS_SECONDS)
+                    repeat_loop = False
+    
+                except GarminConnectTooManyRequestsError as err:
+                    logging.error(err)
+                    logging.info(f"Too many requests (429) : Failed to fetch one or more metrics - will retry for date {current_date}")
+                    logging.info(f"Waiting : for {FETCH_FAILED_WAIT_SECONDS} seconds")
+                    time.sleep(FETCH_FAILED_WAIT_SECONDS)
+                    repeat_loop = True
+    
+                except (requests.exceptions.HTTPError, GarthHTTPError) as err:
+                    is_500_error = False
+                    if isinstance(err, requests.exceptions.HTTPError):
+                        if hasattr(err, "response") and err.response is not None and err.response.status_code == 500:
+                            is_500_error = True
+                    elif isinstance(err, GarthHTTPError):
+                        if getattr(err, "status_code", None) == 500:
+                            is_500_error = True
+                        elif hasattr(err, "response") and err.response is not None and err.response.status_code == 500:
+                            is_500_error = True
+    
+                    if is_500_error:
+                        consecutive_500_errors += 1
+                        logging.error(f"HTTP 500 error ({consecutive_500_errors}/{MAX_CONSECUTIVE_500_ERRORS}) for date {current_date}: {err}")
+                        if consecutive_500_errors >= MAX_CONSECUTIVE_500_ERRORS:
+                            logging.warning(
+                                f"Received {consecutive_500_errors} consecutive HTTP 500 errors. Logging error and continuing backward in time to fetch remaining data."
+                            )
+                            logging.warning(f"Skipping date {current_date} due to persistent 500 errors from Garmin API")
+                            logging.info(f"Waiting : for {RATE_LIMIT_CALLS_SECONDS} seconds before continuing")
+                            time.sleep(RATE_LIMIT_CALLS_SECONDS)
+                            repeat_loop = False
+                        else:
+                            logging.info(
+                                f"HTTP 500 error encountered - will retry for date {current_date} (attempt {consecutive_500_errors}/{MAX_CONSECUTIVE_500_ERRORS})"
+                            )
+                            logging.info(f"Waiting : for {RATE_LIMIT_CALLS_SECONDS} seconds before retry")
+                            time.sleep(RATE_LIMIT_CALLS_SECONDS)
+                            repeat_loop = True
+                    else:
+                        logging.error(err)
+                        logging.info(f"HTTP Error (non-500) : Failed to fetch one or more metrics - skipping date {current_date}")
+                        logging.info(f"Waiting : for {RATE_LIMIT_CALLS_SECONDS} seconds")
                         time.sleep(RATE_LIMIT_CALLS_SECONDS)
                         repeat_loop = False
-                    else:
-                        logging.info(
-                            f"HTTP 500 error encountered - will retry for date {current_date} (attempt {consecutive_500_errors}/{MAX_CONSECUTIVE_500_ERRORS})"
-                        )
-                        logging.info(f"Waiting : for {RATE_LIMIT_CALLS_SECONDS} seconds before retry")
-                        time.sleep(RATE_LIMIT_CALLS_SECONDS)
-                        repeat_loop = True
-                else:
+    
+                except (GarminConnectConnectionError, requests.exceptions.ConnectionError, requests.exceptions.Timeout) as err:
                     logging.error(err)
-                    logging.info(f"HTTP Error (non-500) : Failed to fetch one or more metrics - skipping date {current_date}")
+                    logging.info(f"Connection Error : Failed to fetch one or more metrics - skipping date {current_date}")
                     logging.info(f"Waiting : for {RATE_LIMIT_CALLS_SECONDS} seconds")
                     time.sleep(RATE_LIMIT_CALLS_SECONDS)
                     repeat_loop = False
-
-            except (GarminConnectConnectionError, requests.exceptions.ConnectionError, requests.exceptions.Timeout) as err:
-                logging.error(err)
-                logging.info(f"Connection Error : Failed to fetch one or more metrics - skipping date {current_date}")
-                logging.info(f"Waiting : for {RATE_LIMIT_CALLS_SECONDS} seconds")
-                time.sleep(RATE_LIMIT_CALLS_SECONDS)
-                repeat_loop = False
-
-            except GarminConnectAuthenticationError as err:
-                logging.error(err)
-                logging.info("Authentication Failed : Retrying login with given credentials (won't work automatically for MFA/2FA enabled accounts)")
-                garmin_obj = garmin_login()
-                time.sleep(5)
-                repeat_loop = True
-
-            except Exception as err:
-                if IGNORE_ERRORS:
-                    logging.warning("IGNORE_ERRORS Enabled >> Failed to process %s:", current_date)
-                    logging.exception(err)
-                    repeat_loop = False
-                else:
-                    raise err
+    
+                except GarminConnectAuthenticationError as err:
+                    logging.error(err)
+                    logging.info("Authentication Failed : Retrying login with given credentials (won't work automatically for MFA/2FA enabled accounts)")
+                    garmin_obj = garmin_login()
+                    time.sleep(5)
+                    repeat_loop = True
+    
+                except Exception as err:
+                    if IGNORE_ERRORS:
+                        logging.warning("IGNORE_ERRORS Enabled >> Failed to process %s:", current_date)
+                        logging.exception(err)
+                        repeat_loop = False
+                    else:
+                        raise err
+    finally:
+        if rollups_after:
+            run_rollups_for_range(start_date_str, end_date_str)
 
 # %%
 if __name__ == "__main__":
     garmin_obj = garmin_login()
 
+    # determine local_timediff once for both MANUAL and LIVE paths
+    try:
+        if USER_TIMEZONE:
+            local_timediff = datetime.now(tz=pytz.timezone(USER_TIMEZONE)).utcoffset()
+        else:
+            last_activity_dict = garmin_obj.get_last_activity()
+            local_timediff = datetime.strptime(last_activity_dict["startTimeLocal"], "%Y-%m-%d %H:%M:%S") - datetime.strptime(
+                last_activity_dict["startTimeGMT"], "%Y-%m-%d %H:%M:%S"
+            )
+    
+        if local_timediff >= timedelta(0):
+            logging.info("Using user's local timezone as UTC+" + str(local_timediff))
+        else:
+            logging.info("Using user's local timezone as UTC-" + str(-local_timediff))
+    
+    except (KeyError, TypeError):
+        logging.warning("Unable to determine user's timezone - Defaulting to UTC. Consider providing TZ identifier with USER_TIMEZONE environment variable")
+        local_timediff = timedelta(hours=0)
+    
     if MANUAL_START_DATE:
-        fetch_write_bulk(MANUAL_START_DATE, MANUAL_END_DATE)
+        # local_timediff exists later in your code; for MANUAL path you should compute it before calling
+        fetch_write_bulk(MANUAL_START_DATE, MANUAL_END_DATE, local_timediff=local_timediff)
         logging.info(f"Bulk update success : Fetched all available health metrics for date range {MANUAL_START_DATE} to {MANUAL_END_DATE}")
         sys.exit(0)
     else:
@@ -2524,24 +2628,6 @@ if __name__ == "__main__":
             )
             last_influxdb_sync_time_UTC = (datetime.today() - timedelta(days=7)).astimezone(pytz.timezone("UTC"))
 
-        try:
-            if USER_TIMEZONE:
-                local_timediff = datetime.now(tz=pytz.timezone(USER_TIMEZONE)).utcoffset()
-            else:
-                last_activity_dict = garmin_obj.get_last_activity()
-                local_timediff = datetime.strptime(last_activity_dict["startTimeLocal"], "%Y-%m-%d %H:%M:%S") - datetime.strptime(
-                    last_activity_dict["startTimeGMT"], "%Y-%m-%d %H:%M:%S"
-                )
-
-            if local_timediff >= timedelta(0):
-                logging.info("Using user's local timezone as UTC+" + str(local_timediff))
-            else:
-                logging.info("Using user's local timezone as UTC-" + str(-local_timediff))
-
-        except (KeyError, TypeError):
-            logging.warning("Unable to determine user's timezone - Defaulting to UTC. Consider providing TZ identifier with USER_TIMEZONE environment variable")
-            local_timediff = timedelta(hours=0)
-
         while True:
             last_watch_sync_time_UTC = datetime.fromtimestamp(int((garmin_obj.get_device_last_used() or {}).get("lastUsedDeviceUploadTime") / 1000)).astimezone(
                 pytz.timezone("UTC")
@@ -2551,6 +2637,7 @@ if __name__ == "__main__":
                 fetch_write_bulk(
                     (last_influxdb_sync_time_UTC + local_timediff).strftime("%Y-%m-%d"),
                     (last_watch_sync_time_UTC + local_timediff).strftime("%Y-%m-%d"),
+                    local_timediff=local_timediff,
                 )
                 last_influxdb_sync_time_UTC = last_watch_sync_time_UTC
             else:
