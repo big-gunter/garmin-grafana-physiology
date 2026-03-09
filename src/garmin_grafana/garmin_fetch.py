@@ -932,29 +932,48 @@ def derive_and_write_activity_metrics_v1(
         return
 
     # numpy arrays + cleaning
-    # compute sample rate from epoch seconds (timezone-safe)
-    ts_epoch = np.array([t.timestamp() for t in ts_list], dtype=float)  # seconds since epoch (UTC)
-    dt_s = np.diff(ts_epoch)
-    # guard against zeros/negatives from duplicate/out-of-order samples
-    dt_s = dt_s[(dt_s > 0) & np.isfinite(dt_s)]
 
     def _to_float_arr(x):
-        out = np.array([np.nan if v is None else float(v) for v in x], dtype=float)
-        return out
+        return np.array([np.nan if v is None else float(v) for v in x], dtype=float)
 
+    # 1) timestamps first
+    ts_epoch = np.array([t.timestamp() for t in ts_list], dtype=float)  # seconds since epoch (UTC)
+
+    # 2) convert lists -> arrays
+    dist_m    = _to_float_arr(dist)
+    elev_m    = _to_float_arr(elev)
+    speed_mps = _to_float_arr(speed)
+    hr_bpm    = _to_float_arr(hr)
+    power_w   = _to_float_arr(power)
+
+    # 3) sort everything by timestamp
     order = np.argsort(ts_epoch)
-    ts_epoch = ts_epoch[order]
-    dist_m = dist_m[order]
-    elev_m = elev_m[order]
+    ts_epoch  = ts_epoch[order]
+    dist_m    = dist_m[order]
+    elev_m    = elev_m[order]
     speed_mps = speed_mps[order]
-    hr_bpm = hr_bpm[order]
-    power_w = power_w[order]
+    hr_bpm    = hr_bpm[order]
+    power_w   = power_w[order]
 
-    # basic validity masks
-    if np.nanmax(speed_mps) <= 0:
+    # 4) drop duplicate timestamps (optional but helps stability)
+    #    keep first occurrence
+    if ts_epoch.size > 1:
+        keep = np.concatenate(([True], np.diff(ts_epoch) > 0))
+        ts_epoch  = ts_epoch[keep]
+        dist_m    = dist_m[keep]
+        elev_m    = elev_m[keep]
+        speed_mps = speed_mps[keep]
+        hr_bpm    = hr_bpm[keep]
+        power_w   = power_w[keep]
+
+    # basic validity
+    if not np.isfinite(speed_mps).any() or np.nanmax(speed_mps) <= 0:
         return
 
-    # sample rate from timestamps
+    # 5) compute sample rate from *sorted, de-duped* timestamps
+    dt_s = np.diff(ts_epoch)
+    dt_s = dt_s[(dt_s > 0) & np.isfinite(dt_s)]
+
     med_dt = float(np.median(dt_s)) if dt_s.size else 1.0
     if not (med_dt > 0):
         med_dt = 1.0
