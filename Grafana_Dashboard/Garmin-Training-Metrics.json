@@ -75,6 +75,141 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 0,
+        "y": 0
+      },
+      "id": 27,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^UserProfile\\.gender$/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "query": "SELECT last(\"gender\") AS \"gender\"\nFROM \"UserProfile\"\nWHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin_influxdb"
+          }
+        }
+      ],
+      "title": "Gender",
+      "transparent": true,
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 3,
+        "x": 3,
+        "y": 0
+      },
+      "id": 26,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "query": "SELECT last(\"birth_year\") AS \"birth_year\"\nFROM \"UserProfile\"\nWHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin_influxdb"
+          }
+        }
+      ],
+      "title": "Year of Birth",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
           "max": 178,
           "min": 40,
           "thresholds": {
@@ -117,7 +252,7 @@
       "gridPos": {
         "h": 5,
         "w": 3,
-        "x": 0,
+        "x": 6,
         "y": 0
       },
       "id": 2,
@@ -201,7 +336,7 @@
       "gridPos": {
         "h": 5,
         "w": 3,
-        "x": 3,
+        "x": 9,
         "y": 0
       },
       "id": 1,
@@ -266,7 +401,7 @@
       "gridPos": {
         "h": 5,
         "w": 2,
-        "x": 6,
+        "x": 12,
         "y": 0
       },
       "id": 12,
@@ -333,7 +468,7 @@
       "gridPos": {
         "h": 5,
         "w": 2,
-        "x": 8,
+        "x": 14,
         "y": 0
       },
       "id": 14,
@@ -400,7 +535,7 @@
       "gridPos": {
         "h": 5,
         "w": 2,
-        "x": 10,
+        "x": 16,
         "y": 0
       },
       "id": 13,
@@ -466,8 +601,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 2,
-        "x": 12,
+        "w": 3,
+        "x": 18,
         "y": 0
       },
       "id": 6,
@@ -533,8 +668,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 2,
-        "x": 14,
+        "w": 3,
+        "x": 21,
         "y": 0
       },
       "id": 8,
@@ -569,152 +704,6 @@
         }
       ],
       "title": "Garmin VO2 Max ",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "influxdb",
-        "uid": "garmin_influxdb"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "continuous-RdYlGr"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 2,
-        "x": 16,
-        "y": 0
-      },
-      "id": 10,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "12.4.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          },
-          "query": "SELECT last(\"VO2_max_value_cycling\")\nFROM \"VO2_Max\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "time_series"
-        }
-      ],
-      "title": "Garmin VO2 Max (Cycling)",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "influxdb",
-        "uid": "garmin_influxdb"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "continuous-viridis"
-          },
-          "fieldMinMax": false,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "bpm"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 2,
-        "x": 18,
-        "y": 0
-      },
-      "id": 4,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "percentChangeColorMode": "inverted",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": true,
-        "textMode": "value",
-        "wideLayout": true
-      },
-      "pluginVersion": "12.4.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          },
-          "query": "SELECT last(\"restingHeartRate\")\nFROM \"DailyStats\"\nWHERE $timeFilter",
-          "rawQuery": true,
-          "refId": "C",
-          "resultFormat": "time_series"
-        },
-        {
-          "datasource": {
-            "type": "influxdb",
-            "uid": "garmin_influxdb"
-          },
-          "query": "SELECT moving_average(mean(\"restingHeartRate\"), 28)\nFROM \"DailyStats\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
-          "rawQuery": true,
-          "refId": "A",
-          "resultFormat": "time_series"
-        }
-      ],
-      "title": "Resting HR - Static Comparison (28 days)",
       "type": "stat"
     },
     {
@@ -848,7 +837,7 @@
           "resultFormat": "time_series"
         }
       ],
-      "title": "Trimp Form (ATL)",
+      "title": "Trimp Fatigue (ATL)",
       "type": "gauge"
     },
     {
@@ -915,7 +904,7 @@
           "resultFormat": "time_series"
         }
       ],
-      "title": "Trimp Fatigue (TSB)",
+      "title": "Trimp Form (TSB)",
       "type": "gauge"
     },
     {
@@ -1049,7 +1038,7 @@
           "resultFormat": "time_series"
         }
       ],
-      "title": "TSS Form (ATL)",
+      "title": "TSS Fatigue (ATL)",
       "type": "gauge"
     },
     {
@@ -1116,8 +1105,154 @@
           "resultFormat": "time_series"
         }
       ],
-      "title": "TSS Fatigue (TSB)",
+      "title": "TSS Form (TSB)",
       "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-viridis"
+          },
+          "fieldMinMax": false,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "bpm"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 18,
+        "y": 5
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "inverted",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": true,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin_influxdb"
+          },
+          "query": "SELECT last(\"restingHeartRate\")\nFROM \"DailyStats\"\nWHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "C",
+          "resultFormat": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin_influxdb"
+          },
+          "query": "SELECT moving_average(mean(\"restingHeartRate\"), 28)\nFROM \"DailyStats\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "title": "Resting HR - Static Comparison (28 days)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-RdYlGr"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 3,
+        "x": 21,
+        "y": 5
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "garmin_influxdb"
+          },
+          "query": "SELECT last(\"VO2_max_value_cycling\")\nFROM \"VO2_Max\"\nWHERE $timeFilter\nGROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "title": "Garmin VO2 Max (Cycling)",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -1169,8 +1304,8 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
-        "w": 5,
+        "h": 6,
+        "w": 6,
         "x": 0,
         "y": 11
       },
@@ -1276,9 +1411,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
-        "w": 5,
-        "x": 5,
+        "h": 6,
+        "w": 6,
+        "x": 6,
         "y": 11
       },
       "id": 20,
@@ -1364,9 +1499,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
-        "w": 5,
-        "x": 10,
+        "h": 6,
+        "w": 6,
+        "x": 12,
         "y": 11
       },
       "id": 24,
@@ -1471,9 +1606,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
-        "w": 5,
-        "x": 15,
+        "h": 6,
+        "w": 6,
+        "x": 18,
         "y": 11
       },
       "id": 25,
@@ -1579,9 +1714,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 10,
+        "w": 11,
         "x": 0,
-        "y": 18
+        "y": 17
       },
       "id": 15,
       "options": {
@@ -1794,9 +1929,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 10,
-        "x": 10,
-        "y": 18
+        "w": 13,
+        "x": 11,
+        "y": 17
       },
       "id": 11,
       "options": {
@@ -1945,10 +2080,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 20,
+        "h": 8,
+        "w": 24,
         "x": 0,
-        "y": 26
+        "y": 25
       },
       "id": 7,
       "options": {
@@ -2043,9 +2178,9 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 20,
+        "w": 24,
         "x": 0,
-        "y": 32
+        "y": 33
       },
       "id": 9,
       "options": {
@@ -2144,9 +2279,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 20,
+        "w": 24,
         "x": 0,
-        "y": 39
+        "y": 40
       },
       "id": 3,
       "options": {
@@ -2250,9 +2385,9 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 20,
+        "w": 24,
         "x": 0,
-        "y": 47
+        "y": 48
       },
       "id": 5,
       "options": {
@@ -2345,6 +2480,6 @@
   "timezone": "browser",
   "title": "Garmin Training Metrics",
   "uid": "ad26w7q",
-  "version": 3,
+  "version": 4,
   "weekStart": ""
 }

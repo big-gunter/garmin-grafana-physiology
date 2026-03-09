@@ -7,6 +7,8 @@ from influxdb import InfluxDBClient
 from influxdb.exceptions import InfluxDBClientError
 from influxdb_client_3 import InfluxDBClient3, InfluxDBError
 import xml.etree.ElementTree as ET
+import pandas as pd
+import numpy as np
 from garth.exc import GarthHTTPError
 from garminconnect import (
     Garmin,
@@ -48,6 +50,20 @@ def _norm_tag_value(v: object) -> str | None:
     if s in {"bike", "biking", "cycling"}:
         return "cycling"
     return s
+
+def _is_run(activity_type: str) -> bool:
+    t = _norm_tag_value(activity_type or "")
+    return t in {
+        "running", "trail_running", "treadmill_running", "track_running",
+        "ultra_run", "virtual_run",
+    }
+
+def _is_ride(activity_type: str) -> bool:
+    t = _norm_tag_value(activity_type or "")
+    return t in {
+        "cycling", "road_biking", "mountain_biking", "gravel_cycling",
+        "virtual_ride", "indoor_cycling", "bike",
+    }
 
 def _bool_env(name: str, default: bool = False) -> bool:
     v = os.getenv(name)
@@ -710,6 +726,299 @@ def _get_trainingload_prev_day_v1(date_str: str) -> dict:
         "atl_tss": f(row.get("atl_tss")),
         "ctl_tss": f(row.get("ctl_tss")),
     }
+
+def rolling_mean(x: np.ndarray, window: int) -> np.ndarray:
+    if window <= 1:
+        return x
+    s = pd.Series(x)
+    return s.rolling(window, center=True, min_periods=max(1, window//2)).mean().to_numpy()
+
+def compute_grade(dist_m: np.ndarray, elev_m: np.ndarray, window_s: int, sample_rate_hz: float) -> np.ndarray:
+    """
+    Compute grade using smoothed elevation and distance over a time window.
+    window_s: smoothing/derivative window in seconds
+    """
+    w = max(3, int(window_s * sample_rate_hz))
+    elev_sm = rolling_mean(elev_m, w)
+
+    # finite difference over window
+    dd = np.roll(dist_m, -w) - dist_m
+    dz = np.roll(elev_sm, -w) - elev_sm
+
+    grade = np.zeros_like(dist_m, dtype=float)
+    valid = (dd > 1.0)  # avoid divide-by-near-zero
+    grade[valid] = dz[valid] / dd[valid]
+
+    # last w points invalid due to roll
+    grade[-w:] = grade[-w-1] if len(grade) > w+1 else 0.0
+
+    # clamp insane grades (GPS/elev noise)
+    grade = np.clip(grade, -0.30, 0.30)
+    return grade
+
+def minetti_cost_factor(grade: np.ndarray) -> np.ndarray:
+    """
+    Minetti-style polynomial for cost of running vs slope.
+    Returns relative energy cost (dimensionless).
+    Common form used in GAP implementations.
+    """
+    g = grade
+    # polynomial (one widely-used approximation)
+    C = (155.4*(g**5) - 30.4*(g**4) - 43.3*(g**3) + 46.3*(g**2) + 19.5*g + 3.6)
+    # Normalize so flat cost is 1.0
+    C0 = 3.6
+    return C / C0
+
+def gap_speed_mps(speed_mps: np.ndarray, grade: np.ndarray) -> np.ndarray:
+    """
+    Convert observed speed on grade to equivalent flat speed via cost ratio.
+    """
+    cf = minetti_cost_factor(grade)
+    # If cost is higher than flat, equivalent flat speed is slower for same metabolic cost:
+    # v_flat = v / cf
+    v = np.clip(speed_mps, 0.0, None)
+    v_gap = np.where(cf > 0, v / cf, v)
+    # cap to avoid spikes
+    return np.clip(v_gap, 0.0, 8.0)  # 8 m/s = 2:05/km (cap)
+
+def acsm_vo2_running(speed_mps: np.ndarray, grade: np.ndarray) -> np.ndarray:
+    """
+    ACSM running metabolic equation.
+    speed in m/s -> convert to m/min
+    """
+    v_m_min = speed_mps * 60.0
+    g = grade
+    vo2 = 0.2 * v_m_min + 0.9 * v_m_min * g + 3.5
+    return np.clip(vo2, 0.0, 90.0)
+
+def best_rolling_mean(series: np.ndarray, window_s: int, sample_rate_hz: float) -> float:
+    w = max(3, int(window_s * sample_rate_hz))
+    s = pd.Series(series)
+    rm = s.rolling(w, min_periods=w).mean()
+    if rm.dropna().empty:
+        return np.nan
+    return float(rm.max())
+
+def fit_cs_from_gap_speed(gap_speed: np.ndarray, durations_s: list[int], sample_rate_hz: float) -> tuple[float, float]:
+    """
+    Returns (CS_mps, Dprime_m).
+    """
+    xs = []
+    ys = []
+    for t in durations_s:
+        v_best = best_rolling_mean(gap_speed, t, sample_rate_hz)
+        if np.isnan(v_best):
+            continue
+        D = v_best * t
+        xs.append(t)
+        ys.append(D)
+    if len(xs) < 3:
+        return (np.nan, np.nan)
+    x = np.array(xs, dtype=float)
+    y = np.array(ys, dtype=float)
+    # linear regression y = a*x + b
+    a, b = np.polyfit(x, y, 1)
+    return (float(a), float(b))
+
+def fit_cp_from_power(power_w: np.ndarray, durations_s: list[int], sample_rate_hz: float) -> tuple[float, float]:
+    """
+    Returns (CP_watts, Wprime_joules).
+    """
+    xs = []
+    ys = []
+    for t in durations_s:
+        p_best = best_rolling_mean(power_w, t, sample_rate_hz)
+        if np.isnan(p_best):
+            continue
+        W = p_best * t
+        xs.append(t)
+        ys.append(W)
+    if len(xs) < 3:
+        return (np.nan, np.nan)
+    x = np.array(xs, dtype=float)
+    y = np.array(ys, dtype=float)
+    a, b = np.polyfit(x, y, 1)
+    return (float(a), float(b))
+
+def estimate_lthr_from_target(
+    hr_bpm: np.ndarray,
+    target_series: np.ndarray,
+    target_value: float,
+    sample_rate_hz: float,
+    band: float = 0.02,          # ±2%
+    min_total_s: int = 12*60,    # need at least 12 min of near-target
+    warmup_exclude_s: int = 10*60
+) -> float:
+    if np.isnan(target_value):
+        return np.nan
+
+    n = len(hr_bpm)
+    t = np.arange(n) / sample_rate_hz
+
+    mask = (t >= warmup_exclude_s)
+    lo = target_value * (1.0 - band)
+    hi = target_value * (1.0 + band)
+    mask &= (target_series >= lo) & (target_series <= hi)
+    mask &= np.isfinite(hr_bpm) & (hr_bpm > 30)
+
+    total_s = mask.sum() / sample_rate_hz
+    if total_s < min_total_s:
+        return np.nan
+
+    return float(np.median(hr_bpm[mask]))
+
+def _pace_s_per_km_from_mps(v_mps: float) -> float | None:
+    try:
+        v = float(v_mps)
+        if v <= 0:
+            return None
+        return 1000.0 / v
+    except Exception:
+        return None
+
+def derive_and_write_activity_metrics_v1(
+    *,
+    activity_id: int,
+    activity_type: str,
+    activity_start_time: datetime,
+    all_records_list: list[dict],
+) -> None:
+    """
+    Writes ONE point per activity into measurement DerivedActivity.
+
+    Running:
+      - grade from distance+elevation
+      - GAP speed (Minetti)
+      - CS from best 3/6/12/20/30min GAP speeds (distance-time model)
+      - VO2 demand from ACSM using GAP (flat)
+      - VO2max_est = best 5min VO2 demand
+      - LTHR_est = median HR when GAP speed ~ CS (±2%) after 10 min warmup
+
+    Cycling:
+      - CP from best 3/6/12/20/30min power (work-time model)
+      - LTHR_est = median HR when power ~ CP (±2%) after 10 min warmup
+    """
+    if INFLUXDB_VERSION != "1":
+        return  # keep v1-only for now
+
+    # decide sport
+    is_run = _is_run(activity_type)
+    is_ride = _is_ride(activity_type)
+    if not (is_run or is_ride):
+        return
+
+    # extract series
+    ts_list = []
+    dist = []
+    elev = []
+    speed = []
+    hr = []
+    power = []
+
+    for r in all_records_list:
+        ts = r.get("timestamp")
+        if ts is None:
+            continue
+        ts = ts.replace(tzinfo=pytz.UTC)
+        ts_list.append(ts)
+
+        dist.append(r.get("distance"))
+        elev.append(r.get("enhanced_altitude") or r.get("altitude"))
+        speed.append(r.get("enhanced_speed") or r.get("speed"))
+        hr.append(r.get("heart_rate"))
+        power.append(r.get("power"))
+
+    if len(ts_list) < 300:  # <~5 minutes at 1 Hz
+        return
+
+    # numpy arrays + cleaning
+    ts_arr = np.array(ts_list, dtype="datetime64[ns]")
+
+    def _to_float_arr(x):
+        out = np.array([np.nan if v is None else float(v) for v in x], dtype=float)
+        return out
+
+    dist_m = _to_float_arr(dist)
+    elev_m = _to_float_arr(elev)
+    speed_mps = _to_float_arr(speed)
+    hr_bpm = _to_float_arr(hr)
+    power_w = _to_float_arr(power)
+
+    # basic validity masks
+    if np.nanmax(speed_mps) <= 0:
+        return
+
+    # sample rate from timestamps
+    dt_s = (ts_arr[1:] - ts_arr[:-1]).astype("timedelta64[ms]").astype(float) / 1000.0
+    med_dt = float(np.nanmedian(dt_s)) if len(dt_s) else 1.0
+    if not (med_dt > 0):
+        med_dt = 1.0
+    sample_rate_hz = float(np.clip(1.0 / med_dt, 0.2, 5.0))
+
+    # tags (match your conventions)
+    selector = activity_start_time.strftime("%Y%m%dT%H%M%SUTC-") + str(activity_type)
+
+    tags = {
+        "Device": GARMIN_DEVICENAME,
+        "Database_Name": INFLUXDB_DATABASE,
+        "ActivityID": str(activity_id),
+        "ActivitySelector": selector,
+        "sport_tag": _norm_tag_value(activity_type),
+    }
+
+    fields: dict[str, object] = {
+        "Activity_ID": int(activity_id),
+    }
+
+    durations = [180, 360, 720, 1200, 1800]  # 3/6/12/20/30 min
+
+    if is_run:
+        # require dist+elev for grade; if missing, fall back to grade=0 and GAP=raw speed
+        if np.isfinite(dist_m).sum() > 100 and np.isfinite(elev_m).sum() > 100:
+            grade = compute_grade(dist_m, elev_m, window_s=20, sample_rate_hz=sample_rate_hz)
+            v_gap = gap_speed_mps(speed_mps, grade)
+        else:
+            grade = np.zeros_like(speed_mps)
+            v_gap = np.clip(speed_mps, 0.0, 8.0)
+
+        cs_mps, dprime_m = fit_cs_from_gap_speed(v_gap, durations, sample_rate_hz)
+        fields["cs_mps"] = float(cs_mps) if np.isfinite(cs_mps) else None
+        fields["dprime_m"] = float(dprime_m) if np.isfinite(dprime_m) else None
+
+        cs_pace = _pace_s_per_km_from_mps(cs_mps) if np.isfinite(cs_mps) else None
+        fields["cs_pace_s_per_km"] = cs_pace
+        fields["lt_pace_s_per_km"] = cs_pace  # LT pace proxy = CS pace
+
+        # VO2 demand on GAP speed (flat)
+        vo2 = acsm_vo2_running(v_gap, np.zeros_like(v_gap))
+        best5 = best_rolling_mean(vo2, 300, sample_rate_hz)
+        fields["best5m_vo2"] = float(best5) if np.isfinite(best5) else None
+        fields["vo2max_est"] = float(best5) if np.isfinite(best5) else None
+
+        # LTHR estimate from near-CS segments
+        if np.isfinite(cs_mps) and np.isfinite(hr_bpm).sum() > 100:
+            lthr_est = estimate_lthr_from_target(hr_bpm, v_gap, cs_mps, sample_rate_hz)
+            fields["lthr_bpm_est"] = float(lthr_est) if np.isfinite(lthr_est) else None
+
+    if is_ride:
+        # require power for CP
+        if np.isfinite(power_w).sum() > 100 and np.nanmax(power_w) > 0:
+            cp_w, wprime_j = fit_cp_from_power(power_w, durations, sample_rate_hz)
+            fields["cp_watts"] = float(cp_w) if np.isfinite(cp_w) else None
+            fields["wprime_j"] = float(wprime_j) if np.isfinite(wprime_j) else None
+
+            if np.isfinite(cp_w) and np.isfinite(hr_bpm).sum() > 100:
+                lthr_est = estimate_lthr_from_target(hr_bpm, power_w, cp_w, sample_rate_hz)
+                fields["lthr_bpm_est"] = float(lthr_est) if np.isfinite(lthr_est) else None
+
+    # write point (ONE per activity)
+    point = {
+        "measurement": "DerivedActivity",
+        "time": activity_start_time.replace(tzinfo=pytz.UTC).isoformat(),
+        "tags": tags,
+        "fields": fields,
+    }
+    write_points_to_influxdb([point])
 
 def _bannister_trimp(dur_seconds: float, hr_avg: float, rhr: float, hrmax: float, gender: str) -> float:
     if dur_seconds <= 0 or hr_avg <= 0 or hrmax <= rhr:
@@ -1744,6 +2053,17 @@ def fetch_activity_GPS(activityIDdict):  # Uses FIT file by default, falls back 
                     logging.info(f"FIT unknown_79 derived: age={fit_age_years}, lthr={fit_lthr}, ltpower={fit_ltpower}")
                 except Exception:
                     logging.exception("FIT unknown_79 extraction failed")
+
+                # --- NEW: derived performance metrics (run/ride) ---
+                try:
+                    derive_and_write_activity_metrics_v1(
+                        activity_id=int(activityID),
+                        activity_type=str(activity_type),
+                        activity_start_time=activity_start_time,
+                        all_records_list=all_records_list,
+                    )
+                except Exception:
+                    logging.exception(f"DerivedActivity computation failed for Activity ID {activityID}")
                 
                 # FIT user_profile extraction (gender + birth year + birthdate)
                 all_user_list = []
@@ -2444,6 +2764,64 @@ def get_lifestyle_data(date_str):
 
     return points_list
 
+def compute_and_write_performance_daily(asof_date: str) -> None:
+    if INFLUXDB_VERSION != "1":
+        return
+
+    # Lookback window
+    end_dt = _dt_utc(asof_date) + timedelta(days=1)
+    start_dt = end_dt - timedelta(days=42)
+    start_z, end_z = _iso_z(start_dt), _iso_z(end_dt)
+
+    # RUN: max VO2max_est in 42d, most recent CS and LTHR_est
+    q_run_vo2 = (
+        'SELECT max("vo2max_est") AS vo2 '
+        'FROM "DerivedActivity" '
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+        "AND sport_tag =~ /run/ "
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+    )
+    vo2 = _query_scalar_influx_v1(q_run_vo2)
+
+    q_run_last = (
+        'SELECT last("cs_pace_s_per_km") AS cs_pace, last("lthr_bpm_est") AS lthr '
+        'FROM "DerivedActivity" '
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+        "AND sport_tag =~ /run/ "
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+    )
+    run_last = _query_last_row_influx_v1(q_run_last) or {}
+
+    # BIKE: most recent CP and LTHR_est in 42d
+    q_bike_last = (
+        'SELECT last("cp_watts") AS cp, last("lthr_bpm_est") AS lthr '
+        'FROM "DerivedActivity" '
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+        "AND sport_tag =~ /cycl|bike|ride/ "
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+    )
+    bike_last = _query_last_row_influx_v1(q_bike_last) or {}
+
+    def f(x):
+        try:
+            return float(x) if x is not None else None
+        except Exception:
+            return None
+
+    point = {
+        "measurement": "PerformanceDaily",
+        "time": _dt_utc(asof_date).isoformat(),
+        "tags": {"Device": GARMIN_DEVICENAME, "Database_Name": INFLUXDB_DATABASE},
+        "fields": {
+            "VO2max_est_run": f(vo2),
+            "CS_pace_s_per_km": f(run_last.get("cs_pace")),
+            "LTHR_run_bpm_est": f(run_last.get("lthr")),
+            "CP_watts": f(bike_last.get("cp")),
+            "LTHR_bike_bpm_est": f(bike_last.get("lthr")),
+        },
+    }
+    write_points_to_influxdb([point])
+
 # %%
 def daily_fetch_write(date_str, *, run_rollups_inline: bool = True):
     if REQUEST_INTRADAY_DATA_REFRESH and (
@@ -2556,6 +2934,11 @@ def daily_fetch_write(date_str, *, run_rollups_inline: bool = True):
             compute_and_write_training_load(date_str)
         except Exception:
             logging.exception(f"TrainingLoadDaily computation failed for {date_str}")
+
+        try:
+            compute_and_write_performance_daily(date_str)
+        except Exception:
+            logging.exception(f"PerformanceDaily computation failed for {date_str}")
 
 def compute_rollups_range(start_date: str, end_date: str) -> None:
     """
