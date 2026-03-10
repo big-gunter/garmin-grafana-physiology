@@ -840,32 +840,76 @@ def fit_cp_from_power(power_w: np.ndarray, durations_s: list[int], sample_rate_h
     a, b = np.polyfit(x, y, 1)
     return (float(a), float(b))
 
-def estimate_lthr_from_target(
+# --- replace estimate_lthr_from_target(...) with this version ---
+def estimate_lthr_from_target_contiguous(
     hr_bpm: np.ndarray,
     target_series: np.ndarray,
     target_value: float,
     sample_rate_hz: float,
-    band: float = 0.02,          # ±2%
-    min_total_s: int = 12*60,    # need at least 12 min of near-target
-    warmup_exclude_s: int = 10*60
+    band: float = 0.05,              # loosened to ±5%
+    min_contig_s: int = 10 * 60,     # require 10 min continuous in-band
+    warmup_exclude_s: int = 10 * 60, # ignore first 10 min
+    min_hr_bpm: float = 30.0,
 ) -> float:
-    if np.isnan(target_value):
+    """
+    Returns median HR over the LONGEST CONTIGUOUS segment where target_series
+    is within ±band of target_value (after warmup). Requires that segment be
+    at least min_contig_s long. Otherwise returns np.nan.
+
+    This makes "steady state near threshold" explicit: one continuous block.
+    """
+    if target_value is None or not np.isfinite(target_value) or target_value <= 0:
+        return np.nan
+    if hr_bpm is None or target_series is None:
+        return np.nan
+    if len(hr_bpm) == 0 or len(target_series) == 0:
         return np.nan
 
-    n = len(hr_bpm)
-    t = np.arange(n) / sample_rate_hz
+    n = min(len(hr_bpm), len(target_series))
+    hr = np.asarray(hr_bpm[:n], dtype=float)
+    ts = np.asarray(target_series[:n], dtype=float)
 
-    mask = (t >= warmup_exclude_s)
+    # time axis (seconds from start)
+    t = np.arange(n, dtype=float) / float(sample_rate_hz if sample_rate_hz and sample_rate_hz > 0 else 1.0)
+
     lo = target_value * (1.0 - band)
     hi = target_value * (1.0 + band)
-    mask &= (target_series >= lo) & (target_series <= hi)
-    mask &= np.isfinite(hr_bpm) & (hr_bpm > 30)
 
-    total_s = mask.sum() / sample_rate_hz
-    if total_s < min_total_s:
+    mask = (
+        (t >= warmup_exclude_s)
+        & np.isfinite(ts)
+        & (ts >= lo) & (ts <= hi)
+        & np.isfinite(hr)
+        & (hr >= min_hr_bpm)
+    )
+
+    if not mask.any():
         return np.nan
 
-    return float(np.median(hr_bpm[mask]))
+    # find longest contiguous True run
+    idx = np.flatnonzero(mask)
+    if idx.size == 0:
+        return np.nan
+
+    # breaks where difference > 1 index
+    breaks = np.where(np.diff(idx) > 1)[0]
+    # segments are [start_i, end_i] over idx array
+    seg_starts = np.r_[0, breaks + 1]
+    seg_ends   = np.r_[breaks, idx.size - 1]
+
+    # choose longest by length in samples
+    seg_lengths = (seg_ends - seg_starts + 1)
+    best_seg = int(np.argmax(seg_lengths))
+
+    s = int(idx[seg_starts[best_seg]])
+    e = int(idx[seg_ends[best_seg]])  # inclusive
+    contig_s = (e - s + 1) / float(sample_rate_hz if sample_rate_hz and sample_rate_hz > 0 else 1.0)
+
+    if contig_s < float(min_contig_s):
+        return np.nan
+
+    # robust statistic
+    return float(np.nanmedian(hr[s : e + 1]))
 
 def _pace_s_per_km_from_mps(v_mps: float) -> float | None:
     try:
@@ -996,8 +1040,36 @@ def derive_and_write_activity_metrics_v1(
 
     durations = [180, 360, 720, 1200, 1800]  # 3/6/12/20/30 min
 
+    # --- helpers ---
+    def _sum_distance_from_speed(speed_mps: np.ndarray, sample_rate_hz: float) -> float | None:
+        try:
+            if speed_mps is None or len(speed_mps) == 0:
+                return None
+            sr = float(sample_rate_hz) if sample_rate_hz and sample_rate_hz > 0 else 1.0
+            dt = 1.0 / sr
+            v = np.asarray(speed_mps, dtype=float)
+            v = np.where(np.isfinite(v) & (v > 0), v, 0.0)
+            return float(np.sum(v) * dt)
+        except Exception:
+            return None
+
+    def _sum_distance_from_speed_var_dt(speed_mps: np.ndarray, ts_epoch: np.ndarray) -> float | None:
+        try:
+            v = np.asarray(speed_mps, dtype=float)
+            t = np.asarray(ts_epoch, dtype=float)
+            if len(v) < 2 or len(t) != len(v):
+                return None
+            dt = np.diff(t)
+            dt = np.where(np.isfinite(dt) & (dt > 0), dt, 0.0)
+            v_mid = np.where(np.isfinite(v[:-1]) & (v[:-1] > 0), v[:-1], 0.0)
+            return float(np.sum(v_mid * dt))
+        except Exception:
+            return None
+    
     if is_run:
         # require dist+elev for grade; if missing, fall back to grade=0 and GAP=raw speed
+        if np.isfinite(dist_m).any():
+            dist_m = np.maximum.accumulate(np.where(np.isfinite(dist_m), dist_m, -np.inf))   
         if np.isfinite(dist_m).sum() > 100 and np.isfinite(elev_m).sum() > 100:
             grade = compute_grade(dist_m, elev_m, window_s=20, sample_rate_hz=sample_rate_hz)
             v_gap = gap_speed_mps(speed_mps, grade)
@@ -1005,6 +1077,16 @@ def derive_and_write_activity_metrics_v1(
             grade = np.zeros_like(speed_mps)
             v_gap = np.clip(speed_mps, 0.0, 8.0)
 
+        # effective distance on flat from GAP
+        #gap_dist_m = _sum_distance_from_speed(v_gap, sample_rate_hz)
+        gap_dist_m = _sum_distance_from_speed_var_dt(v_gap, ts_epoch)
+        raw_dist_m = _sum_distance_from_speed_var_dt(np.clip(speed_mps, 0.0, None), ts_epoch)
+        
+        fields["gap_distance_m"] = gap_dist_m
+        fields["raw_distance_m_from_fit"] = float(np.nanmax(dist_m)) if np.isfinite(dist_m).any() else None
+        fields["raw_distance_m_from_speed"] = raw_dist_m  # optional sanity check
+        fields["gap_distance_km"] = (gap_dist_m / 1000.0) if gap_dist_m is not None else None
+        
         cs_mps, dprime_m = fit_cs_from_gap_speed(v_gap, durations, sample_rate_hz)
         fields["cs_mps"] = float(cs_mps) if np.isfinite(cs_mps) else None
         fields["dprime_m"] = float(dprime_m) if np.isfinite(dprime_m) else None
@@ -1021,8 +1103,20 @@ def derive_and_write_activity_metrics_v1(
 
         # LTHR estimate from near-CS segments
         if np.isfinite(cs_mps) and np.isfinite(hr_bpm).sum() > 100:
-            lthr_est = estimate_lthr_from_target(hr_bpm, v_gap, cs_mps, sample_rate_hz)
+            lthr_est = estimate_lthr_from_target_contiguous(
+                hr_bpm=hr_bpm,
+                target_series=v_gap,
+                target_value=cs_mps,
+                sample_rate_hz=sample_rate_hz,
+                band=0.05,              # ±5%
+                min_contig_s=10 * 60,   # 10 min continuous
+                warmup_exclude_s=10*60
+            )
             fields["lthr_bpm_est"] = float(lthr_est) if np.isfinite(lthr_est) else None
+            # add near where you set lthr_bpm_est (after computing lthr_est)
+            fields["lthr_target_mps"] = float(cs_mps)
+            fields["lthr_band"] = float(0.05)
+            fields["lthr_min_contig_s"] = int(10 * 60)
 
     if is_ride:
         # require power for CP
@@ -1422,7 +1516,32 @@ def _get_birth_year_from_garmin_profile() -> int | None:
         logging.exception("Unable to extract birth year from Garmin user profile")
         return None
 
-
+def fitness_age_from_vo2(vo2: float, gender: str) -> float | None:
+    """
+    Returns an approximate 'fitness age' from VO2max.
+    Replace the coefficients/table with your preferred normative source.
+    """
+    if vo2 is None or not np.isfinite(vo2) or vo2 <= 0:
+        return None
+    g = _norm_gender(gender)
+    # placeholder: very rough mapping bands (replace with real normative mapping)
+    # higher VO2 => younger age-equivalent
+    if g == "male":
+        # crude piecewise mapping
+        if vo2 >= 60: return 25.0
+        if vo2 >= 55: return 30.0
+        if vo2 >= 50: return 35.0
+        if vo2 >= 45: return 45.0
+        if vo2 >= 40: return 55.0
+        return 65.0
+    if g == "female":
+        if vo2 >= 55: return 25.0
+        if vo2 >= 50: return 30.0
+        if vo2 >= 45: return 35.0
+        if vo2 >= 40: return 45.0
+        if vo2 >= 35: return 55.0
+        return 65.0
+    return None
 
 def compute_and_write_physiology(asof_date: str) -> None:
     if INFLUXDB_VERSION != "1":
@@ -2826,11 +2945,33 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
     )
     bike_last = _query_last_row_influx_v1(q_bike_last) or {}
 
-    def f(x):
+    # gender for age model
+    gender = _get_gender_for_day_v1(asof_date)
+    if gender not in {"male","female"}:
+        row = _get_userprofile_master_v1()
+        gc = row.get("gender_code")
         try:
-            return float(x) if x is not None else None
+            gc_i = int(float(gc)) if gc is not None else 0
         except Exception:
-            return None
+            gc_i = 0
+        gender = "male" if gc_i == 1 else "female" if gc_i == 2 else "unknown"
+    
+    fa = fitness_age_from_vo2(vo2, gender)
+    # (optional) pull RHR and adjust slightly (lower RHR => slightly younger)
+    rhr, _ = _get_physiology_for_day_v1(asof_date)
+    if fa is not None and rhr is not None:
+        try:
+            r = float(rhr)
+            # tiny adjustment: 40 bpm ~ -2y, 60 bpm ~ +2y (keep small)
+            fa = fa + np.clip((r - 50.0) / 5.0, -2.0, 2.0)
+        except Exception:
+            pass
+    
+        def f(x):
+            try:
+                return float(x) if x is not None else None
+            except Exception:
+                return None
 
     point = {
         "measurement": "PerformanceDaily",
@@ -2842,6 +2983,8 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
             "LTHR_run_bpm_est": f(run_last.get("lthr")),
             "CP_watts": f(bike_last.get("cp")),
             "LTHR_bike_bpm_est": f(bike_last.get("lthr")),
+            "FitnessAge_model": float(fa) if fa is not None else None,
+            "FitnessAge_model_source": "vo2_run(+rhr_adj)" if fa is not None else None,
         },
     }
     write_points_to_influxdb([point])
