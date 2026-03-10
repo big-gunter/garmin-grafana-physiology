@@ -2802,7 +2802,7 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
         'SELECT max("vo2max_est") AS vo2 '
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
-        "AND sport_tag =~ /run/ "
+        "AND sport_tag =~ /running/ "
         f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
     )
     vo2 = _query_scalar_influx_v1(q_run_vo2)
@@ -2811,7 +2811,7 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
         'SELECT last("cs_pace_s_per_km") AS cs_pace, last("lthr_bpm_est") AS lthr '
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
-        "AND sport_tag =~ /run/ "
+        "AND sport_tag =~ /running/ "
         f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
     )
     run_last = _query_last_row_influx_v1(q_run_last) or {}
