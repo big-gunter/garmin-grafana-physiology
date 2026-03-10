@@ -2916,7 +2916,7 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
     start_dt = end_dt - timedelta(days=42)
     start_z, end_z = _iso_z(start_dt), _iso_z(end_dt)
 
-    # RUN: max VO2max_est in 42d, most recent CS and LTHR_est
+    # RUN: max VO2max_est in 42d
     q_run_vo2 = (
         'SELECT max("vo2max_est") AS vo2 '
         'FROM "DerivedActivity" '
@@ -2926,8 +2926,17 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
     )
     vo2 = _query_scalar_influx_v1(q_run_vo2)
 
+    # RUN: most recent key derived metrics in 42d (extend as needed)
     q_run_last = (
-        'SELECT last("cs_pace_s_per_km") AS cs_pace, last("lthr_bpm_est") AS lthr '
+        'SELECT '
+        '  last("cs_pace_s_per_km") AS cs_pace, '
+        '  last("cs_mps")          AS cs_mps, '
+        '  last("dprime_m")        AS dprime_m, '
+        '  last("best5m_vo2")      AS best5m_vo2, '
+        '  last("gap_distance_km") AS gap_km, '
+        '  last("raw_distance_m_from_speed") AS raw_dist_m_speed, '
+        '  last("raw_distance_m_from_fit")   AS raw_dist_m_fit, '
+        '  last("lthr_bpm_est")    AS lthr '
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND sport_tag =~ /running/ "
@@ -2935,9 +2944,12 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
     )
     run_last = _query_last_row_influx_v1(q_run_last) or {}
 
-    # BIKE: most recent CP and LTHR_est in 42d
+    # BIKE: most recent key derived metrics in 42d (extend as needed)
     q_bike_last = (
-        'SELECT last("cp_watts") AS cp, last("lthr_bpm_est") AS lthr '
+        'SELECT '
+        '  last("cp_watts")   AS cp, '
+        '  last("wprime_j")   AS wprime_j, '
+        '  last("lthr_bpm_est") AS lthr '
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND sport_tag =~ /cycl|bike|ride/ "
@@ -2947,7 +2959,7 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
 
     # gender for age model
     gender = _get_gender_for_day_v1(asof_date)
-    if gender not in {"male","female"}:
+    if gender not in {"male", "female"}:
         row = _get_userprofile_master_v1()
         gc = row.get("gender_code")
         try:
@@ -2955,8 +2967,9 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
         except Exception:
             gc_i = 0
         gender = "male" if gc_i == 1 else "female" if gc_i == 2 else "unknown"
-    
+
     fa = fitness_age_from_vo2(vo2, gender)
+
     # (optional) pull RHR and adjust slightly (lower RHR => slightly younger)
     rhr, _ = _get_physiology_for_day_v1(asof_date)
     if fa is not None and rhr is not None:
@@ -2966,18 +2979,19 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
             fa = fa + np.clip((r - 50.0) / 5.0, -2.0, 2.0)
         except Exception:
             pass
-    
-        def f(x):
-            try:
-                return float(x) if x is not None else None
-            except Exception:
-                return None
+
+    def f(x):
+        try:
+            return float(x) if x is not None else None
+        except Exception:
+            return None
 
     point = {
         "measurement": "PerformanceDaily",
         "time": _dt_utc(asof_date).isoformat(),
         "tags": {"Device": GARMIN_DEVICENAME, "Database_Name": INFLUXDB_DATABASE},
         "fields": {
+            # Existing
             "VO2max_est_run": f(vo2),
             "CS_pace_s_per_km": f(run_last.get("cs_pace")),
             "LTHR_run_bpm_est": f(run_last.get("lthr")),
@@ -2985,8 +2999,20 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
             "LTHR_bike_bpm_est": f(bike_last.get("lthr")),
             "FitnessAge_model": float(fa) if fa is not None else None,
             "FitnessAge_model_source": "vo2_run(+rhr_adj)" if fa is not None else None,
+
+            # New (RUN)
+            "CS_mps": f(run_last.get("cs_mps")),
+            "Dprime_m": f(run_last.get("dprime_m")),
+            "best5m_vo2_last": f(run_last.get("best5m_vo2")),
+            "gap_distance_km_last": f(run_last.get("gap_km")),
+            "raw_distance_m_from_speed_last": f(run_last.get("raw_dist_m_speed")),
+            "raw_distance_m_from_fit_last": f(run_last.get("raw_dist_m_fit")),
+
+            # New (BIKE)
+            "Wprime_j": f(bike_last.get("wprime_j")),
         },
     }
+
     write_points_to_influxdb([point])
 
 # %%
