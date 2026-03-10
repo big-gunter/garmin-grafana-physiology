@@ -1342,6 +1342,11 @@ def run_rollups_for_range(start_date: str, end_date: str) -> None:
         except Exception:
             logging.exception(f"TrainingLoadDaily computation failed for {ds}")
 
+        try:
+            compute_and_write_performance_daily(ds)
+        except Exception:
+            logging.exception(f"PerformanceDaily computation failed for {ds}")
+
         cur += timedelta(days=1)
 
 def _userprofile_exists_for_day_v1(date_str: str) -> bool:
@@ -3154,6 +3159,11 @@ def compute_rollups_range(start_date: str, end_date: str) -> None:
             compute_and_write_training_load(d)
         except Exception:
             logging.exception(f"TrainingLoadDaily computation failed for {d}")
+
+        try:
+            compute_and_write_performance_daily(d)
+        except Exception:
+            logging.exception(f"PerformanceDaily computation failed for {d}")
     
         current += timedelta(days=1)
                 
