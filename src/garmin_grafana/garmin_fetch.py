@@ -1095,11 +1095,18 @@ def derive_and_write_activity_metrics_v1(
         fields["cs_pace_s_per_km"] = cs_pace
         fields["lt_pace_s_per_km"] = cs_pace  # LT pace proxy = CS pace
 
-        # VO2 demand on GAP speed (flat)
-        vo2 = acsm_vo2_running(v_gap, np.zeros_like(v_gap))
-        best5 = best_rolling_mean(vo2, 300, sample_rate_hz)
+        # VO2 demand using raw speed + computed grade (ACSM)
+        # (more stable than GAP->flat)
+        vo2_rawgrade = acsm_vo2_running(np.clip(speed_mps, 0.0, None), grade)
+        best5 = best_rolling_mean(vo2_rawgrade, 300, sample_rate_hz)
+        
         fields["best5m_vo2"] = float(best5) if np.isfinite(best5) else None
         fields["vo2max_est"] = float(best5) if np.isfinite(best5) else None
+        
+        # optional diagnostics
+        best5_speed = best_rolling_mean(np.clip(speed_mps, 0.0, None), 300, sample_rate_hz)
+        fields["best5m_speed_mps_raw"] = float(best5_speed) if np.isfinite(best5_speed) else None
+        fields["best5m_grade_median"] = float(np.nanmedian(grade)) if np.isfinite(grade).any() else None
 
         # LTHR estimate from near-CS segments
         if np.isfinite(cs_mps) and np.isfinite(hr_bpm).sum() > 100:
