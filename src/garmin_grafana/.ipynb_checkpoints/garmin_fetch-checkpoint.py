@@ -3497,9 +3497,9 @@ if __name__ == "__main__":
         except Exception as err:
             logging.error(err)
             logging.warning(
-                "No previously synced data found in local InfluxDB database, defaulting to 42 day initial fetching. Use specific start date ENV variable to bulk update past data"
+                "No previously synced data found in local InfluxDB database, defaulting to 90 day initial fetching. Use specific start date ENV variable to bulk update past data"
             )
-            last_influxdb_sync_time_UTC = (datetime.today() - timedelta(days=42)).astimezone(pytz.timezone("UTC"))
+            last_influxdb_sync_time_UTC = (datetime.today() - timedelta(days=90)).astimezone(pytz.timezone("UTC"))
 
         while True:
             last_watch_sync_time_UTC = datetime.fromtimestamp(int((garmin_obj.get_device_last_used() or {}).get("lastUsedDeviceUploadTime") / 1000)).astimezone(
