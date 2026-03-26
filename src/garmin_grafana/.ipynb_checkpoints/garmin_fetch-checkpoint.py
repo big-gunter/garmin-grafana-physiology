@@ -1175,13 +1175,31 @@ def derive_and_write_activity_metrics_v1(
         fields["cs_pace_s_per_km"] = cs_pace
         fields["lt_pace_s_per_km"] = cs_pace  # LT pace proxy = CS pace
 
-        # VO2 demand using raw speed + computed grade (ACSM)
-        # (more stable than GAP->flat)
-        vo2_rawgrade = acsm_vo2_running(np.clip(speed_mps, 0.0, None), grade)
-        best5 = best_rolling_mean(vo2_rawgrade, 300, sample_rate_hz)
+        # VO2 demand using raw speed + grade (ACSM), mountain-safe.
+        # Apply conservative mask so downhill/noise doesn't dominate.
+        vo2_raw = acsm_vo2_running(np.clip(speed_mps, 0.0, 8.0), grade)
         
-        fields["best5m_vo2"] = float(best5) if np.isfinite(best5) else None
-        fields["vo2max_est"] = float(best5) if np.isfinite(best5) else None
+        vo2_valid = (
+            np.isfinite(vo2_raw)
+            & np.isfinite(speed_mps)
+            & np.isfinite(grade)
+            & (speed_mps >= float(os.getenv("VO2_SPEED_FLOOR_MPS", "1.2")))  # hiking? drop to 0.8–1.0
+            & (grade >= float(os.getenv("VO2_GRADE_FLOOR", "0.0")))
+            & (grade <= float(os.getenv("VO2_GRADE_CEIL", "0.30")))
+        )
+        
+        vo2_f = np.where(vo2_valid, vo2_raw, np.nan)
+        
+        best5_vo2 = best_rolling_mean(vo2_f, 300, sample_rate_hz)
+        fields["best5m_vo2_masked"] = float(best5_vo2) if np.isfinite(best5_vo2) else None
+        fields["vo2max_est"] = fields["best5m_vo2_masked"]
+
+        best5_all = best_rolling_mean(vo2_raw, 300, sample_rate_hz)
+        fields["best5m_vo2_all"] = float(best5_all) if np.isfinite(best5_all) else None
+
+        fields["vo2_mask_speed_floor_mps"] = float(os.getenv("VO2_SPEED_FLOOR_MPS", "1.2"))
+        fields["vo2_mask_grade_floor"] = float(os.getenv("VO2_GRADE_FLOOR", "0.0"))
+        fields["vo2_mask_grade_ceil"] = float(os.getenv("VO2_GRADE_CEIL", "0.30"))
         
         # optional diagnostics
         best5_speed = best_rolling_mean(np.clip(speed_mps, 0.0, None), 300, sample_rate_hz)
@@ -1258,6 +1276,7 @@ def derive_and_write_activity_metrics_v1(
             fields["vam_hr_floor"] = float(hr_floor)
             fields["vam_speed_floor_mps"] = float(speed_floor)
             fields["vam_warmup_exclude_s"] = int(warmup_exclude_s)
+    
 
     if is_ride:
         # require power for CP
@@ -1269,7 +1288,7 @@ def derive_and_write_activity_metrics_v1(
             if np.isfinite(cp_w) and np.isfinite(hr_bpm).sum() > 100:
                 lthr_est = estimate_lthr_from_target(hr_bpm, power_w, cp_w, sample_rate_hz)
                 fields["lthr_bpm_est"] = float(lthr_est) if np.isfinite(lthr_est) else None
-
+    
     # write point (ONE per activity)
     point = {
         "measurement": "DerivedActivity",
@@ -3057,18 +3076,17 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
     if INFLUXDB_VERSION != "1":
         return
 
-    # Lookback window
     end_dt = _dt_utc(asof_date) + timedelta(days=1)
     start_dt = end_dt - timedelta(days=42)
     start_z, end_z = _iso_z(start_dt), _iso_z(end_dt)
 
-    # RUN: mountain fitness via VAM (best sustained climb rate)
+    # --- RUN: mountain fitness via VAM (best sustained climb rate) ---
     q_vam20 = (
         'SELECT max("best20m_vam_m_per_h") AS vam20 '
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND sport_tag =~ /running/ "
-        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+        f'AND "Database_Name"=\'{INFLUXDB_DATABASE}\' AND "Device"=\'{GARMIN_DEVICENAME}\''
     )
     vam20 = _query_scalar_influx_v1(q_vam20)
 
@@ -3077,37 +3095,30 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND sport_tag =~ /running/ "
-        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+        f'AND "Database_Name"=\'{INFLUXDB_DATABASE}\' AND "Device"=\'{GARMIN_DEVICENAME}\''
     )
     vam30 = _query_scalar_influx_v1(q_vam30)
 
-    # RUN: most recent CS + LTHR (keep if you like)
-    q_run_last = (
-        'SELECT last("cs_pace_s_per_km") AS cs_pace, last("lthr_bpm_est") AS lthr '
-        'FROM "DerivedActivity" '
-        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
-        "AND sport_tag =~ /running/ "
-        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
-    )
-    run_last = _query_last_row_influx_v1(q_run_last) or {}
-    
-    # RUN: max VO2max_est in 42d
+    # --- RUN: VO2 (use your canonical field) ---
+    # If DerivedActivity sets vo2max_est = best5m_vo2_masked, this is correct.
     q_run_vo2 = (
         'SELECT max("vo2max_est") AS vo2 '
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND sport_tag =~ /running/ "
-        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+        f'AND "Database_Name"=\'{INFLUXDB_DATABASE}\' AND "Device"=\'{GARMIN_DEVICENAME}\''
     )
     vo2 = _query_scalar_influx_v1(q_run_vo2)
 
-    # RUN: most recent key derived metrics in 42d (extend as needed)
+    # --- RUN: most recent derived metrics in 42d ---
+    # IMPORTANT: use the actual field names you write in DerivedActivity.
+    # Replace best5m_vo2_masked with best5m_vo2_raw if you kept that naming.
     q_run_last = (
         'SELECT '
         '  last("cs_pace_s_per_km") AS cs_pace, '
         '  last("cs_mps")          AS cs_mps, '
         '  last("dprime_m")        AS dprime_m, '
-        '  last("best5m_vo2")      AS best5m_vo2, '
+        '  last("best5m_vo2_masked") AS best5m_vo2_last, '
         '  last("gap_distance_km") AS gap_km, '
         '  last("raw_distance_m_from_speed") AS raw_dist_m_speed, '
         '  last("raw_distance_m_from_fit")   AS raw_dist_m_fit, '
@@ -3115,24 +3126,24 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND sport_tag =~ /running/ "
-        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+        f'AND "Database_Name"=\'{INFLUXDB_DATABASE}\' AND "Device"=\'{GARMIN_DEVICENAME}\''
     )
     run_last = _query_last_row_influx_v1(q_run_last) or {}
 
-    # BIKE: most recent key derived metrics in 42d (extend as needed)
+    # --- BIKE: most recent derived metrics in 42d ---
     q_bike_last = (
         'SELECT '
-        '  last("cp_watts")   AS cp, '
-        '  last("wprime_j")   AS wprime_j, '
+        '  last("cp_watts")     AS cp, '
+        '  last("wprime_j")     AS wprime_j, '
         '  last("lthr_bpm_est") AS lthr '
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND sport_tag =~ /cycl|bike|ride/ "
-        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+        f'AND "Database_Name"=\'{INFLUXDB_DATABASE}\' AND "Device"=\'{GARMIN_DEVICENAME}\''
     )
     bike_last = _query_last_row_influx_v1(q_bike_last) or {}
 
-    # gender for age model
+    # --- gender for fitness age model ---
     gender = _get_gender_for_day_v1(asof_date)
     if gender not in {"male", "female"}:
         row = _get_userprofile_master_v1()
@@ -3145,12 +3156,10 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
 
     fa = fitness_age_from_vo2(vo2, gender)
 
-    # (optional) pull RHR and adjust slightly (lower RHR => slightly younger)
     rhr, _ = _get_physiology_for_day_v1(asof_date)
     if fa is not None and rhr is not None:
         try:
             r = float(rhr)
-            # tiny adjustment: 40 bpm ~ -2y, 60 bpm ~ +2y (keep small)
             fa = fa + np.clip((r - 50.0) / 5.0, -2.0, 2.0)
         except Exception:
             pass
@@ -3166,31 +3175,30 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
         "time": _dt_utc(asof_date).isoformat(),
         "tags": {"Device": GARMIN_DEVICENAME, "Database_Name": INFLUXDB_DATABASE},
         "fields": {
-
             # Mountain fitness
             "VAM20_best_42d_m_per_h": f(vam20),
             "VAM30_best_42d_m_per_h": f(vam30),
-            "MountainFitness_source": "DerivedActivity.best(20m/30m)_vam_m_per_h_42d",
-            
-            # Existing
+            "MountainFitness_source": "DerivedActivity.max(best20m/best30m)_vam_m_per_h over 42d",
+
+            # VO2-based
             "VO2max_est_run": f(vo2),
-            "CS_pace_s_per_km": f(run_last.get("cs_pace")),
-            "LTHR_run_bpm_est": f(run_last.get("lthr")),
-            "CP_watts": f(bike_last.get("cp")),
-            "LTHR_bike_bpm_est": f(bike_last.get("lthr")),
             "FitnessAge_model": float(fa) if fa is not None else None,
             "FitnessAge_model_source": "vo2_run(+rhr_adj)" if fa is not None else None,
 
-            # New (RUN)
+            # RUN details
+            "CS_pace_s_per_km": f(run_last.get("cs_pace")),
             "CS_mps": f(run_last.get("cs_mps")),
             "Dprime_m": f(run_last.get("dprime_m")),
-            "best5m_vo2_last": f(run_last.get("best5m_vo2")),
+            "best5m_vo2_last": f(run_last.get("best5m_vo2_last")),
             "gap_distance_km_last": f(run_last.get("gap_km")),
             "raw_distance_m_from_speed_last": f(run_last.get("raw_dist_m_speed")),
             "raw_distance_m_from_fit_last": f(run_last.get("raw_dist_m_fit")),
+            "LTHR_run_bpm_est": f(run_last.get("lthr")),
 
-            # New (BIKE)
+            # BIKE details
+            "CP_watts": f(bike_last.get("cp")),
             "Wprime_j": f(bike_last.get("wprime_j")),
+            "LTHR_bike_bpm_est": f(bike_last.get("lthr")),
         },
     }
 
