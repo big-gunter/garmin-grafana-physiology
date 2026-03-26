@@ -589,7 +589,87 @@ def _age_from_birth_year(birth_year: int, date_str: str | None = None) -> int:
     else:
         yr = _date.today().year
     return max(yr - int(birth_year), 0)
-    
+
+def _smooth_series(x: np.ndarray, window_samples: int) -> np.ndarray:
+    w = max(3, int(window_samples))
+    return pd.Series(x).rolling(w, center=True, min_periods=max(1, w//2)).mean().to_numpy()
+
+def vertical_speed_mps(ts_epoch: np.ndarray, elev_m: np.ndarray, smooth_s: float = 10.0) -> np.ndarray:
+    """
+    Vertical speed in m/s using smoothed elevation and variable dt.
+    Positive-only is handled later (we keep signed here).
+    """
+    t = np.asarray(ts_epoch, dtype=float)
+    z = np.asarray(elev_m, dtype=float)
+
+    # smooth elevation using ~smooth_s worth of samples (approx via median dt)
+    dt = np.diff(t)
+    dt = dt[(dt > 0) & np.isfinite(dt)]
+    med_dt = float(np.median(dt)) if dt.size else 1.0
+    sr = float(np.clip(1.0 / med_dt, 0.2, 5.0))
+    w = int(max(3, smooth_s * sr))
+    z_sm = _smooth_series(z, w)
+
+    dz = np.diff(z_sm)
+    dt_full = np.diff(t)
+    dt_full = np.where(np.isfinite(dt_full) & (dt_full > 0), dt_full, np.nan)
+
+    vz = dz / dt_full
+    vz = np.r_[vz, vz[-1] if vz.size else 0.0]  # pad to length n
+    # guard spikes
+    vz = np.where(np.isfinite(vz), vz, 0.0)
+    vz = np.clip(vz, -5.0, 5.0)  # ±5 m/s is already extreme
+    return vz
+
+def best_rolling_mean_masked(series: np.ndarray, ts_epoch: np.ndarray, window_s: float, mask: np.ndarray | None = None) -> float:
+    """
+    Best rolling mean over variable dt by resampling to 1 Hz-ish index.
+    Since your FIT data is ~1 Hz, we can approximate with sample_rate derived from ts_epoch.
+    Masked samples are excluded by setting them to NaN.
+    """
+    x = np.asarray(series, dtype=float)
+    if mask is not None:
+        m = np.asarray(mask, dtype=bool)
+        x = np.where(m, x, np.nan)
+
+    # derive sample rate from timestamps
+    dt = np.diff(np.asarray(ts_epoch, dtype=float))
+    dt = dt[(dt > 0) & np.isfinite(dt)]
+    med_dt = float(np.median(dt)) if dt.size else 1.0
+    sr = float(np.clip(1.0 / med_dt, 0.2, 5.0))
+
+    w = max(3, int(window_s * sr))
+    rm = pd.Series(x).rolling(w, min_periods=w).mean()
+    if rm.dropna().empty:
+        return np.nan
+    return float(rm.max())
+
+def _best_window_index(series: np.ndarray, ts_epoch: np.ndarray, window_s: float, mask: np.ndarray | None = None) -> tuple[int | None, int | None]:
+    """
+    Returns (start_idx, end_idx_inclusive) for the window achieving best rolling mean.
+    Uses same approximation as best_rolling_mean_masked.
+    """
+    x = np.asarray(series, dtype=float)
+    if mask is not None:
+        m = np.asarray(mask, dtype=bool)
+        x = np.where(m, x, np.nan)
+
+    dt = np.diff(np.asarray(ts_epoch, dtype=float))
+    dt = dt[(dt > 0) & np.isfinite(dt)]
+    med_dt = float(np.median(dt)) if dt.size else 1.0
+    sr = float(np.clip(1.0 / med_dt, 0.2, 5.0))
+
+    w = max(3, int(window_s * sr))
+    rm = pd.Series(x).rolling(w, min_periods=w).mean()
+    if rm.dropna().empty:
+        return (None, None)
+
+    end_i = int(rm.idxmax())
+    start_i = end_i - w + 1
+    if start_i < 0:
+        return (None, None)
+    return (start_i, end_i)
+
 def maybe_update_userprofile_master(*, birth_year=None, age_years=None, gender=None, lthr=None, source="unknown", activity_id=None):
     def _to_int(x):
         try:
@@ -1124,6 +1204,60 @@ def derive_and_write_activity_metrics_v1(
             fields["lthr_target_mps"] = float(cs_mps)
             fields["lthr_band"] = float(0.05)
             fields["lthr_min_contig_s"] = int(10 * 60)
+
+        # --- Mountain-native fitness: Vertical Ascent Rate (VAM) ---
+        # Need elevation
+        if np.isfinite(elev_m).sum() > 100:
+            vz_mps = vertical_speed_mps(ts_epoch, elev_m, smooth_s=10.0)
+
+            # positive-only climb rate
+            vz_up = np.where(vz_mps > 0, vz_mps, 0.0)
+
+            # Gating to avoid "best" being dominated by coasting / pauses / nonsense
+            # Tune hr_floor for beta blocker reality (110–120 often works better than 130+)
+            hr_floor = float(os.getenv("VAM_HR_FLOOR", "115"))
+            speed_floor = float(os.getenv("VAM_SPEED_FLOOR_MPS", "1.0"))  # ~3:20/km; adjust if needed
+            warmup_exclude_s = int(os.getenv("VAM_WARMUP_EXCLUDE_S", str(10 * 60)))
+
+            # time axis for warmup exclusion
+            t_rel = ts_epoch - ts_epoch[0]
+            valid = (
+                np.isfinite(vz_up)
+                & np.isfinite(speed_mps)
+                & (speed_mps >= speed_floor)
+                & np.isfinite(hr_bpm)
+                & (hr_bpm >= hr_floor)
+                & (t_rel >= warmup_exclude_s)
+            )
+
+            # Best sustained climb rate over 20 and 30 minutes
+            best20_vz = best_rolling_mean_masked(vz_up, ts_epoch, window_s=20*60, mask=valid)
+            best30_vz = best_rolling_mean_masked(vz_up, ts_epoch, window_s=30*60, mask=valid)
+
+            # Store as VAM (m/h) and m/min too (handy)
+            if np.isfinite(best20_vz):
+                fields["best20m_vam_m_per_h"] = float(best20_vz * 3600.0)
+                fields["best20m_vert_m_per_min"] = float(best20_vz * 60.0)
+            if np.isfinite(best30_vz):
+                fields["best30m_vam_m_per_h"] = float(best30_vz * 3600.0)
+                fields["best30m_vert_m_per_min"] = float(best30_vz * 60.0)
+
+            # Optional: store the paired HR and distance for the best-20m window
+            s_i, e_i = _best_window_index(vz_up, ts_epoch, window_s=20*60, mask=valid)
+            if s_i is not None and e_i is not None:
+                fields["best20m_hr_median"] = float(np.nanmedian(hr_bpm[s_i:e_i+1]))
+                # distance in that window (from raw speed variable dt)
+                try:
+                    t_win = ts_epoch[s_i:e_i+1]
+                    v_win = np.clip(speed_mps[s_i:e_i+1], 0.0, None)
+                    fields["best20m_distance_m"] = float(_sum_distance_from_speed_var_dt(v_win, t_win))
+                except Exception:
+                    pass
+
+            # Record gating params for auditability
+            fields["vam_hr_floor"] = float(hr_floor)
+            fields["vam_speed_floor_mps"] = float(speed_floor)
+            fields["vam_warmup_exclude_s"] = int(warmup_exclude_s)
 
     if is_ride:
         # require power for CP
@@ -2928,6 +3062,35 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
     start_dt = end_dt - timedelta(days=42)
     start_z, end_z = _iso_z(start_dt), _iso_z(end_dt)
 
+    # RUN: mountain fitness via VAM (best sustained climb rate)
+    q_vam20 = (
+        'SELECT max("best20m_vam_m_per_h") AS vam20 '
+        'FROM "DerivedActivity" '
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+        "AND sport_tag =~ /running/ "
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+    )
+    vam20 = _query_scalar_influx_v1(q_vam20)
+
+    q_vam30 = (
+        'SELECT max("best30m_vam_m_per_h") AS vam30 '
+        'FROM "DerivedActivity" '
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+        "AND sport_tag =~ /running/ "
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+    )
+    vam30 = _query_scalar_influx_v1(q_vam30)
+
+    # RUN: most recent CS + LTHR (keep if you like)
+    q_run_last = (
+        'SELECT last("cs_pace_s_per_km") AS cs_pace, last("lthr_bpm_est") AS lthr '
+        'FROM "DerivedActivity" '
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+        "AND sport_tag =~ /running/ "
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+    )
+    run_last = _query_last_row_influx_v1(q_run_last) or {}
+    
     # RUN: max VO2max_est in 42d
     q_run_vo2 = (
         'SELECT max("vo2max_est") AS vo2 '
@@ -3003,6 +3166,12 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
         "time": _dt_utc(asof_date).isoformat(),
         "tags": {"Device": GARMIN_DEVICENAME, "Database_Name": INFLUXDB_DATABASE},
         "fields": {
+
+            # Mountain fitness
+            "VAM20_best_42d_m_per_h": f(vam20),
+            "VAM30_best_42d_m_per_h": f(vam30),
+            "MountainFitness_source": "DerivedActivity.best(20m/30m)_vam_m_per_h_42d",
+            
             # Existing
             "VO2max_est_run": f(vo2),
             "CS_pace_s_per_km": f(run_last.get("cs_pace")),
