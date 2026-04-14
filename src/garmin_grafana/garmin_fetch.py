@@ -628,6 +628,54 @@ def _get_trainingload_prev_day_v1(date_str: str) -> dict:
     )
     return _influxv1.get_trainingload_prev_day(date_str, ctx)
 
+
+def _get_hr_zones_for_day_v1(date_str: str) -> dict[str, float] | None:
+    ctx = _InfluxV1QueryContext(
+        influxdbclient=influxdbclient,
+        influxdb_database=INFLUXDB_DATABASE,
+        garmin_devicename=GARMIN_DEVICENAME,
+        day_bounds_z=_day_bounds_z,
+        dt_utc=_dt_utc,
+        query_last_row=_query_last_row_influx_v1,
+    )
+    return _influxv1.get_hr_zones_for_day(date_str, ctx)
+
+
+def _get_activity_gps_points_for_day_v1(date_str: str, activity_id: int) -> list[dict]:
+    ctx = _InfluxV1QueryContext(
+        influxdbclient=influxdbclient,
+        influxdb_database=INFLUXDB_DATABASE,
+        garmin_devicename=GARMIN_DEVICENAME,
+        day_bounds_z=_day_bounds_z,
+        dt_utc=_dt_utc,
+        query_last_row=_query_last_row_influx_v1,
+    )
+    return _influxv1.get_activity_gps_points_for_day(date_str, activity_id, ctx)
+
+
+def _get_derived_activity_thresholds_for_day_v1(date_str: str, activity_id: int) -> dict:
+    ctx = _InfluxV1QueryContext(
+        influxdbclient=influxdbclient,
+        influxdb_database=INFLUXDB_DATABASE,
+        garmin_devicename=GARMIN_DEVICENAME,
+        day_bounds_z=_day_bounds_z,
+        dt_utc=_dt_utc,
+        query_last_row=_query_last_row_influx_v1,
+    )
+    return _influxv1.get_derived_activity_thresholds_for_day(date_str, activity_id, ctx)
+
+
+def _get_derived_activity_loads_for_day_v1(date_str: str, activity_id: int) -> dict:
+    ctx = _InfluxV1QueryContext(
+        influxdbclient=influxdbclient,
+        influxdb_database=INFLUXDB_DATABASE,
+        garmin_devicename=GARMIN_DEVICENAME,
+        day_bounds_z=_day_bounds_z,
+        dt_utc=_dt_utc,
+        query_last_row=_query_last_row_influx_v1,
+    )
+    return _influxv1.get_derived_activity_loads_for_day(date_str, activity_id, ctx)
+
 def rolling_mean(x: np.ndarray, window: int) -> np.ndarray:
     if window <= 1:
         return x
@@ -811,6 +859,83 @@ def estimate_lthr_from_target_contiguous(
 
     # robust statistic
     return float(np.nanmedian(hr[s : e + 1]))
+
+def _edwards_zone_weight(hr_bpm: float, zones: dict[str, float]) -> int:
+    try:
+        hr = float(hr_bpm)
+    except Exception:
+        return 0
+    if not (hr > 0):
+        return 0
+    if hr < zones["Z1_Low"]:
+        return 0
+    if hr <= zones["Z1_High"]:
+        return 1
+    if hr >= zones["Z2_Low"] and hr <= zones["Z2_High"]:
+        return 2
+    if hr >= zones["Z3_Low"] and hr <= zones["Z3_High"]:
+        return 3
+    if hr >= zones["Z4_Low"] and hr <= zones["Z4_High"]:
+        return 4
+    if hr >= zones["Z5_Low"]:
+        return 5
+    return 0
+
+
+def _bin_time_series(ts_s: np.ndarray, values: np.ndarray, bin_s: float) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Returns (bin_dur_s, bin_time_weighted_mean).
+    Assumes ts_s is increasing seconds since epoch.
+    """
+    if ts_s.size < 2:
+        return (np.array([], dtype=float), np.array([], dtype=float))
+    t0 = float(ts_s[0])
+    rel = ts_s - t0
+    b = np.floor(rel / float(bin_s)).astype(int)
+    nb = int(b.max()) + 1 if b.size else 0
+    if nb <= 0:
+        return (np.array([], dtype=float), np.array([], dtype=float))
+
+    dt = np.diff(ts_s)
+    dt = np.where(np.isfinite(dt) & (dt > 0), dt, 0.0)
+    med_dt = float(np.median(dt[dt > 0])) if np.any(dt > 0) else 1.0
+    dt = np.r_[dt, med_dt]
+
+    bin_dur = np.zeros(nb, dtype=float)
+    bin_sum = np.zeros(nb, dtype=float)
+    bin_cnt = np.zeros(nb, dtype=float)
+    for i in range(values.size):
+        bi = int(b[i])
+        if bi < 0 or bi >= nb:
+            continue
+        di = float(dt[i])
+        if di <= 0:
+            continue
+        bin_dur[bi] += di
+        v = values[i]
+        if np.isfinite(v):
+            bin_sum[bi] += float(v) * di
+            bin_cnt[bi] += di
+
+    mean = np.where(bin_cnt > 0, bin_sum / bin_cnt, np.nan)
+    return (bin_dur, mean)
+
+
+def _np_from_power_bins(bin_dur_s: np.ndarray, bin_power_w: np.ndarray) -> float | None:
+    if bin_dur_s.size == 0 or bin_power_w.size == 0:
+        return None
+    dur = np.asarray(bin_dur_s, dtype=float)
+    p = np.asarray(bin_power_w, dtype=float)
+    m = np.isfinite(dur) & (dur > 0) & np.isfinite(p) & (p >= 0)
+    if not m.any():
+        return None
+    w = dur[m]
+    x = p[m] ** 4
+    try:
+        mean4 = float(np.sum(x * w) / np.sum(w))
+        return float(mean4 ** 0.25) if mean4 > 0 else 0.0
+    except Exception:
+        return None
 
 def _pace_s_per_km_from_mps(v_mps: float) -> float | None:
     try:
@@ -1110,6 +1235,114 @@ def derive_and_write_activity_metrics_v1(
                 lthr_est = estimate_lthr_from_target(hr_bpm, power_w, cp_w, sample_rate_hz)
                 fields["lthr_bpm_est"] = float(lthr_est) if np.isfinite(lthr_est) else None
     
+    # --- Windowed training load metrics (peer-reviewed/industry-standard variants) ---
+    # Uses physiology inputs from daily rollups where available; falls back to canonical zone definitions when needed.
+    try:
+        day_str = activity_start_time.strftime("%Y-%m-%d")
+        gender = _get_gender_for_day_v1(day_str)
+        rhr, hrmax = _get_physiology_for_day_v1(day_str)
+        lthr_bpm = _stored_lthr_bpm_v1()
+
+        rhr_f = float(rhr) if rhr is not None else np.nan
+        hrmax_f = float(hrmax) if hrmax is not None else np.nan
+
+        # bins: keep consistent with daily rollup
+        bin_s = float(np.clip(float(os.getenv("TRAINING_LOAD_BIN_SECONDS", "30")), 10.0, 120.0))
+        fields["training_load_bin_seconds"] = float(bin_s)
+
+        # HR bins
+        bin_dur, bin_hr = _bin_time_series(ts_epoch, hr_bpm, bin_s=bin_s)
+
+        # Banister TRIMP from time series (requires gender + RHR + HRmax)
+        if np.isfinite(rhr_f) and np.isfinite(hrmax_f) and hrmax_f > rhr_f and gender in {"male", "female"}:
+            btrimp = 0.0
+            for dsec, h in zip(bin_dur, bin_hr):
+                if not (np.isfinite(dsec) and dsec > 0 and np.isfinite(h) and h > 0):
+                    continue
+                btrimp += _bannister_trimp(float(dsec), float(h), float(rhr_f), float(hrmax_f), gender)
+            fields["TRIMP_Banister_ts"] = float(btrimp)
+            fields["RHR_used"] = float(rhr_f)
+            fields["HRmax_used"] = float(hrmax_f)
+            fields["gender_used"] = str(gender)
+
+        # Edwards TRIMP zones: prefer PhysiologyDaily Z1..Z5; else %HRmax fallback
+        zones = _get_hr_zones_for_day_v1(day_str)
+        zones_source = "PhysiologyDaily(Z1..Z5)"
+        if zones is None and np.isfinite(hrmax_f) and hrmax_f > 0:
+            zones = {
+                "Z1_Low": 0.50 * hrmax_f, "Z1_High": 0.60 * hrmax_f,
+                "Z2_Low": 0.60 * hrmax_f, "Z2_High": 0.70 * hrmax_f,
+                "Z3_Low": 0.70 * hrmax_f, "Z3_High": 0.80 * hrmax_f,
+                "Z4_Low": 0.80 * hrmax_f, "Z4_High": 0.90 * hrmax_f,
+                "Z5_Low": 0.90 * hrmax_f, "Z5_High": 1.00 * hrmax_f,
+            }
+            zones_source = "%HRmax(Edwards)"
+
+        if zones is not None:
+            etrimp = 0.0
+            for dsec, h in zip(bin_dur, bin_hr):
+                if not (np.isfinite(dsec) and dsec > 0 and np.isfinite(h) and h > 0):
+                    continue
+                w = _edwards_zone_weight(float(h), zones)
+                if w <= 0:
+                    continue
+                etrimp += (float(dsec) / 60.0) * float(w)
+            fields["TRIMP_Edwards_ts"] = float(etrimp)
+            fields["TRIMP_Edwards_zones_source"] = str(zones_source)
+
+        # hrTSS (industry-standard analogue; requires LTHR)
+        if lthr_bpm is not None:
+            try:
+                thr = float(lthr_bpm)
+                if thr > 0:
+                    hrtss = 0.0
+                    for dsec, h in zip(bin_dur, bin_hr):
+                        if not (np.isfinite(dsec) and dsec > 0 and np.isfinite(h) and h > 0):
+                            continue
+                        hrtss += _hr_tss(float(dsec), float(h), thr)
+                    fields["hrTSS_ts"] = float(hrtss)
+                    fields["lthr_used"] = float(thr)
+            except Exception:
+                pass
+
+        # rTSS (GAP speed vs CS) for running
+        if is_run:
+            try:
+                cs = fields.get("cs_mps")
+                cs_f = float(cs) if cs is not None else np.nan
+            except Exception:
+                cs_f = np.nan
+            if np.isfinite(cs_f) and cs_f > 0:
+                _, bin_gap = _bin_time_series(ts_epoch, v_gap, bin_s=bin_s)
+                rtss = 0.0
+                for dsec, v in zip(bin_dur, bin_gap):
+                    if not (np.isfinite(dsec) and dsec > 0 and np.isfinite(v) and v > 0):
+                        continue
+                    hours = float(dsec) / 3600.0
+                    IF = float(v) / float(cs_f)
+                    IF = max(0.3, min(IF, 1.5))
+                    rtss += 100.0 * hours * (IF ** 2)
+                fields["rTSS_ts"] = float(rtss)
+
+        # bike TSS (NP-like) for cycling
+        if is_ride:
+            try:
+                cp = fields.get("cp_watts")
+                cp_f = float(cp) if cp is not None else np.nan
+            except Exception:
+                cp_f = np.nan
+            if np.isfinite(cp_f) and cp_f > 0:
+                _, bin_p = _bin_time_series(ts_epoch, power_w, bin_s=bin_s)
+                np_est = _np_from_power_bins(bin_dur, bin_p)
+                if np_est is not None and np.isfinite(np_est):
+                    total_hours = float(np.sum(bin_dur)) / 3600.0
+                    IF = float(np_est) / float(cp_f)
+                    IF = max(0.3, min(IF, 1.5))
+                    fields["bikeTSS_ts"] = float(100.0 * total_hours * (IF ** 2))
+                    fields["bikeNP_est"] = float(np_est)
+    except Exception:
+        logging.exception("DerivedActivity training load computation failed")
+
     # write point (ONE per activity)
     point = {
         "measurement": "DerivedActivity",
@@ -1179,6 +1412,10 @@ def compute_and_write_training_load(date_str: str) -> None:
         stored_lthr_bpm_v1=_stored_lthr_bpm_v1,
         get_activities_for_day_v1=_get_activities_for_day_v1,
         get_trainingload_prev_day_v1=_get_trainingload_prev_day_v1,
+        get_hr_zones_for_day_v1=_get_hr_zones_for_day_v1,
+        get_activity_gps_points_for_day_v1=_get_activity_gps_points_for_day_v1,
+        get_derived_activity_thresholds_for_day_v1=_get_derived_activity_thresholds_for_day_v1,
+        get_derived_activity_loads_for_day_v1=_get_derived_activity_loads_for_day_v1,
         iso_z=_iso_z,
         query_scalar_influx_v1=_query_scalar_influx_v1,
         query_last_row_influx_v1=_query_last_row_influx_v1,
@@ -1381,6 +1618,9 @@ def compute_and_write_physiology(asof_date: str) -> None:
         stored_lthr_bpm_v1=_stored_lthr_bpm_v1,
         get_activities_for_day_v1=_get_activities_for_day_v1,
         get_trainingload_prev_day_v1=_get_trainingload_prev_day_v1,
+        get_hr_zones_for_day_v1=_get_hr_zones_for_day_v1,
+        get_activity_gps_points_for_day_v1=_get_activity_gps_points_for_day_v1,
+        get_derived_activity_thresholds_for_day_v1=_get_derived_activity_thresholds_for_day_v1,
         iso_z=_iso_z,
         query_scalar_influx_v1=_query_scalar_influx_v1,
         query_last_row_influx_v1=_query_last_row_influx_v1,
@@ -1676,6 +1916,9 @@ def compute_and_write_performance_daily(asof_date: str) -> None:
         stored_lthr_bpm_v1=_stored_lthr_bpm_v1,
         get_activities_for_day_v1=_get_activities_for_day_v1,
         get_trainingload_prev_day_v1=_get_trainingload_prev_day_v1,
+        get_hr_zones_for_day_v1=_get_hr_zones_for_day_v1,
+        get_activity_gps_points_for_day_v1=_get_activity_gps_points_for_day_v1,
+        get_derived_activity_thresholds_for_day_v1=_get_derived_activity_thresholds_for_day_v1,
         iso_z=_iso_z,
         query_scalar_influx_v1=_query_scalar_influx_v1,
         query_last_row_influx_v1=_query_last_row_influx_v1,

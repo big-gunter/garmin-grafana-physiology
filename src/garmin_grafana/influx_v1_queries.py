@@ -15,6 +15,103 @@ class InfluxV1QueryContext:
     dt_utc: Callable[[str], Any]
     query_last_row: Callable[[str], dict | None]
 
+def get_hr_zones_for_day(date_str: str, ctx: InfluxV1QueryContext) -> dict[str, float] | None:
+    """
+    Returns absolute BPM zone bounds from PhysiologyDaily (Z1..Z5).
+    Keys: Z1_Low, Z1_High, ..., Z5_Low, Z5_High.
+    """
+    start_z, end_z = ctx.day_bounds_z(date_str)
+    q = (
+        "SELECT "
+        '  last("Z1_Low")  AS Z1_Low,  last("Z1_High") AS Z1_High, '
+        '  last("Z2_Low")  AS Z2_Low,  last("Z2_High") AS Z2_High, '
+        '  last("Z3_Low")  AS Z3_Low,  last("Z3_High") AS Z3_High, '
+        '  last("Z4_Low")  AS Z4_Low,  last("Z4_High") AS Z4_High, '
+        '  last("Z5_Low")  AS Z5_Low,  last("Z5_High") AS Z5_High '
+        'FROM "PhysiologyDaily" '
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+        f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+    )
+    row = ctx.query_last_row(q) or {}
+
+    def f(k: str) -> float | None:
+        v = row.get(k)
+        try:
+            return float(v) if v is not None else None
+        except Exception:
+            return None
+
+    out = {k: f(k) for k in (
+        "Z1_Low","Z1_High","Z2_Low","Z2_High","Z3_Low","Z3_High","Z4_Low","Z4_High","Z5_Low","Z5_High"
+    )}
+    if any(v is None for v in out.values()):
+        return None
+    return {k: float(v) for k, v in out.items() if v is not None}
+
+
+def get_activity_gps_points_for_day(date_str: str, activity_id: int, ctx: InfluxV1QueryContext) -> list[dict]:
+    """
+    Returns raw ActivityGPS points for a given day + Activity_ID.
+    Expected fields: HeartRate, Power, Speed, GradeAdjustedSpeed, time.
+    """
+    start_z, end_z = ctx.day_bounds_z(date_str)
+    q = (
+        "SELECT "
+        '  "HeartRate" AS HeartRate, '
+        '  "Power" AS Power, '
+        '  "Speed" AS Speed, '
+        '  "GradeAdjustedSpeed" AS GradeAdjustedSpeed '
+        'FROM "ActivityGPS" '
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+        f"AND \"Activity_ID\" = {int(activity_id)} "
+        f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+    )
+    try:
+        res = ctx.influxdbclient.query(q)
+        return list(res.get_points())
+    except Exception:
+        logging.exception(f"ActivityGPS query failed for Activity_ID={activity_id} day={date_str}")
+        return []
+
+
+def get_derived_activity_thresholds_for_day(date_str: str, activity_id: int, ctx: InfluxV1QueryContext) -> dict:
+    """
+    Returns thresholds derived during FIT parsing for the activity (if present):
+      - cs_mps (running critical speed from GAP)
+      - cp_watts (cycling critical power)
+    """
+    start_z, end_z = ctx.day_bounds_z(date_str)
+    q = (
+        "SELECT "
+        '  last("cs_mps") AS cs_mps, '
+        '  last("cp_watts") AS cp_watts '
+        'FROM "DerivedActivity" '
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+        f"AND \"ActivityID\"='{int(activity_id)}' "
+        f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+    )
+    return ctx.query_last_row(q) or {}
+
+
+def get_derived_activity_loads_for_day(date_str: str, activity_id: int, ctx: InfluxV1QueryContext) -> dict:
+    """
+    Returns per-activity training load fields computed during FIT parsing (if present).
+    """
+    start_z, end_z = ctx.day_bounds_z(date_str)
+    q = (
+        "SELECT "
+        '  last("TRIMP_Banister_ts") AS TRIMP_Banister_ts, '
+        '  last("TRIMP_Edwards_ts")  AS TRIMP_Edwards_ts, '
+        '  last("hrTSS_ts")          AS hrTSS_ts, '
+        '  last("rTSS_ts")           AS rTSS_ts, '
+        '  last("bikeTSS_ts")        AS bikeTSS_ts '
+        'FROM "DerivedActivity" '
+        f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+        f"AND \"ActivityID\"='{int(activity_id)}' "
+        f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+    )
+    return ctx.query_last_row(q) or {}
+
 
 def get_gender_for_day(date_str: str, ctx: InfluxV1QueryContext) -> str:
     start_z, end_z = ctx.day_bounds_z(date_str)

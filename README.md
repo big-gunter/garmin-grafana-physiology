@@ -63,6 +63,33 @@ A docker container to fetch data from Garmin servers and store the data in a loc
 - Automated data fetching in regular interval (set and forget)
 - Historical data backfilling
 
+## Training load metrics (TRIMP / TSS) and trail support
+
+This project computes several **internal** and **external** training-load metrics designed to remain usable for **trail running** (where raw pace is heavily distorted by gradient and technical terrain).
+
+### TRIMP (Training Impulse)
+
+- **Banister TRIMP (bTRIMP)**: Heart-rate-reserve based TRIMP with sex-specific exponential weighting.
+  - Uses \(HRR = (HR_{avg}-HR_{rest})/(HR_{max}-HR_{rest})\).
+  - bTRIMP is computed from the activity **heart-rate time series** in windows (default 30s) when available.
+- **Edwards TRIMP (eTRIMP)**: Zone-weighted TRIMP computed as \(\sum (\text{minutes in zone} \times \text{zone weight})\) with weights 1..5.
+  - Zones prefer `PhysiologyDaily` (individualized Z1..Z5 BPM bounds).
+  - If zones are unavailable, it falls back to %HRmax zones (50–60, 60–70, 70–80, 80–90, 90–100%).
+
+### TSS family (explicit variants)
+
+“TSS” is power-based in the original Coggan definition (cycling). This project stores TSS-like variants explicitly:
+
+- **`hrTSS`**: HR-based TSS analogue computed from HR relative to threshold HR (LTHR).
+- **`rTSS`**: Running TSS analogue computed from **grade-adjusted speed (GAP)** relative to critical speed (CS) derived from GAP.
+- **`bikeTSS`**: Cycling TSS analogue computed from power using an NP-like \(P^4\) weighting relative to critical power (CP).
+
+### Trail/terrain handling
+
+- TRIMP metrics are **HR-driven** and do not need explicit grade correction.
+- Running load uses **grade-adjusted speed** (GAP / `GradeAdjustedSpeed`) rather than raw speed/pace, making it more comparable across hills.
+
+
 ## Why use this project?
 
 - **Free and Fully Open Source**: 100% transparent and open project — modify, distribute extend, and self-host as you wish, with no hidden costs. Just credit the author and support this project as you please!
