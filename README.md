@@ -67,6 +67,15 @@ A docker container to fetch data from Garmin servers and store the data in a loc
 
 This project computes several **internal** and **external** training-load metrics designed to remain usable for **trail running** (where raw pace is heavily distorted by gradient and technical terrain).
 
+### Where these calculations live (implementation notes)
+
+The upstream `garmin-grafana` project primarily **ingests and visualizes Garmin-provided fields**. This fork adds a small number of **derived** and **rollup** metrics.
+
+- **Derived per-activity metrics** are computed during FIT parsing in `src/garmin_grafana/garmin_fetch.py` inside `derive_and_write_activity_metrics_v1()` and written to the `DerivedActivity` measurement.
+  - This is done “close to the data” (while iterating FIT records) for efficiency and to avoid re-querying dense time-series later.
+- **Daily rollups** are computed in `src/garmin_grafana/rollups.py` (written to `TrainingLoadDaily`, `PhysiologyDaily`, `PerformanceDaily`).
+  - The rollups use helper query functions in `src/garmin_grafana/influx_v1_queries.py` to fetch only what’s needed for a day.
+
 ### TRIMP (Training Impulse)
 
 - **Banister TRIMP (bTRIMP)**: Heart-rate-reserve based TRIMP with sex-specific exponential weighting.
@@ -88,6 +97,23 @@ This project computes several **internal** and **external** training-load metric
 
 - TRIMP metrics are **HR-driven** and do not need explicit grade correction.
 - Running load uses **grade-adjusted speed** (GAP / `GradeAdjustedSpeed`) rather than raw speed/pace, making it more comparable across hills.
+
+### Derived measurements and key fields (quick reference)
+
+- **`DerivedActivity`** (one point per activity; written at activity start time)
+  - **Running (trail-aware)**:
+    - `grade` (derived from distance + altitude), `gap_distance_m`, `gap_distance_km`
+    - `cs_mps`, `cs_pace_s_per_km`, `dprime_m` (critical-speed model fit using GAP)
+    - `vo2max_est` (VO2 demand proxy; see code for masks/assumptions)
+    - **Load**: `TRIMP_Banister_ts`, `TRIMP_Edwards_ts`, `hrTSS_ts`, `rTSS_ts`
+  - **Cycling**:
+    - `cp_watts`, `wprime_j` (critical-power model fit from power)
+    - **Load**: `TRIMP_Banister_ts`, `TRIMP_Edwards_ts`, `hrTSS_ts`, `bikeTSS_ts`, `bikeNP_est`
+
+- **`TrainingLoadDaily`** (one point per day)
+  - Back-compat: `TRIMP`, `TSS`
+  - Explicit variants: `TRIMP_Banister`, `TRIMP_Edwards`, `hrTSS`, `rTSS`, `bikeTSS`
+  - Provenance: `TRIMP_Edwards_zones_source`, `activities_used`, `activities_used_timeseries`, plus `RHR_used`, `HRmax_used`, `lthr_used`
 
 
 ## Why use this project?
