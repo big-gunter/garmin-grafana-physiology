@@ -1767,7 +1767,7 @@ def fetch_write_bulk(start_date_str, end_date_str, *, local_timediff: timedelta)
     )
 
 # %%
-if __name__ == "__main__":
+def main() -> int:
     garmin_obj = garmin_login()
 
     # determine local_timediff once for both MANUAL and LIVE paths
@@ -1793,7 +1793,7 @@ if __name__ == "__main__":
         # local_timediff exists later in your code; for MANUAL path you should compute it before calling
         fetch_write_bulk(MANUAL_START_DATE, MANUAL_END_DATE, local_timediff=local_timediff)
         logging.info(f"Bulk update success : Fetched all available health metrics for date range {MANUAL_START_DATE} to {MANUAL_END_DATE}")
-        sys.exit(0)
+        return 0
     else:
         try:
             if INFLUXDB_VERSION == "1":
@@ -1832,3 +1832,7 @@ if __name__ == "__main__":
                 logging.info(f"No new data found : Current watch and influxdb sync time is {last_watch_sync_time_UTC} UTC")
             logging.info(f"waiting for {UPDATE_INTERVAL_SECONDS} seconds before next automatic update calls")
             time.sleep(UPDATE_INTERVAL_SECONDS)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
