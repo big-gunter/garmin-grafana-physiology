@@ -1768,6 +1768,7 @@ def fetch_write_bulk(start_date_str, end_date_str, *, local_timediff: timedelta)
 
 # %%
 def main() -> int:
+    global garmin_obj
     garmin_obj = garmin_login()
 
     # determine local_timediff once for both MANUAL and LIVE paths
