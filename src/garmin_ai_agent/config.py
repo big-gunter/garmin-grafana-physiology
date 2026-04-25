@@ -29,6 +29,7 @@ class AgentConfig:
     influx_database: str
     influx_endpoint_is_http: bool
     allow_db_write: bool
+    cycling_gross_efficiency: float
 
     # Anthropic
     anthropic_api_key: str | None
@@ -57,6 +58,7 @@ def load_config() -> AgentConfig:
     influx_database = os.getenv("INFLUXDB_DATABASE", "GarminStats")
     influx_endpoint_is_http = _get_bool("INFLUXDB_ENDPOINT_IS_HTTP", True)
     allow_db_write = _get_bool("AI_ALLOW_DB_WRITE", False)
+    cycling_gross_efficiency = float(os.getenv("AI_CYCLING_GROSS_EFF", "0.23"))
 
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY") or None
     analysis_model = os.getenv("ANALYSIS_MODEL", "claude-sonnet-4-6")
@@ -84,6 +86,7 @@ def load_config() -> AgentConfig:
         influx_database=influx_database,
         influx_endpoint_is_http=influx_endpoint_is_http,
         allow_db_write=allow_db_write,
+        cycling_gross_efficiency=cycling_gross_efficiency,
         anthropic_api_key=anthropic_api_key,
         analysis_model=analysis_model,
         planning_model=planning_model,

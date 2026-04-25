@@ -88,11 +88,15 @@ def build_snapshot(ro: InfluxRO, *, window_days: int = 42) -> Snapshot:
     q_sleep = f'SELECT * FROM "SleepSummary" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
     q_hrv_i = f'SELECT * FROM "HRV_Intraday" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
     q_act = f'SELECT * FROM "ActivitySummary" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
+    q_vo2 = f'SELECT * FROM "VO2_Max" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
+    q_race = f'SELECT * FROM "RacePredictions" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
 
     df_daily = query_influxql_df(ro, q_daily)
     df_sleep = query_influxql_df(ro, q_sleep)
     df_hrv_i = query_influxql_df(ro, q_hrv_i)
     df_act = query_influxql_df(ro, q_act)
+    df_vo2 = query_influxql_df(ro, q_vo2)
+    df_race = query_influxql_df(ro, q_race)
 
     # Resting HR: prefer DailyStats.restingHeartRate, fall back to SleepSummary.restingHeartRate
     rhr = _last_value(df_daily, "restingHeartRate") or _last_value(df_sleep, "restingHeartRate")
@@ -102,6 +106,9 @@ def build_snapshot(ro: InfluxRO, *, window_days: int = 42) -> Snapshot:
 
     sleep_score = _last_value(df_sleep, "sleepScore")
     sleep_time_s = _last_value(df_sleep, "sleepTimeSeconds")
+
+    vo2_run = _last_value(df_vo2, "VO2_max_value")
+    vo2_cyc = _last_value(df_vo2, "VO2_max_value_cycling")
 
     # Simple load from raw ActivitySummary: acute (7d) vs chronic (28d) moving duration
     acute_7d_s = None
@@ -170,12 +177,23 @@ def build_snapshot(ro: InfluxRO, *, window_days: int = 42) -> Snapshot:
         "load_ratio": load_ratio,
         "notes": "Computed from ActivitySummary.movingDuration only (raw Garmin import).",
     }
+    debug["available_signals"] = {
+        "has_DailyStats": bool(df_daily is not None and not df_daily.empty),
+        "has_SleepSummary": bool(df_sleep is not None and not df_sleep.empty),
+        "has_HRV_Intraday": bool(df_hrv_i is not None and not df_hrv_i.empty),
+        "has_ActivitySummary": bool(df_act is not None and not df_act.empty),
+        "has_VO2_Max": bool(df_vo2 is not None and not df_vo2.empty),
+        "has_RacePredictions": bool(df_race is not None and not df_race.empty),
+        "note": "Signals listed here are raw Garmin-imported measurements the agent is allowed to use.",
+    }
 
     metrics = {
         "rhr_bpm": _safe_float(rhr),
         "hrv": _safe_float(hrv),
         "sleep_score": _safe_float(sleep_score),
         "sleep_time_s": _safe_float(sleep_time_s),
+        "vo2max_run": _safe_float(vo2_run),
+        "vo2max_cycling": _safe_float(vo2_cyc),
         "acute_7d_moving_s": _safe_float(acute_7d_s),
         "chronic_28d_moving_s": _safe_float(chronic_28d_s),
         "load_ratio": _safe_float(load_ratio),

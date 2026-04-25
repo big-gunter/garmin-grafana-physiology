@@ -199,6 +199,56 @@
         }
       ],
       "options": { "showHeader": true }
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Agent-derived VO2max (Running)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 31 },
+      "datasource": { "type": "influxdb", "uid": "garmin_influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT last(\"vo2max_est\") AS \"vo2max_run\" FROM \"AgentDerivedActivity\" WHERE $timeFilter AND \"sport_tag\" =~ /running/ GROUP BY time(1d) fill(null)",
+          "resultFormat": "time_series"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ml/kg/min" }, "overrides": [] }
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Agent-derived VO2max (Cycling)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
+      "datasource": { "type": "influxdb", "uid": "garmin_influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT last(\"vo2max_est_cycling\") AS \"vo2max_cycling\" FROM \"AgentDerivedActivity\" WHERE $timeFilter AND \"sport_tag\" =~ /cycling|biking|cyclocross|gravel|mountain/ GROUP BY time(1d) fill(null)",
+          "resultFormat": "time_series"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ml/kg/min" }, "overrides": [] }
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Agent-derived TRIMP (Banister / Edwards)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 39 },
+      "datasource": { "type": "influxdb", "uid": "garmin_influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT last(\"trimp_banister\") AS \"trimp_banister\" FROM \"AgentDerivedActivity\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "resultFormat": "time_series"
+        },
+        {
+          "refId": "B",
+          "query": "SELECT last(\"trimp_edwards\") AS \"trimp_edwards\" FROM \"AgentDerivedActivity\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "resultFormat": "time_series"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] }
     }
   ],
   "schemaVersion": 41,

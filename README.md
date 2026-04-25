@@ -104,6 +104,8 @@ The AI agent is served from the `ai-agent` container and provides:
   - `DailyStats`, `SleepSummary`, `HRV_Intraday`, `ActivitySummary`
 - Optional “store insights” writes to an **agent-owned** measurement:
   - `AgentInsights` (for display in Grafana)
+- Optional “derive metrics from activities” reads raw activity streams (`ActivityGPS`) and writes:
+  - `AgentDerivedActivity` (agent-owned; derived from raw Garmin activity samples)
 
 ### Environment variables (AI)
 
@@ -114,6 +116,17 @@ In `.env` (never commit):
 - `GRAFANA_API_TOKEN`: optional, enables Grafana API push
 - `GRAFANA_URL`: default is the internal URL `http://grafana:3000` for Compose
 - `AI_ALLOW_DB_WRITE`: default `false`; must be `true` to write `AgentInsights`
+- `AI_CYCLING_GROSS_EFF`: cycling gross efficiency used for power→VO₂ conversion (default `0.23`)
+
+### Agent-derived metrics (from raw activities)
+
+When enabled (`AI_ALLOW_DB_WRITE=true`) the agent can compute additional metrics from **raw activity samples** in `ActivityGPS`:
+
+- **Running**: VO₂ demand and VO₂max estimate from speed + grade (grade derived from distance+altitude)
+- **Cycling**: VO₂ demand and VO₂max estimate from **power** using assumed gross efficiency (`AI_CYCLING_GROSS_EFF`) and your body weight from `BodyComposition.weight`
+- **TRIMP** (Banister / Edwards): derived from raw heart-rate time series where HRmax/RHR are available
+
+These results are written to the agent-owned measurement `AgentDerivedActivity` and can be visualized on the AI Coach Grafana dashboard.
 
 ## Grafana dashboards
 

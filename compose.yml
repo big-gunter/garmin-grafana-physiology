@@ -80,6 +80,7 @@ services:
       - AGENT_AUTH_TOKEN=${AGENT_AUTH_TOKEN:-}
       # Optional: allow the agent to write its own measurements (for display only)
       - AI_ALLOW_DB_WRITE=${AI_ALLOW_DB_WRITE:-false}
+      - AI_CYCLING_GROSS_EFF=${AI_CYCLING_GROSS_EFF:-0.23}
     volumes:
       # Optional: allow agent to write/update provisioned dashboards as source-of-truth
       - ./Grafana_Dashboard:/app/Grafana_Dashboard

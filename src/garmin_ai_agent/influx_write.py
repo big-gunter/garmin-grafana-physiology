@@ -40,3 +40,21 @@ def write_agent_insights(
     }
     client.write_points([point])
 
+
+def write_agent_derived_activity(
+    *,
+    client: InfluxDBClient,
+    activity_id: str,
+    time_iso: str,
+    tags: dict[str, str],
+    fields: dict[str, Any],
+) -> None:
+    point: dict[str, Any] = {
+        "measurement": "AgentDerivedActivity",
+        "time": time_iso,
+        "tags": {"source": "ai-agent", "ActivityID": str(activity_id), **{str(k): str(v) for k, v in (tags or {}).items()}},
+        "fields": {k: v for k, v in (fields or {}).items() if v is not None},
+    }
+    if point["fields"]:
+        client.write_points([point])
+

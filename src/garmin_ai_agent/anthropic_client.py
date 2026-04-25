@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from anthropic import Anthropic
 
@@ -23,25 +24,32 @@ def summarize_readiness(
     snapshot: dict,
     readiness: dict,
     user_prompt: str | None = None,
-) -> str:
+) -> dict[str, Any]:
     """
     Produces a concise narrative from already-derived numbers.
+
+    Returns markdown text. The server/UI will render it into sections/cards.
     """
     system = (
         "You are a sports-science assistant. "
         "You MUST NOT invent metric values. "
         "You are given a JSON snapshot and readiness result computed from the database. "
         "The snapshot metrics are computed ONLY from raw Garmin-imported measurements (not derived rollups). "
-        "Explain what it likely means, call out missing inputs, and give 3-6 actionable suggestions "
-        "for today and the next 2-3 days. Keep it concise."
+        "IMPORTANT: Do not claim data is unavailable if it is present in snapshot.debug.available_signals. "
+        "If a metric is null/missing, say it is missing. "
+        "Formatting rules: do not use markdown tables. Use short headings and bullet points."
     )
     prompt = (
-        "Snapshot (DB-derived):\n"
-        f"{snapshot}\n\n"
-        "Readiness (DB-derived):\n"
-        f"{readiness}\n\n"
-        "User context:\n"
-        f"{user_prompt or ''}\n"
+        "Write a concise readiness note using ONLY the provided values.\n\n"
+        "Output structure:\n"
+        "## Title (1 line)\n"
+        "### Summary (2-4 bullets)\n"
+        "### Key metrics (bullets; include numbers + units where possible; no tables)\n"
+        "### Actions (3-6 bullets)\n"
+        "### Caveats (0-4 bullets; mention missing metrics or assumptions)\n\n"
+        f"Snapshot (DB-derived):\n{snapshot}\n\n"
+        f"Readiness (DB-derived):\n{readiness}\n\n"
+        f"User context:\n{user_prompt or ''}\n"
     )
 
     msg = client.messages.create(
@@ -50,10 +58,10 @@ def summarize_readiness(
         system=system,
         messages=[{"role": "user", "content": prompt}],
     )
-    # anthropic sdk returns list of content blocks
-    parts = []
+    parts: list[str] = []
     for c in msg.content:
         if getattr(c, "type", None) == "text":
             parts.append(c.text)
-    return "\n".join(parts).strip()
+    raw = "\n".join(parts).strip()
+    return raw
 

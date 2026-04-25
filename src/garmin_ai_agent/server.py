@@ -48,6 +48,11 @@ class InsightsRequest(BaseModel):
     prompt: str | None = Field(default=None, description="Optional user context/question")
 
 
+class DeriveActivitiesRequest(BaseModel):
+    window_days: int = Field(42, ge=1, le=365)
+    limit: int = Field(250, ge=1, le=2000, description="Max activities to process")
+
+
 @app.get("/health")
 def health():
     return {"ok": True}
@@ -282,6 +287,7 @@ def web_ui():
             <button class="primary" id="btnInsights">Insights (Anthropic)</button>
             <button id="btnSnapshot">Snapshot</button>
             <button id="btnReadiness">Readiness</button>
+            <button id="btnDeriveAll">Derive metrics from activities</button>
             <button class="ghost" id="btnStoreInsights">Store insights to DB</button>
             <button class="ghost" id="btnGrafana">Grafana: write dashboard file</button>
             <button class="ghost" id="btnGrafanaPush">Grafana: push via API</button>
@@ -318,7 +324,78 @@ def web_ui():
         if (!res.ok) throw json;
         return json;
       }
-      function setOut(x) { document.getElementById("out").textContent = JSON.stringify(x, null, 2); }
+      function escapeHtml(s){
+        return String(s ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll("\"","&quot;").replaceAll("'","&#39;");
+      }
+      function parseSections(md){
+        const lines = String(md ?? "").split("\\n");
+        const sections = [];
+        let cur = { title: "Insights", body: [] };
+        for (const ln of lines){
+          const m = ln.match(/^#{2,3}\\s+(.*)$/);
+          if (m){
+            if (cur.body.length || cur.title) sections.push(cur);
+            cur = { title: m[1].trim(), body: [] };
+          } else {
+            cur.body.push(ln);
+          }
+        }
+        sections.push(cur);
+        return sections.filter(s => (s.title || "").trim() || s.body.join("").trim());
+      }
+
+      function mdToHtml(md){
+        // minimal markdown: bullets, bold, code, paragraphs (no tables).
+        const esc = escapeHtml;
+        const lines = String(md ?? "").split("\\n");
+        const out = [];
+        let inList = false;
+        const flushList = () => { if(inList){ out.push("</ul>"); inList=false; } };
+        for (let ln of lines){
+          const li = ln.match(/^\\s*[-*]\\s+(.*)$/);
+          if (li){
+            if(!inList){ out.push("<ul style=\\"margin:10px 0 0 18px;color:rgba(226,232,240,0.92)\\">"); inList=true; }
+            let t = esc(li[1]);
+            t = t.replaceAll(/\\*\\*(.+?)\\*\\*/g, "<strong>$1</strong>");
+            t = t.replaceAll(/`([^`]+)`/g, "<code style=\\"background:rgba(148,163,184,0.10);padding:1px 6px;border-radius:8px;border:1px solid rgba(148,163,184,0.12)\\">$1</code>");
+            out.push(`<li>${t}</li>`);
+            continue;
+          }
+          flushList();
+          if (!ln.trim()) { out.push("<div style=\\"height:8px\\"></div>"); continue; }
+          let t = esc(ln);
+          t = t.replaceAll(/\\*\\*(.+?)\\*\\*/g, "<strong>$1</strong>");
+          t = t.replaceAll(/`([^`]+)`/g, "<code style=\\"background:rgba(148,163,184,0.10);padding:1px 6px;border-radius:8px;border:1px solid rgba(148,163,184,0.12)\\">$1</code>");
+          out.push(`<div style=\\"color:rgba(226,232,240,0.92)\\">${t}</div>`);
+        }
+        flushList();
+        return out.join("");
+      }
+
+      function renderInsights(md){
+        if (!md || typeof md !== "string") return null;
+        const sections = parseSections(md);
+        const cards = sections.map((s, idx) => {
+          const title = escapeHtml(s.title || (idx === 0 ? "Insights" : ""));
+          const body = mdToHtml(s.body.join("\\n"));
+          return `<div style="border:1px solid rgba(148,163,184,0.16);border-radius:14px;background:rgba(2,6,23,0.35);padding:12px;margin-bottom:12px">
+            <div style="font-size:14px;font-weight:800;margin-bottom:8px">${title}</div>
+            ${body}
+          </div>`;
+        }).join("");
+        return cards;
+      }
+
+      function setOut(x) {
+        const pre = document.getElementById("out");
+        const md = (typeof x?.insights === "string") ? x.insights : null;
+        const cards = renderInsights(md);
+        if (cards) {
+          pre.innerHTML = cards + `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw JSON</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>`;
+        } else {
+          pre.textContent = JSON.stringify(x, null, 2);
+        }
+      }
       function getWindowDays() { return parseInt(document.getElementById("windowDays").value || "42", 10); }
 
       document.getElementById("btnSnapshot").onclick = async () => {
@@ -345,6 +422,10 @@ def web_ui():
       };
       document.getElementById("btnGrafanaPush").onclick = async () => {
         try { setOut(await call("/grafana/push_dashboard_api", {})); }
+        catch(e) { setOut(e); }
+      };
+      document.getElementById("btnDeriveAll").onclick = async () => {
+        try { setOut(await call("/activities/derive_all", { window_days: getWindowDays(), limit: 500 })); }
         catch(e) { setOut(e); }
       };
 
@@ -446,14 +527,14 @@ def insights(req: InsightsRequest, authorization: str | None = Header(default=No
             planning_model=cfg.planning_model,
         )
     )
-    text = summarize_readiness(
+    insights_obj = summarize_readiness(
         client=client,
         model=cfg.analysis_model,
         snapshot=snap.to_dict(),
         readiness=score,
         user_prompt=req.prompt,
     )
-    return {"snapshot": snap.to_dict(), "readiness": score, "insights": text}
+    return {"snapshot": snap.to_dict(), "readiness": score, "insights": insights_obj}
 
 
 @app.post("/insights/store")
@@ -476,13 +557,16 @@ def insights_store(req: InsightsRequest, authorization: str | None = Header(defa
             planning_model=cfg.planning_model,
         )
     )
-    text = summarize_readiness(
+    insights_obj = summarize_readiness(
         client=client,
         model=cfg.analysis_model,
         snapshot=snap.to_dict(),
         readiness=readiness,
         user_prompt=req.prompt,
     )
+    # Pretty string for storage (Grafana table expects a single field); keep it compact.
+    import json as _json
+    insights_text = _json.dumps(insights_obj, ensure_ascii=False)
 
     from .influx_write import create_influx_v1_writer, write_agent_insights
 
@@ -497,11 +581,148 @@ def insights_store(req: InsightsRequest, authorization: str | None = Header(defa
         client=w,
         readiness_score=float(readiness.get("score", 0.0)),
         window_days=req.window_days,
-        insights_text=text,
+        insights_text=insights_text,
         prompt=req.prompt,
     )
 
-    return {"ok": True, "stored_measurement": "AgentInsights", "snapshot": snap.to_dict(), "readiness": readiness, "insights": text}
+    return {"ok": True, "stored_measurement": "AgentInsights", "snapshot": snap.to_dict(), "readiness": readiness, "insights": insights_obj}
+
+
+@app.post("/activities/derive_all")
+def derive_all_activities(req: DeriveActivitiesRequest, authorization: str | None = Header(default=None)):
+    _require_auth(authorization)
+    if not cfg.allow_db_write:
+        raise HTTPException(status_code=400, detail="AI_ALLOW_DB_WRITE is false; refusing to write to DB")
+    if cfg.influx_version != "1":
+        raise HTTPException(status_code=400, detail="Activity derivations currently support InfluxDB v1 only")
+
+    from datetime import datetime, timedelta, timezone
+    import pytz
+    import pandas as pd
+
+    from .influx_ro import query_influxql_df
+    from .activity_derivations import derive_activity_metrics_from_streams
+    from .influx_write import create_influx_v1_writer, write_agent_derived_activity
+
+    since = datetime.now(timezone.utc) - timedelta(days=int(req.window_days))
+    since_iso = since.isoformat().replace("+00:00", "Z")
+
+    # Activity list from raw Garmin import
+    df_act = query_influxql_df(_ro, f'SELECT * FROM "ActivitySummary" WHERE time >= \'{since_iso}\' ORDER BY time DESC')
+    if df_act is None or df_act.empty:
+        return {"ok": True, "processed": 0, "note": "No ActivitySummary rows in window"}
+
+    # Try to determine HRmax/RHR/gender from raw Garmin imports
+    df_daily = query_influxql_df(_ro, f'SELECT * FROM "DailyStats" WHERE time >= \'{since_iso}\' ORDER BY time ASC')
+    hrmax = None
+    rhr = None
+    if df_daily is not None and not df_daily.empty:
+        if "maxHeartRate" in df_daily.columns:
+            try:
+                hrmax = float(pd.to_numeric(df_daily["maxHeartRate"], errors="coerce").dropna().max())
+            except Exception:
+                hrmax = None
+        if "restingHeartRate" in df_daily.columns:
+            try:
+                rhr = float(pd.to_numeric(df_daily["restingHeartRate"], errors="coerce").dropna().iloc[-1])
+            except Exception:
+                rhr = None
+
+    df_profile = query_influxql_df(_ro, f'SELECT * FROM "UserProfileMaster" WHERE time >= \'{since_iso}\' ORDER BY time DESC LIMIT 1')
+    gender = None
+    if df_profile is not None and not df_profile.empty and "gender" in df_profile.columns:
+        try:
+            gender = str(df_profile["gender"].iloc[0]).strip().lower()
+        except Exception:
+            gender = None
+
+    # Weight (kg) from raw Garmin import
+    df_bc = query_influxql_df(_ro, f'SELECT * FROM "BodyComposition" WHERE time >= \'{since_iso}\' ORDER BY time DESC LIMIT 1')
+    weight_kg = None
+    if df_bc is not None and not df_bc.empty and "weight" in df_bc.columns:
+        try:
+            wv = pd.to_numeric(df_bc["weight"], errors="coerce").dropna()
+            if not wv.empty:
+                w_raw = float(wv.iloc[0])
+                # Garmin exports are sometimes in grams or scaled units; normalize to kg.
+                if w_raw > 500:  # implausible kg; assume grams
+                    w_raw = w_raw / 1000.0
+                weight_kg = w_raw if 20.0 <= w_raw <= 250.0 else None
+        except Exception:
+            weight_kg = None
+
+    # Writer
+    w = create_influx_v1_writer(
+        host=cfg.influx_host,
+        port=cfg.influx_port,
+        username=cfg.influx_username,
+        password=cfg.influx_password,
+        database=cfg.influx_database,
+    )
+
+    processed = 0
+    errors: list[dict] = []
+
+    # Iterate activities (most recent first)
+    for _, row in df_act.head(int(req.limit)).iterrows():
+        act_id = row.get("Activity_ID") or row.get("ActivityId") or row.get("activityId") or row.get("ActivityID")
+        if act_id is None:
+            continue
+        act_id_s = str(int(act_id)) if str(act_id).isdigit() else str(act_id)
+        sport_tag = row.get("activity_type_tag") or row.get("activityType") or row.get("activityTypeName")
+        start_time = row.get("time")
+        if start_time is None:
+            continue
+        try:
+            start_dt = pd.to_datetime(start_time, utc=True)
+        except Exception:
+            continue
+        start_iso = start_dt.to_pydatetime().astimezone(pytz.UTC).isoformat(timespec="seconds")
+
+        # Pull raw stream
+        try:
+            df_stream = query_influxql_df(
+                _ro,
+                f'SELECT "Speed","HeartRate","Altitude","Distance","Power","GradeAdjustedSpeed" FROM "ActivityGPS" WHERE "ActivityID" = \'{act_id_s}\' AND time >= \'{since_iso}\' ORDER BY time ASC',
+            )
+            if df_stream is None or df_stream.empty:
+                # no stream: skip
+                continue
+            # HRmax fallback from activity if present
+            hrmax_i = hrmax
+            if hrmax_i is None and "maxHR" in row and row.get("maxHR") is not None:
+                try:
+                    hrmax_i = float(row.get("maxHR"))
+                except Exception:
+                    pass
+            rhr_i = rhr
+
+            derived = derive_activity_metrics_from_streams(
+                activity_id=act_id_s,
+                sport_tag=str(sport_tag) if sport_tag is not None else None,
+                activity_type=str(row.get("activityType")) if row.get("activityType") is not None else None,
+                start_time_utc=start_iso,
+                df_stream=df_stream,
+                hrmax_bpm=hrmax_i,
+                rhr_bpm=rhr_i,
+                gender=gender,
+                weight_kg=weight_kg,
+                cycling_gross_eff=cfg.cycling_gross_efficiency,
+            )
+
+            write_agent_derived_activity(
+                client=w,
+                activity_id=act_id_s,
+                time_iso=start_iso,
+                tags={"sport_tag": str(derived.sport_tag or ""), "activity_type": str(derived.activity_type or "")},
+                fields=derived.fields,
+            )
+            processed += 1
+        except Exception as e:
+            errors.append({"activity_id": act_id_s, "error": str(e)})
+            continue
+
+    return {"ok": True, "processed": processed, "errors": errors[:20], "note": "Wrote AgentDerivedActivity from raw ActivityGPS streams"}
 
 
 def main() -> None:
