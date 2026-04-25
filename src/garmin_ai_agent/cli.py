@@ -8,6 +8,7 @@ from rich import print
 from .config import load_config
 from .influx_ro import create_influx_ro
 from .readiness import build_snapshot, readiness_score
+from .anthropic_client import LLMConfig, create_client, summarize_readiness
 
 
 app = typer.Typer(add_completion=False)
@@ -50,6 +51,46 @@ def serve():
     from .server import main
 
     main()
+
+
+@app.command()
+def insights(
+    window_days: int = typer.Option(42, min=1, max=365),
+    prompt: str = typer.Option("", help="Optional context/question"),
+):
+    """Print a concise AI summary from DB-derived snapshot + readiness."""
+    cfg, ro = _client()
+    if not cfg.anthropic_api_key:
+        raise typer.BadParameter("ANTHROPIC_API_KEY is not configured")
+    snap = build_snapshot(ro, window_days=window_days)
+    score = readiness_score(snap)
+    client = create_client(
+        LLMConfig(
+            api_key=cfg.anthropic_api_key,
+            analysis_model=cfg.analysis_model,
+            planning_model=cfg.planning_model,
+        )
+    )
+    text = summarize_readiness(
+        client=client,
+        model=cfg.analysis_model,
+        snapshot=snap.to_dict(),
+        readiness=score,
+        user_prompt=prompt or None,
+    )
+    out = {"snapshot": snap.to_dict(), "readiness": score, "insights": text}
+    print(json.dumps(out, indent=2, sort_keys=True))
+
+
+@app.command()
+def export_schema(out: str = typer.Option("docs/schema.influxql.md", help="Output markdown path")):
+    """Export InfluxDB v1 measurement/tag/field keys to markdown."""
+    _, ro = _client()
+    from .schema_export import export_schema_influxql, write_schema_markdown
+
+    schemas = export_schema_influxql(ro)
+    write_schema_markdown(schemas=schemas, out_path=out)
+    print(f"Wrote schema to {out}")
 
 
 if __name__ == "__main__":
