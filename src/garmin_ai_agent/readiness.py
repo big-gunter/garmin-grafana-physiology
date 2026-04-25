@@ -75,47 +75,55 @@ def build_snapshot(ro: InfluxRO, *, window_days: int = 42) -> Snapshot:
     since = now - timedelta(days=int(window_days))
     since_iso = _iso(since)
 
-    # These measurements exist in this repo for InfluxDB v1 rollups / fetchers.
-    # We keep queries narrow (last N days) and only select fields the agent needs.
-    q_phys = (
-        'SELECT * FROM "PhysiologyDaily" '
-        f"WHERE time >= '{since_iso}' ORDER BY time ASC"
-    )
-    q_load = (
-        'SELECT * FROM "TrainingLoadDaily" '
-        f"WHERE time >= '{since_iso}' ORDER BY time ASC"
-    )
-    q_sleep = (
-        'SELECT * FROM "SleepSummary" '
-        f"WHERE time >= '{since_iso}' ORDER BY time ASC"
-    )
-    q_readiness = (
-        'SELECT * FROM "TrainingReadiness" '
-        f"WHERE time >= '{since_iso}' ORDER BY time ASC"
-    )
+    # IMPORTANT constraint: only use fields directly imported from Garmin.
+    # Do NOT use rollups/derived measurements such as PhysiologyDaily, TrainingLoadDaily, DerivedActivity.
+    #
+    # Raw Garmin-imported sources we rely on:
+    # - DailyStats: restingHeartRate, stress, body battery, activity seconds, etc.
+    # - SleepSummary: sleepScore, avgOvernightHrv, restingHeartRate, sleepTimeSeconds, etc.
+    # - HRV_Intraday: hrvValue (time series)
+    # - ActivitySummary: movingDuration, distance, averageHR, etc.
 
-    df_phys = query_influxql_df(ro, q_phys)
-    df_load = query_influxql_df(ro, q_load)
+    q_daily = f'SELECT * FROM "DailyStats" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
+    q_sleep = f'SELECT * FROM "SleepSummary" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
+    q_hrv_i = f'SELECT * FROM "HRV_Intraday" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
+    q_act = f'SELECT * FROM "ActivitySummary" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
+
+    df_daily = query_influxql_df(ro, q_daily)
     df_sleep = query_influxql_df(ro, q_sleep)
-    df_tr = query_influxql_df(ro, q_readiness)
+    df_hrv_i = query_influxql_df(ro, q_hrv_i)
+    df_act = query_influxql_df(ro, q_act)
 
-    # Common field names can vary by Garmin endpoints / mapping.
-    # We defensively try several likely columns.
-    rhr = _last_value(df_phys, "restingHeartRate") or _last_value(df_phys, "rhr_bpm") or _last_value(df_phys, "RHR")
-    hrv = _last_value(df_phys, "hrv_rmssd") or _last_value(df_phys, "rmssd") or _last_value(df_phys, "HRV")
+    # Resting HR: prefer DailyStats.restingHeartRate, fall back to SleepSummary.restingHeartRate
+    rhr = _last_value(df_daily, "restingHeartRate") or _last_value(df_sleep, "restingHeartRate")
 
-    ctl = _last_value(df_load, "ctl") or _last_value(df_load, "CTL")
-    atl = _last_value(df_load, "atl") or _last_value(df_load, "ATL")
-    tsb = _last_value(df_load, "tsb") or _last_value(df_load, "TSB")
+    # HRV: prefer SleepSummary.avgOvernightHrv (Garmin field), else last HRV_Intraday.hrvValue
+    hrv = _last_value(df_sleep, "avgOvernightHrv") or _last_value(df_hrv_i, "hrvValue")
 
-    sleep_score = (
-        _last_value(df_sleep, "sleepScore")
-        or _last_value(df_sleep, "overallSleepScore")
-        or _last_value(df_sleep, "score")
-    )
-    tr_score = _last_value(df_tr, "score") or _last_value(df_tr, "trainingReadinessScore")
+    sleep_score = _last_value(df_sleep, "sleepScore")
+    sleep_time_s = _last_value(df_sleep, "sleepTimeSeconds")
 
-    # Trends (simple): compare last 7d mean vs prior 21d mean for HRV/RHR when present.
+    # Simple load from raw ActivitySummary: acute (7d) vs chronic (28d) moving duration
+    acute_7d_s = None
+    chronic_28d_s = None
+    load_ratio = None
+    if df_act is not None and not df_act.empty and "time" in df_act.columns:
+        d = df_act.copy()
+        d["time"] = pd.to_datetime(d["time"], errors="coerce", utc=True)
+        d = d.dropna(subset=["time"])
+        if "movingDuration" in d.columns:
+            d["movingDuration"] = pd.to_numeric(d["movingDuration"], errors="coerce")
+            d = d.dropna(subset=["movingDuration"])
+            if not d.empty:
+                t_end = d["time"].iloc[-1]
+                d7 = d[d["time"] >= (t_end - pd.Timedelta(days=7))]
+                d28 = d[d["time"] >= (t_end - pd.Timedelta(days=28))]
+                acute_7d_s = float(d7["movingDuration"].sum()) if not d7.empty else 0.0
+                chronic_28d_s = float(d28["movingDuration"].sum()) if not d28.empty else 0.0
+                if chronic_28d_s and chronic_28d_s > 0:
+                    load_ratio = acute_7d_s / (chronic_28d_s / 4.0)  # compare 7d to avg-week in last 28d
+
+    # Trends (simple): compare last 7d mean vs prior 21d mean for HRV/RHR when present (raw fields only).
     debug: dict[str, Any] = {}
 
     def _trend(df: pd.DataFrame, col: str) -> dict[str, float | None]:
@@ -144,27 +152,33 @@ def build_snapshot(ro: InfluxRO, *, window_days: int = 42) -> Snapshot:
     # Find actual column names for trend calculation if available
     hrv_trend = None
     rhr_trend = None
-    if "hrv_rmssd" in df_phys.columns:
-        hrv_trend = _trend(df_phys, "hrv_rmssd")
-    elif "rmssd" in df_phys.columns:
-        hrv_trend = _trend(df_phys, "rmssd")
+    if df_sleep is not None and "avgOvernightHrv" in df_sleep.columns:
+        hrv_trend = _trend(df_sleep, "avgOvernightHrv")
+    elif df_hrv_i is not None and "hrvValue" in df_hrv_i.columns:
+        hrv_trend = _trend(df_hrv_i, "hrvValue")
 
-    if "rhr_bpm" in df_phys.columns:
-        rhr_trend = _trend(df_phys, "rhr_bpm")
-    elif "restingHeartRate" in df_phys.columns:
-        rhr_trend = _trend(df_phys, "restingHeartRate")
+    if df_daily is not None and "restingHeartRate" in df_daily.columns:
+        rhr_trend = _trend(df_daily, "restingHeartRate")
+    elif df_sleep is not None and "restingHeartRate" in df_sleep.columns:
+        rhr_trend = _trend(df_sleep, "restingHeartRate")
 
     debug["hrv_trend"] = hrv_trend
     debug["rhr_trend"] = rhr_trend
+    debug["load"] = {
+        "acute_7d_moving_s": acute_7d_s,
+        "chronic_28d_moving_s": chronic_28d_s,
+        "load_ratio": load_ratio,
+        "notes": "Computed from ActivitySummary.movingDuration only (raw Garmin import).",
+    }
 
     metrics = {
         "rhr_bpm": _safe_float(rhr),
-        "hrv_rmssd": _safe_float(hrv),
+        "hrv": _safe_float(hrv),
         "sleep_score": _safe_float(sleep_score),
-        "training_readiness_garmin": _safe_float(tr_score),
-        "ctl": _safe_float(ctl),
-        "atl": _safe_float(atl),
-        "tsb": _safe_float(tsb),
+        "sleep_time_s": _safe_float(sleep_time_s),
+        "acute_7d_moving_s": _safe_float(acute_7d_s),
+        "chronic_28d_moving_s": _safe_float(chronic_28d_s),
+        "load_ratio": _safe_float(load_ratio),
     }
 
     return Snapshot(
@@ -184,9 +198,8 @@ def readiness_score(snapshot: Snapshot) -> dict[str, Any]:
     """
     m = snapshot.metrics
 
-    # Start with Garmin readiness if present, else neutral 60.
-    base = m.get("training_readiness_garmin")
-    score = float(base) if isinstance(base, (int, float)) and base is not None else 60.0
+    # No derived readiness fields are used; start neutral and adjust from raw Garmin imports.
+    score = 60.0
     reasons: list[str] = []
 
     # Sleep influence
@@ -202,18 +215,18 @@ def readiness_score(snapshot: Snapshot) -> dict[str, Any]:
             score += 3
             reasons.append("High sleep score")
 
-    # Load balance (TSB)
-    tsb = m.get("tsb")
-    if tsb is not None:
-        if tsb < -15:
-            score -= 10
-            reasons.append("High accumulated fatigue (TSB low)")
-        elif tsb < -5:
-            score -= 5
-            reasons.append("Some fatigue (TSB mildly negative)")
-        elif tsb > 10:
-            score += 3
-            reasons.append("Fresh (TSB positive)")
+    # Load balance (raw): acute:chronic ratio based on ActivitySummary movingDuration
+    lr = m.get("load_ratio")
+    if lr is not None:
+        if lr >= 1.5:
+            score -= 8
+            reasons.append("Acute load high vs recent baseline (7d vs 28d)")
+        elif lr >= 1.2:
+            score -= 4
+            reasons.append("Acute load moderately elevated (7d vs 28d)")
+        elif lr <= 0.7:
+            score += 2
+            reasons.append("Acute load low vs baseline (more freshness)")
 
     # Trend signals (if present)
     hrvz = snapshot.debug.get("hrv_trend", {}) or {}
@@ -233,9 +246,8 @@ def readiness_score(snapshot: Snapshot) -> dict[str, Any]:
         "score": score,
         "reasons": reasons,
         "inputs_used": {
-            "training_readiness_garmin": m.get("training_readiness_garmin"),
             "sleep_score": m.get("sleep_score"),
-            "tsb": m.get("tsb"),
+            "load_ratio": m.get("load_ratio"),
             "hrv_trend": snapshot.debug.get("hrv_trend"),
             "rhr_trend": snapshot.debug.get("rhr_trend"),
         },

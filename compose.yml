@@ -78,6 +78,8 @@ services:
       - AGENT_HOST=0.0.0.0
       - AGENT_PORT=8000
       - AGENT_AUTH_TOKEN=${AGENT_AUTH_TOKEN:-}
+      # Optional: allow the agent to write its own measurements (for display only)
+      - AI_ALLOW_DB_WRITE=${AI_ALLOW_DB_WRITE:-false}
     volumes:
       # Optional: allow agent to write/update provisioned dashboards as source-of-truth
       - ./Grafana_Dashboard:/app/Grafana_Dashboard

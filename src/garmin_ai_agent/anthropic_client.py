@@ -31,6 +31,7 @@ def summarize_readiness(
         "You are a sports-science assistant. "
         "You MUST NOT invent metric values. "
         "You are given a JSON snapshot and readiness result computed from the database. "
+        "The snapshot metrics are computed ONLY from raw Garmin-imported measurements (not derived rollups). "
         "Explain what it likely means, call out missing inputs, and give 3-6 actionable suggestions "
         "for today and the next 2-3 days. Keep it concise."
     )

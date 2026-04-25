@@ -1,0 +1,215 @@
+{
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "12.4.0"
+    },
+    {
+      "type": "datasource",
+      "id": "influxdb",
+      "name": "InfluxDB",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "SleepScore (SleepSummary.sleepScore)",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "influxdb", "uid": "garmin_influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT last(\"sleepScore\") FROM \"SleepSummary\" WHERE $timeFilter",
+          "resultFormat": "time_series"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal" },
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "RHR (DailyStats.restingHeartRate)",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "influxdb", "uid": "garmin_influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT last(\"restingHeartRate\") FROM \"DailyStats\" WHERE $timeFilter",
+          "resultFormat": "time_series"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal" },
+      "fieldConfig": { "defaults": { "unit": "bpm" }, "overrides": [] }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Overnight HRV (SleepSummary.avgOvernightHrv)",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "influxdb", "uid": "garmin_influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT last(\"avgOvernightHrv\") FROM \"SleepSummary\" WHERE $timeFilter",
+          "resultFormat": "time_series"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Sleep time (SleepSummary.sleepTimeSeconds)",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "influxdb", "uid": "garmin_influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT last(\"sleepTimeSeconds\") FROM \"SleepSummary\" WHERE $timeFilter",
+          "resultFormat": "time_series"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "RHR trend (DailyStats.restingHeartRate)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "influxdb", "uid": "garmin_influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT mean(\"restingHeartRate\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "resultFormat": "time_series"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bpm" }, "overrides": [] }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Overnight HRV trend (SleepSummary.avgOvernightHrv)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "datasource": { "type": "influxdb", "uid": "garmin_influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT mean(\"avgOvernightHrv\") FROM \"SleepSummary\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "resultFormat": "time_series"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "SleepScore trend (SleepSummary.sleepScore)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "datasource": { "type": "influxdb", "uid": "garmin_influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT mean(\"sleepScore\") FROM \"SleepSummary\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "resultFormat": "time_series"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Moving duration (ActivitySummary.movingDuration)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "datasource": { "type": "influxdb", "uid": "garmin_influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT sum(\"movingDuration\") FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(1d) fill(0)",
+          "resultFormat": "time_series"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Agent readiness (AgentInsights.readiness_score)",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 21 },
+      "datasource": { "type": "influxdb", "uid": "garmin_influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT last(\"readiness_score\") FROM \"AgentInsights\" WHERE $timeFilter",
+          "resultFormat": "time_series"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal" },
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] }
+    },
+    {
+      "id": 21,
+      "type": "table",
+      "title": "Latest agent insights (AgentInsights.insights)",
+      "gridPos": { "h": 10, "w": 18, "x": 6, "y": 21 },
+      "datasource": { "type": "influxdb", "uid": "garmin_influxdb" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "SELECT last(\"insights\") AS \"insights\" FROM \"AgentInsights\" WHERE $timeFilter",
+          "resultFormat": "table"
+        }
+      ],
+      "options": { "showHeader": true }
+    }
+  ],
+  "schemaVersion": 41,
+  "style": "dark",
+  "tags": ["ai", "coach"],
+  "templating": { "list": [] },
+  "time": { "from": "now-30d", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "AI Coach (Raw Garmin Signals)",
+  "uid": "ai-coach-raw-garmin",
+  "version": 1
+}
+

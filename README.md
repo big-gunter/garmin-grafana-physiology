@@ -2,7 +2,7 @@
 <img src="https://i.imgur.com/PYsbwqj.png" width="450" height="164" align="center">
 </p>
 
-# Grafana for Garmin Dashboard
+# Garmin Grafana Physiology (with AI Coach)
 
 A docker container to fetch data from Garmin servers and store the data in a local influxdb database for appealing visualization with Grafana.
 
@@ -16,28 +16,18 @@ A docker container to fetch data from Garmin servers and store the data in a loc
 
 - [Dashboard Example](#dashboard-example)
 - [Features](#features)
-- [Why use this project?](#why-use-this-project)
-- **Installation**
-  - EASY : [Automated installation](#automatic-install-with-helper-script-recommended-for-less-techy-people) with helper script
-  - ADVANCED : [Manual step by step installation](#manual-install-with-docker-recommended-if-you-understand-linux-concepts) guide
-  - SYNOLOGY : [Installation Guide](https://github.com/arpanghosh8453/garmin-grafana/discussions/107#discussion-8326104)
-  - KUBERNETES : [Helm](./k8s/README.md) chart for Kubernetes. Try with minikube - [Makefile](./k8s/Makefile) for easy deployment.
-- **How to**
-  - How to [pull historic (old) data](#historical-data-fetching-bulk-update) (bulk update)?
-  - How to [import from garmin connect local export files](#importing-from-garmin-connect-export)?
-  - How to [update to newer versions](#update-to-new-versions) of this project?
-  - How to [export data as CSV files](#export-data-to-csv-files) for AI insights?
-  - How to [backup the InfluxDB Database?](#backup-influxdb-database)
-  - How to use [multiple accounts](#multi-user-instance-setup)? - if you want to set up a dashboard for your spouse
-  - [Troubleshooting](#troubleshooting) Guide
-  - [Need Help?](#need-help)
-- Project supplement
-  - [Credits](#credits)
-  - [Dependencies](#dependencies)
-  - [Contribution Guideline](#contribution-guideline)
-  - [Limitations](#limitations)
-- [Support this project](#love-this-project)
-- [Star History](#star-history)
+- [Quickstart (Docker Compose)](#quickstart-docker-compose)
+- [AI Coach (browser UI)](#ai-coach-browser-ui)
+- [Grafana dashboards](#grafana-dashboards)
+- [Configuration](#configuration)
+- [Historical data fetching (bulk update)](#historical-data-fetching-bulk-update)
+- [Importing from Garmin connect export](#importing-from-garmin-connect-export)
+- [Backup InfluxDB Database](#backup-influxdb-database)
+- [Troubleshooting](#troubleshooting)
+- [Credits](#credits)
+- [Dependencies](#dependencies)
+- [Contribution Guideline](#contribution-guideline)
+- [Limitations](#limitations)
 
 ## Dashboard Example
 
@@ -63,58 +53,80 @@ A docker container to fetch data from Garmin servers and store the data in a loc
 - Automated data fetching in regular interval (set and forget)
 - Historical data backfilling
 
-## Training load metrics (TRIMP / TSS) and trail support
+### AI Coach (this fork)
 
-This project computes several **internal** and **external** training-load metrics designed to remain usable for **trail running** (where raw pace is heavily distorted by gradient and technical terrain).
+This fork adds an **agentic AI service** (`ai-agent`) that runs **inside the same Docker Compose stack**, can query your InfluxDB on the internal network, and provides:
 
-### Where these calculations live (implementation notes)
+- **Browser UI** at `http://localhost:8000/` for snapshot/readiness/insights
+- **Raw-Garmin-only physiology model** for calculations (see constraint below)
+- **Grafana dashboard automation**:
+  - Source-of-truth dashboard file: `Grafana_Dashboard/AI-Coach.json`
+  - Optional push via Grafana HTTP API (token-based)
+- **Optional insights storage** to InfluxDB for display in Grafana (`AgentInsights`)
 
-The upstream `garmin-grafana` project primarily **ingests and visualizes Garmin-provided fields**. This fork adds a small number of **derived** and **rollup** metrics.
+> [!IMPORTANT]
+> **Constraint enforced**: agent calculations must use only **fields directly imported from Garmin**.\n+> The agent does **not** use derived/rollup measurements created by ingestion (e.g. `DerivedActivity`, `TrainingLoadDaily`, `PhysiologyDaily`).\n+> (The project can still ingest those measurements; the AI simply won’t rely on them for calculations.)
 
-- **Derived per-activity metrics** are computed during FIT parsing in `src/garmin_grafana/garmin_fetch.py` inside `derive_and_write_activity_metrics_v1()` and written to the `DerivedActivity` measurement.
-  - This is done “close to the data” (while iterating FIT records) for efficiency and to avoid re-querying dense time-series later.
-- **Daily rollups** are computed in `src/garmin_grafana/rollups.py` (written to `TrainingLoadDaily`, `PhysiologyDaily`, `PerformanceDaily`).
-  - The rollups use helper query functions in `src/garmin_grafana/influx_v1_queries.py` to fetch only what’s needed for a day.
+## Quickstart (Docker Compose)
 
-### TRIMP (Training Impulse)
+1) Create a `garminconnect-tokens` folder (persist Garmin auth session tokens):
 
-- **Banister TRIMP (bTRIMP)**: Heart-rate-reserve based TRIMP with sex-specific exponential weighting.
-  - Uses \(HRR = (HR_{avg}-HR_{rest})/(HR_{max}-HR_{rest})\).
-  - bTRIMP is computed from the activity **heart-rate time series** in windows (default 30s) when available.
-- **Edwards TRIMP (eTRIMP)**: Zone-weighted TRIMP computed as \(\sum (\text{minutes in zone} \times \text{zone weight})\) with weights 1..5.
-  - Zones prefer `PhysiologyDaily` (individualized Z1..Z5 BPM bounds).
-  - If zones are unavailable, it falls back to %HRmax zones (50–60, 60–70, 70–80, 80–90, 90–100%).
+```bash
+mkdir -p garminconnect-tokens
+sudo chown -R 1000:1000 garminconnect-tokens
+```
 
-### TSS family (explicit variants)
+2) Copy `.env.example` to `.env` (optional but recommended for AI/Grafana tokens):
 
-“TSS” is power-based in the original Coggan definition (cycling). This project stores TSS-like variants explicitly:
+```bash
+cp .env.example .env
+```
 
-- **`hrTSS`**: HR-based TSS analogue computed from HR relative to threshold HR (LTHR).
-- **`rTSS`**: Running TSS analogue computed from **grade-adjusted speed (GAP)** relative to critical speed (CS) derived from GAP.
-- **`bikeTSS`**: Cycling TSS analogue computed from power using an NP-like \(P^4\) weighting relative to critical power (CP).
+3) Bring the stack up:
 
-### Trail/terrain handling
+```bash
+docker compose up -d
+```
 
-- TRIMP metrics are **HR-driven** and do not need explicit grade correction.
-- Running load uses **grade-adjusted speed** (GAP / `GradeAdjustedSpeed`) rather than raw speed/pace, making it more comparable across hills.
+4) Open:
+- **Grafana**: `http://localhost:3000` (default `admin` / `admin`)
+- **AI Coach (browser UI)**: `http://localhost:8000/`
 
-### Derived measurements and key fields (quick reference)
+> [!NOTE]
+> If you use the AI features that call Anthropic, set `ANTHROPIC_API_KEY` in `.env`.
 
-- **`DerivedActivity`** (one point per activity; written at activity start time)
-  - **Running (trail-aware)**:
-    - `grade` (derived from distance + altitude), `gap_distance_m`, `gap_distance_km`
-    - `cs_mps`, `cs_pace_s_per_km`, `dprime_m` (critical-speed model fit using GAP)
-    - `vo2max_est` (VO2 demand proxy; see code for masks/assumptions)
-    - **Load**: `TRIMP_Banister_ts`, `TRIMP_Edwards_ts`, `hrTSS_ts`, `rTSS_ts`
-  - **Cycling**:
-    - `cp_watts`, `wprime_j` (critical-power model fit from power)
-    - **Load**: `TRIMP_Banister_ts`, `TRIMP_Edwards_ts`, `hrTSS_ts`, `bikeTSS_ts`, `bikeNP_est`
+## AI Coach (browser UI)
 
-- **`TrainingLoadDaily`** (one point per day)
-  - Back-compat: `TRIMP`, `TSS`
-  - Explicit variants: `TRIMP_Banister`, `TRIMP_Edwards`, `hrTSS`, `rTSS`, `bikeTSS`
-  - Provenance: `TRIMP_Edwards_zones_source`, `activities_used`, `activities_used_timeseries`, plus `RHR_used`, `HRmax_used`, `lthr_used`
+The AI agent is served from the `ai-agent` container and provides:
 
+- `http://localhost:8000/` web UI (no CLI required)
+- Snapshot/readiness derived from **raw Garmin-imported measurements**:
+  - `DailyStats`, `SleepSummary`, `HRV_Intraday`, `ActivitySummary`
+- Optional “store insights” writes to an **agent-owned** measurement:
+  - `AgentInsights` (for display in Grafana)
+
+### Environment variables (AI)
+
+In `.env` (never commit):
+
+- `ANTHROPIC_API_KEY`: required for insights
+- `ANALYSIS_MODEL`, `PLANNING_MODEL`: model routing
+- `GRAFANA_API_TOKEN`: optional, enables Grafana API push
+- `GRAFANA_URL`: default is the internal URL `http://grafana:3000` for Compose
+- `AI_ALLOW_DB_WRITE`: default `false`; must be `true` to write `AgentInsights`
+
+## Grafana dashboards
+
+This repo provisions dashboards via the `Grafana_Dashboard/` folder.
+
+- Upstream dashboard: `Grafana_Dashboard/Garmin-Grafana-Dashboard.json`
+- Training metrics dashboard: `Grafana_Dashboard/Garmin-Training-Metrics.json`
+- **AI Coach dashboard (this fork)**: `Grafana_Dashboard/AI-Coach.json`
+  - Panels are based on **raw Garmin-imported** measurements plus the optional `AgentInsights` display-only measurement.
+
+### Grafana “push via API” (optional)
+
+If `GRAFANA_API_TOKEN` is set, the AI UI can push `AI-Coach.json` to Grafana immediately via API.\n+If not set, Grafana will still pick up changes via file provisioning (polls every ~10 seconds by default).
 
 ## Why use this project?
 
@@ -309,31 +321,7 @@ Updating with docker is super simple. Just go to the folder where the `compose.y
 See [here](docs/manual-import-instructions.md) for instructions on how to manually import local files from (e.g, Garmin Bulk Export or local .FIT file). Please make note that it will not import intraday level data. Just the basic average daily stats and the activity or workout stats from the FIT file. For intraday level detailed data use the bulk import option given [above](#historical-data-fetching-bulk-update). 
 
 ## Export Data to CSV files
-
-This project provides additional utilities to export the data as CSV for external analysis or AI integration. After the export, you can use the CSV files to feed into ChatGPT (If you are not in EU, your data will be used for training) or any locally hosted LLM chat interface with [Openweb-UI](https://github.com/open-webui/open-webui) or [anythingllm](https://anythingllm.com/) (Which natively supports RAG based document ingestion and available as Windows application) to get insights from your long term health data. If you turn on chat history, you may be able to get more insightful recommendations over time.
-
-There are two ways to export the data into CSV files.
-
-1. Use the native CSV export functionality of Grafana, where you can export the data shown on any Grafana panel using [this guide](https://grafana.com/blog/2024/05/30/how-to-export-any-grafana-visualization-to-a-csv-file-microsoft-excel-or-google-sheets/) as CSV.
-2. If the above method is tedious and you want to grab all measurements in detail as CSV files with one command directly from the local InfluxDB database, a convenient exporter script is provided with this project (included inside the docker container).
-
-   2.1 Simply run the following docker command from your terminal `docker exec garmin-fetch-data python /app/garmin_grafana/influxdb_exporter.py` to export the last 30 days data. The script takes additional arguments such as `last-n-days` or `start-date` and `end-date` if you want to export data for last n days or for a specific date range. You should run the command like
-
-   ```
-   docker exec garmin-fetch-data python /app/garmin_grafana/influxdb_exporter.py --last-n-days=7
-   ```
-
-   or
-
-   ```
-   docker exec garmin-fetch-data python /app/garmin_grafana/influxdb_exporter.py --start-date=2025-01-01 --end-date=2025-03-01
-   ```
-
-   2.2 When the export is finished, you will see an output file path in the format ` Exported N measurement CSVs into /tmp/GarminStats_Export_XYZ.zip`. The zip filename will vary based on when you run the command and how many days you selected. Take note of the full export path name.
-
-   2.3 Now the exported zip is saved inside the container, we need to copy it to our host machine. To do this, run `docker cp garmin-fetch-data:/tmp/GarminStats_Export_XYZ.zip ./` and replace the `/tmp/GarminStats_Export_XYZ.zip` part with your zip filename from the output of the previous command. This command will place the zip file in your current working directory - you can replace the `./` ending of the command with a local path like `~/garmin-grafana/` if you want to place it somewhere specific. Once the copy is complete, you can remove the export zip from the container by running `docker exec garmin-fetch-data rm /tmp/GarminStats_Export_XYZ.zip` to free up some space (optional).
-
-   2.4 Now unzip the zip file you have and you will see all the measurements are available as separate CSV files. You can run your custom analysis with these or ask LLM for insights by directly feeding the CSV file(s)!
+This project still supports CSV export for external analysis.\n+However, for interactive insights from your database, prefer the built-in **AI Coach** service at `http://localhost:8000/`.\n+You can always export from Grafana panels as CSV when needed.
 
 ## Backup InfluxDB Database
 
