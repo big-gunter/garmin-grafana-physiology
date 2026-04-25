@@ -860,6 +860,32 @@ def estimate_lthr_from_target_contiguous(
     # robust statistic
     return float(np.nanmedian(hr[s : e + 1]))
 
+
+def estimate_lthr_from_target(
+    hr_bpm: np.ndarray,
+    target_series: np.ndarray,
+    target_value: float,
+    sample_rate_hz: float,
+    band: float = 0.05,
+    min_contig_s: int = 10 * 60,
+    warmup_exclude_s: int = 10 * 60,
+) -> float:
+    """
+    Backward-compatible wrapper.
+
+    Older call sites used `estimate_lthr_from_target(...)`; the implementation
+    now lives in `estimate_lthr_from_target_contiguous(...)`.
+    """
+    return estimate_lthr_from_target_contiguous(
+        hr_bpm=hr_bpm,
+        target_series=target_series,
+        target_value=target_value,
+        sample_rate_hz=sample_rate_hz,
+        band=band,
+        min_contig_s=min_contig_s,
+        warmup_exclude_s=warmup_exclude_s,
+    )
+
 def _edwards_zone_weight(hr_bpm: float, zones: dict[str, float]) -> int:
     try:
         hr = float(hr_bpm)
@@ -1232,7 +1258,15 @@ def derive_and_write_activity_metrics_v1(
             fields["wprime_j"] = float(wprime_j) if np.isfinite(wprime_j) else None
 
             if np.isfinite(cp_w) and np.isfinite(hr_bpm).sum() > 100:
-                lthr_est = estimate_lthr_from_target(hr_bpm, power_w, cp_w, sample_rate_hz)
+                lthr_est = estimate_lthr_from_target_contiguous(
+                    hr_bpm=hr_bpm,
+                    target_series=power_w,
+                    target_value=cp_w,
+                    sample_rate_hz=sample_rate_hz,
+                    band=0.05,              # ±5%
+                    min_contig_s=10 * 60,   # 10 min continuous
+                    warmup_exclude_s=10 * 60,
+                )
                 fields["lthr_bpm_est"] = float(lthr_est) if np.isfinite(lthr_est) else None
     
     # --- Windowed training load metrics (peer-reviewed/industry-standard variants) ---
