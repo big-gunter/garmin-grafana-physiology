@@ -17,6 +17,27 @@ def create_client(cfg: LLMConfig) -> Anthropic:
     return Anthropic(api_key=cfg.api_key)
 
 
+def _load_reference_docs() -> str:
+    """
+    Best-effort load of runtime reference docs that describe domain + tool surface.
+    These are mounted at /app/docs in docker-compose, and also copied into the image.
+    """
+    try:
+        from pathlib import Path
+
+        root = Path("/app/docs")
+        parts: list[str] = []
+        for name in ("agent-domain.md", "agent-tools.md"):
+            p = root / name
+            if p.exists():
+                txt = p.read_text(encoding="utf-8", errors="replace").strip()
+                if txt:
+                    parts.append(f"\n\n---\nBEGIN {name}\n---\n{txt}\n---\nEND {name}\n---\n")
+        return "".join(parts).strip()
+    except Exception:
+        return ""
+
+
 def summarize_readiness(
     *,
     client: Anthropic,
@@ -30,6 +51,7 @@ def summarize_readiness(
 
     Returns markdown text. The server/UI will render it into sections/cards.
     """
+    ref = _load_reference_docs()
     system = (
         "You are a sports-science assistant. "
         "You MUST NOT invent metric values. "
@@ -46,6 +68,8 @@ def summarize_readiness(
         "Tone: write like a helpful coach: 1-2 short paragraphs, then bullets for key metrics and actions. "
         "Formatting rules: do not use markdown tables. Use short headings and bullet points."
     )
+    if ref:
+        system = system + "\n\nRuntime reference docs (authoritative):\n" + ref
     prompt = (
         "Write a concise readiness note using ONLY the provided values.\n\n"
         "Output structure:\n"

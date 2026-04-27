@@ -25,6 +25,7 @@ RUN groupadd --gid 1000 appuser && useradd --uid 1000 --gid appuser --shell /bin
 
 COPY --chown=appuser:appuser --from=build /app/.venv /app/.venv
 COPY --chown=appuser:appuser src /app/
+COPY --chown=appuser:appuser docs /app/docs
 
 USER appuser
 
