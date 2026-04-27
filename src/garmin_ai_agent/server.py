@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import shutil
+from pathlib import Path
+
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
@@ -53,6 +57,22 @@ class DeriveActivitiesRequest(BaseModel):
     window_days: int = Field(42, ge=1, le=365)
     limit: int = Field(250, ge=1, le=2000, description="Max activities to process")
 
+
+class ForceReloginResponse(BaseModel):
+    ok: bool
+    token_dir: str
+    removed_paths: int
+    note: str
+
+
+class GarminAuthStatusResponse(BaseModel):
+    ok: bool
+    token_dir: str
+    token_files: list[dict]
+    file_count: int
+    most_recent_mtime_utc: str | None
+    noninteractive_credentials_configured: bool
+    note: str
 class MetricsCatalogResponse(BaseModel):
     metrics: list[dict]
 
@@ -363,6 +383,8 @@ def web_ui():
             <button id="btnSnapshot">Snapshot</button>
             <button id="btnReadiness">Readiness</button>
             <button id="btnDeriveAll">Derive metrics from activities</button>
+            <button id="btnForceRelogin">Force Garmin re-login</button>
+            <button class="ghost" id="btnGarminAuthStatus">Garmin auth status</button>
             <button id="btnMetrics">Compute metrics</button>
             <button class="ghost" id="btnStoreInsights">Store insights to DB</button>
             <button class="ghost" id="btnGrafana">Grafana: write dashboard file</button>
@@ -443,7 +465,7 @@ def web_ui():
         const text = byId("statusText");
         if (dot) dot.classList.toggle("busy", !!busy);
         if (text) text.textContent = busy ? (msg || "Working…") : "Ready";
-        for (const id of ["btnInsights","btnSnapshot","btnReadiness","btnDeriveAll","btnMetrics","btnStoreInsights","btnGrafana","btnGrafanaPush","btnSubmitPrompt","btnClear"]) {
+        for (const id of ["btnInsights","btnSnapshot","btnReadiness","btnDeriveAll","btnForceRelogin","btnGarminAuthStatus","btnMetrics","btnStoreInsights","btnGrafana","btnGrafanaPush","btnSubmitPrompt","btnClear"]) {
           const el = byId(id);
           if (el) el.disabled = !!busy;
         }
@@ -612,6 +634,14 @@ def web_ui():
         const res = await call("/activities/derive_all", { window_days: getWindowDays(), limit: 500 });
         return res;
       });
+      byId("btnForceRelogin").onclick = () => runAction("Forcing Garmin re-login…", async () => {
+        const res = await call("/garmin/force_relogin", {});
+        return res;
+      });
+      byId("btnGarminAuthStatus").onclick = () => runAction("Checking Garmin auth…", async () => {
+        const res = await call("/garmin/auth_status", {});
+        return res;
+      });
       byId("btnMetrics").onclick = () => {
         const q = byId("prompt").value || "";
         if (q && q.trim()) appendMsg("user", `<div style="color:rgba(226,232,240,0.92)">${escapeHtml(q)}</div>`);
@@ -721,6 +751,59 @@ def insights(req: InsightsRequest, authorization: str | None = Header(default=No
     _require_auth(authorization)
     snap = build_snapshot(_ro, window_days=req.window_days)
     score = readiness_score(snap)
+    snap_dict = snap.to_dict()
+
+    # On-demand computations from raw streams for specific questions (no pre-derived tables required).
+    prompt_l = (req.prompt or "").strip().lower()
+
+    def _inject_on_demand(metric_names: list[str]) -> None:
+        if not metric_names:
+            return
+        try:
+            computed = metrics_engine.compute_metrics(
+                _ro,
+                metrics=metric_names,
+                window_days=req.window_days,
+                activity_limit=20,
+                cycling_gross_eff=cfg.cycling_gross_efficiency,
+            )
+            if isinstance(snap_dict.get("metrics"), dict):
+                snap_dict["metrics"].setdefault("on_demand_metrics", {})
+                for r in computed.get("results", []):
+                    if isinstance(r, dict) and r.get("name") and isinstance(r.get("data"), dict):
+                        snap_dict["metrics"]["on_demand_metrics"][str(r["name"])] = r["data"]
+            if isinstance(snap_dict.get("debug"), dict):
+                snap_dict["debug"].setdefault("on_demand", {})
+                snap_dict["debug"]["on_demand"]["computed_metrics"] = computed
+        except Exception as e:
+            if isinstance(snap_dict.get("debug"), dict):
+                snap_dict["debug"]["on_demand_error"] = str(e)
+
+    # Decide what to compute based on the question
+    want_p95_hr = ("p95" in prompt_l or "95th" in prompt_l or "percentile" in prompt_l) and ("hr" in prompt_l or "heart rate" in prompt_l)
+    want_vo2 = ("vo2" in prompt_l or "v02" in prompt_l)
+    want_trimp = ("trimp" in prompt_l)
+    want_tss = ("tss" in prompt_l)
+    want_lthr = ("lthr" in prompt_l or "lactate threshold" in prompt_l or "threshold hr" in prompt_l)
+    want_threshold = ("threshold" in prompt_l or "ftp" in prompt_l or "critical speed" in prompt_l or "critical power" in prompt_l)
+
+    on_demand: list[str] = []
+    if want_p95_hr:
+        on_demand.append("hr_p95_window_all")
+    if want_vo2:
+        # Prefer combined window output so it can compare run vs ride automatically.
+        on_demand.append("vo2_window_all")
+    if want_trimp:
+        on_demand.append("trimp_window_all")
+    if want_tss:
+        on_demand.append("tss_window_ride")
+    if want_lthr:
+        on_demand.append("lthr_window_all")
+    if want_threshold:
+        on_demand.append("threshold_window_all")
+
+    if on_demand:
+        _inject_on_demand(on_demand)
     if cfg.anthropic_api_key:
         client = create_client(
             LLMConfig(
@@ -732,13 +815,13 @@ def insights(req: InsightsRequest, authorization: str | None = Header(default=No
         insights_obj = summarize_readiness(
             client=client,
             model=cfg.analysis_model,
-            snapshot=snap.to_dict(),
+            snapshot=snap_dict,
             readiness=score,
             user_prompt=req.prompt,
         )
     else:
         # Deterministic fallback: still provides useful, formatted output based on agent-calculated metrics.
-        m = snap.metrics
+        m = snap_dict.get("metrics") if isinstance(snap_dict, dict) else snap.metrics
         agent_vo2 = (m.get("agent_vo2") or {}) if isinstance(m, dict) else {}
 
         def _fmt_vo2_block(label: str, block: dict) -> list[str]:
@@ -788,8 +871,29 @@ def insights(req: InsightsRequest, authorization: str | None = Header(default=No
         lines.append("- VO₂max estimates depend on having a reasonable HRmax and good-quality stream data (speed/altitude or power).")
         lines.append("- This is **agent-calculated** from raw streams; it does **not** use Garmin’s VO₂max device estimate.")
 
+        # Surface on-demand metrics in the deterministic fallback too
+        if isinstance(m, dict) and isinstance(m.get("on_demand_metrics"), dict) and m["on_demand_metrics"]:
+            odm = m["on_demand_metrics"]
+            if want_p95_hr and isinstance(odm.get("hr_p95_window_all"), dict):
+                hrp = odm["hr_p95_window_all"]
+                try:
+                    all_p = (hrp.get("all") or {}).get("hr_percentile_bpm")
+                    run_p = (hrp.get("running") or {}).get("hr_percentile_bpm")
+                    cyc_p = (hrp.get("cycling") or {}).get("hr_percentile_bpm")
+                    lines.append("")
+                    lines.append("### HR percentile (on-demand from raw streams)")
+                    if all_p is not None:
+                        lines.append(f"- **p95 HR (all sports)**: {float(all_p):.0f} bpm")
+                    if run_p is not None:
+                        lines.append(f"- **p95 HR (running)**: {float(run_p):.0f} bpm")
+                    if cyc_p is not None:
+                        lines.append(f"- **p95 HR (cycling)**: {float(cyc_p):.0f} bpm")
+                    lines.append("- Computed directly from raw `ActivityGPS.HeartRate` samples (no pre-derived table).")
+                except Exception:
+                    pass
+
         insights_obj = "\n".join(lines).strip()
-    return {"snapshot": snap.to_dict(), "readiness": score, "insights": insights_obj}
+    return {"snapshot": snap_dict, "readiness": score, "insights": insights_obj}
 
 
 @app.post("/insights/store")
@@ -981,6 +1085,94 @@ def derive_all_activities(req: DeriveActivitiesRequest, authorization: str | Non
             continue
 
     return {"ok": True, "processed": processed, "errors": errors[:20], "note": "Wrote AgentDerivedActivity from raw ActivityGPS streams"}
+
+
+@app.post("/garmin/force_relogin", response_model=ForceReloginResponse)
+def force_garmin_relogin(authorization: str | None = Header(default=None)):
+    _require_auth(authorization)
+
+    token_dir = os.path.expanduser(os.getenv("TOKEN_DIR", "/home/appuser/.garminconnect"))
+    p = Path(token_dir).resolve()
+
+    # Safety: only allow deleting within a ".garminconnect" directory
+    if p.name != ".garminconnect":
+        raise HTTPException(status_code=400, detail=f"Refusing to delete non-standard TOKEN_DIR: {p}")
+
+    removed = 0
+    if p.exists() and p.is_dir():
+        for child in p.iterdir():
+            try:
+                if child.is_dir():
+                    shutil.rmtree(child)
+                else:
+                    child.unlink(missing_ok=True)
+                removed += 1
+            except Exception:
+                continue
+
+    return ForceReloginResponse(
+        ok=True,
+        token_dir=str(p),
+        removed_paths=int(removed),
+        note=(
+            "Cleared cached Garmin session tokens. The `garmin-fetch-data` service should re-authenticate on its next run. "
+            "If you use MFA and do not have a non-interactive login configured, you may need to run an interactive login once."
+        ),
+    )
+
+
+@app.post("/garmin/auth_status", response_model=GarminAuthStatusResponse)
+def garmin_auth_status(authorization: str | None = Header(default=None)):
+    _require_auth(authorization)
+
+    token_dir = os.path.expanduser(os.getenv("TOKEN_DIR", "/home/appuser/.garminconnect"))
+    p = Path(token_dir).resolve()
+
+    files: list[dict] = []
+    newest: float | None = None
+    if p.exists() and p.is_dir():
+        for child in sorted(p.iterdir(), key=lambda x: x.name):
+            try:
+                st = child.stat()
+                m = float(st.st_mtime)
+                if newest is None or m > newest:
+                    newest = m
+                files.append(
+                    {
+                        "name": child.name,
+                        "is_dir": bool(child.is_dir()),
+                        "size_bytes": int(st.st_size),
+                        "mtime_epoch": float(m),
+                    }
+                )
+            except Exception:
+                continue
+
+    # Non-interactive login requires email + password envs inside garmin-fetch-data
+    # (password is usually GARMINCONNECT_BASE64_PASSWORD).
+    noninteractive = bool(os.getenv("GARMINCONNECT_EMAIL")) and bool(os.getenv("GARMINCONNECT_BASE64_PASSWORD"))
+
+    most_recent_iso = None
+    if newest is not None:
+        # ISO UTC; keep dependencies minimal
+        import datetime as _dt
+
+        most_recent_iso = _dt.datetime.fromtimestamp(newest, tz=_dt.timezone.utc).isoformat().replace("+00:00", "Z")
+
+    note = (
+        "Token cache status only. For MFA accounts, a fresh login may require an interactive session to generate new tokens. "
+        "If tokens are missing/empty and you see auth failures, run an interactive login in the `garmin-fetch-data` container to regenerate them."
+    )
+
+    return GarminAuthStatusResponse(
+        ok=True,
+        token_dir=str(p),
+        token_files=files,
+        file_count=int(len(files)),
+        most_recent_mtime_utc=most_recent_iso,
+        noninteractive_credentials_configured=bool(noninteractive),
+        note=note,
+    )
 
 
 @app.get("/metrics/catalog")

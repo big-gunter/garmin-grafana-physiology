@@ -40,6 +40,8 @@ def summarize_readiness(
         "If snapshot.metrics.agent_vo2 is present, prefer it for VO₂/VO₂max discussion because it is agent-calculated from raw activity streams "
         "(ACSM running equation and power→VO₂ cycling conversions) rather than Garmin's device-estimated VO₂ fields. "
         "If snapshot.metrics.agent_load is present, prefer it for TRIMP/TSS discussion (agent-derived from streams) rather than claiming it is unavailable. "
+        "If snapshot.metrics.on_demand_metrics is present, those metrics were computed on-the-fly from raw streams in response to the user's question. "
+        "Prefer answering using on_demand_metrics when the question asks for them (e.g., HR percentiles, TRIMP, TSS, VO2 window summaries) rather than saying the snapshot does not include them. "
         "Do NOT introduce medication topics (e.g., beta blockers) unless the user's prompt explicitly mentions medication/beta blocker. "
         "Tone: write like a helpful coach: 1-2 short paragraphs, then bullets for key metrics and actions. "
         "Formatting rules: do not use markdown tables. Use short headings and bullet points."

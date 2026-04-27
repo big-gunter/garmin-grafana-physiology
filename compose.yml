@@ -85,6 +85,8 @@ services:
       # Optional: allow agent to write/update provisioned dashboards as source-of-truth
       - ./Grafana_Dashboard:/app/Grafana_Dashboard
       - ./docs:/app/docs
+      # Allow the agent to clear Garmin token cache for re-login
+      - ./garminconnect-tokens:/home/appuser/.garminconnect
     ports:
       - "8000:8000"
     command: ["python", "-m", "garmin_ai_agent.server"]
