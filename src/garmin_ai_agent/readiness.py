@@ -88,14 +88,16 @@ def build_snapshot(ro: InfluxRO, *, window_days: int = 42) -> Snapshot:
     q_sleep = f'SELECT * FROM "SleepSummary" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
     q_hrv_i = f'SELECT * FROM "HRV_Intraday" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
     q_act = f'SELECT * FROM "ActivitySummary" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
-    q_vo2 = f'SELECT * FROM "VO2_Max" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
+    # Agent-derived activity metrics computed from raw ActivityGPS streams (peer-reviewed methods).
+    # This is explicitly NOT Garmin's VO2 model output.
+    q_agent_act = f'SELECT * FROM "AgentDerivedActivity" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
     q_race = f'SELECT * FROM "RacePredictions" WHERE time >= \'{since_iso}\' ORDER BY time ASC'
 
     df_daily = query_influxql_df(ro, q_daily)
     df_sleep = query_influxql_df(ro, q_sleep)
     df_hrv_i = query_influxql_df(ro, q_hrv_i)
     df_act = query_influxql_df(ro, q_act)
-    df_vo2 = query_influxql_df(ro, q_vo2)
+    df_agent_act = query_influxql_df(ro, q_agent_act)
     df_race = query_influxql_df(ro, q_race)
 
     # Resting HR: prefer DailyStats.restingHeartRate, fall back to SleepSummary.restingHeartRate
@@ -107,8 +109,71 @@ def build_snapshot(ro: InfluxRO, *, window_days: int = 42) -> Snapshot:
     sleep_score = _last_value(df_sleep, "sleepScore")
     sleep_time_s = _last_value(df_sleep, "sleepTimeSeconds")
 
-    vo2_run = _last_value(df_vo2, "VO2_max_value")
-    vo2_cyc = _last_value(df_vo2, "VO2_max_value_cycling")
+    def _agent_vo2_summary(df: pd.DataFrame) -> dict[str, Any]:
+        """
+        Summaries from AgentDerivedActivity (derived from raw streams).
+        Fields come from activity_derivations.py:
+          - running: vo2_demand_best5m, vo2max_est
+          - cycling: vo2_demand_best5m_cycling, vo2max_est_cycling
+        """
+        if df is None or df.empty:
+            return {
+                "has_agent_derived_activity": False,
+                "note": "No AgentDerivedActivity rows found in window. Run 'Derive metrics from activities' to compute VO₂ from raw streams.",
+                "running": {},
+                "cycling": {},
+            }
+
+        d = df.copy()
+        if "time" in d.columns:
+            d["time"] = pd.to_datetime(d["time"], errors="coerce", utc=True)
+            d = d.dropna(subset=["time"]).sort_values("time")
+
+        # sport tag lives in tags when written; influxdb-python returns tags as columns.
+        sport_col = "sport_tag" if "sport_tag" in d.columns else None
+        if sport_col:
+            sport = d[sport_col].astype(str).str.lower()
+        else:
+            sport = pd.Series([""] * len(d), index=d.index)
+
+        def _summarise(mask: pd.Series, demand_col: str, vo2max_col: str) -> dict[str, Any]:
+            dd = d[mask].copy()
+            if dd.empty:
+                return {"row_count": 0}
+            out: dict[str, Any] = {"row_count": int(len(dd))}
+            if demand_col in dd.columns:
+                s = pd.to_numeric(dd[demand_col], errors="coerce").dropna()
+                if not s.empty:
+                    out["vo2_demand_best5m_last"] = float(s.iloc[-1])
+                    out["vo2_demand_best5m_mean"] = float(s.mean())
+                    out["vo2_demand_best5m_best"] = float(s.max())
+            if vo2max_col in dd.columns:
+                s = pd.to_numeric(dd[vo2max_col], errors="coerce").dropna()
+                if not s.empty:
+                    out["vo2max_est_last"] = float(s.iloc[-1])
+                    out["vo2max_est_mean"] = float(s.mean())
+                    out["vo2max_est_best"] = float(s.max())
+            # last activity id/time (for "last run" style questions)
+            if "ActivityID" in dd.columns:
+                out["last_activity_id"] = str(dd["ActivityID"].iloc[-1])
+            if "time" in dd.columns:
+                out["last_activity_time_utc"] = str(dd["time"].iloc[-1].to_pydatetime().astimezone(timezone.utc).isoformat().replace("+00:00", "Z"))
+            return out
+
+        is_run = sport.str.contains("running", na=False)
+        is_ride = sport.str.contains("cycling|biking|cyclocross|gravel|mountain", na=False, regex=True)
+
+        return {
+            "has_agent_derived_activity": True,
+            "methods": {
+                "running_vo2_demand": "ACSM running equation using speed + grade (grade from distance+altitude), best 5-minute mean VO₂ demand.",
+                "running_vo2max_est": "VO₂max proxy: best5m VO₂ demand divided by (median HR in that window / HRmax).",
+                "cycling_vo2_demand": "Power→metabolic using assumed gross efficiency, converted to ml/kg/min; best 5-minute mean VO₂ demand.",
+                "cycling_vo2max_est": "VO₂max proxy: best5m cycling VO₂ demand divided by (median HR in that window / HRmax).",
+            },
+            "running": _summarise(is_run, "vo2_demand_best5m", "vo2max_est"),
+            "cycling": _summarise(is_ride, "vo2_demand_best5m_cycling", "vo2max_est_cycling"),
+        }
 
     # Simple load from raw ActivitySummary: acute (7d) vs chronic (28d) moving duration
     acute_7d_s = None
@@ -182,7 +247,7 @@ def build_snapshot(ro: InfluxRO, *, window_days: int = 42) -> Snapshot:
         "has_SleepSummary": bool(df_sleep is not None and not df_sleep.empty),
         "has_HRV_Intraday": bool(df_hrv_i is not None and not df_hrv_i.empty),
         "has_ActivitySummary": bool(df_act is not None and not df_act.empty),
-        "has_VO2_Max": bool(df_vo2 is not None and not df_vo2.empty),
+        "has_AgentDerivedActivity": bool(df_agent_act is not None and not df_agent_act.empty),
         "has_RacePredictions": bool(df_race is not None and not df_race.empty),
         "note": "Signals listed here are raw Garmin-imported measurements the agent is allowed to use.",
     }
@@ -192,8 +257,8 @@ def build_snapshot(ro: InfluxRO, *, window_days: int = 42) -> Snapshot:
         "hrv": _safe_float(hrv),
         "sleep_score": _safe_float(sleep_score),
         "sleep_time_s": _safe_float(sleep_time_s),
-        "vo2max_run": _safe_float(vo2_run),
-        "vo2max_cycling": _safe_float(vo2_cyc),
+        # Agent-calculated VO₂/VO₂max summaries from raw activity streams.
+        "agent_vo2": _agent_vo2_summary(df_agent_act),
         "acute_7d_moving_s": _safe_float(acute_7d_s),
         "chronic_28d_moving_s": _safe_float(chronic_28d_s),
         "load_ratio": _safe_float(load_ratio),

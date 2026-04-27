@@ -37,6 +37,8 @@ def summarize_readiness(
         "The snapshot metrics are computed ONLY from raw Garmin-imported measurements (not derived rollups). "
         "IMPORTANT: Do not claim data is unavailable if it is present in snapshot.debug.available_signals. "
         "If a metric is null/missing, say it is missing. "
+        "If snapshot.metrics.agent_vo2 is present, prefer it for VO₂/VO₂max discussion because it is agent-calculated from raw activity streams "
+        "(ACSM running equation and power→VO₂ cycling conversions) rather than Garmin's device-estimated VO₂ fields. "
         "Formatting rules: do not use markdown tables. Use short headings and bullet points."
     )
     prompt = (

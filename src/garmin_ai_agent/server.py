@@ -8,6 +8,7 @@ from .config import load_config
 from .influx_ro import create_influx_ro
 from .readiness import build_snapshot, readiness_score
 from .anthropic_client import LLMConfig, create_client, summarize_readiness
+from . import metrics as metrics_engine
 
 
 cfg = load_config()
@@ -51,6 +52,21 @@ class InsightsRequest(BaseModel):
 class DeriveActivitiesRequest(BaseModel):
     window_days: int = Field(42, ge=1, le=365)
     limit: int = Field(250, ge=1, le=2000, description="Max activities to process")
+
+class MetricsCatalogResponse(BaseModel):
+    metrics: list[dict]
+
+
+class MetricsComputeRequest(BaseModel):
+    metrics: list[str] = Field(..., min_length=1, description="Metric names (see /metrics/catalog)")
+    window_days: int = Field(30, ge=1, le=365)
+    activity_limit: int = Field(20, ge=1, le=200, description="Max activities to scan for window metrics")
+
+
+class MetricsQueryRequest(BaseModel):
+    query: str = Field(..., min_length=1, description="Natural language metric request")
+    window_days: int = Field(30, ge=1, le=365)
+    activity_limit: int = Field(20, ge=1, le=200, description="Max activities to scan for window metrics")
 
 
 @app.get("/health")
@@ -302,6 +318,7 @@ def web_ui():
             <button id="btnSnapshot">Snapshot</button>
             <button id="btnReadiness">Readiness</button>
             <button id="btnDeriveAll">Derive metrics from activities</button>
+            <button id="btnMetrics">Compute metrics</button>
             <button class="ghost" id="btnStoreInsights">Store insights to DB</button>
             <button class="ghost" id="btnGrafana">Grafana: write dashboard file</button>
             <button class="ghost" id="btnGrafanaPush">Grafana: push via API</button>
@@ -357,7 +374,7 @@ def web_ui():
         const text = byId("statusText");
         if (dot) dot.classList.toggle("busy", !!busy);
         if (text) text.textContent = busy ? (msg || "Working…") : "Ready";
-        for (const id of ["btnInsights","btnSnapshot","btnReadiness","btnDeriveAll","btnStoreInsights","btnGrafana","btnGrafanaPush","btnSubmitPrompt","btnClear"]) {
+        for (const id of ["btnInsights","btnSnapshot","btnReadiness","btnDeriveAll","btnMetrics","btnStoreInsights","btnGrafana","btnGrafanaPush","btnSubmitPrompt","btnClear"]) {
           const el = byId(id);
           if (el) el.disabled = !!busy;
         }
@@ -542,6 +559,7 @@ def web_ui():
       byId("btnGrafana").onclick = () => runAction("Writing dashboard…", () => call("/grafana/write_dashboard_file", {}));
       byId("btnGrafanaPush").onclick = () => runAction("Pushing dashboard…", () => call("/grafana/push_dashboard_api", {}));
       byId("btnDeriveAll").onclick = () => runAction("Deriving metrics…", () => call("/activities/derive_all", { window_days: getWindowDays(), limit: 500 }));
+      byId("btnMetrics").onclick = () => runAction("Computing metrics…", () => call("/metrics/query", { window_days: getWindowDays(), query: byId("prompt").value || "" }));
 
       byId("btnClear").onclick = () => { byId("prompt").value = ""; byId("prompt").focus(); };
 
@@ -644,24 +662,76 @@ def readiness(req: SnapshotRequest, authorization: str | None = Header(default=N
 @app.post("/insights")
 def insights(req: InsightsRequest, authorization: str | None = Header(default=None)):
     _require_auth(authorization)
-    if not cfg.anthropic_api_key:
-        raise HTTPException(status_code=400, detail="ANTHROPIC_API_KEY not configured")
     snap = build_snapshot(_ro, window_days=req.window_days)
     score = readiness_score(snap)
-    client = create_client(
-        LLMConfig(
-            api_key=cfg.anthropic_api_key,
-            analysis_model=cfg.analysis_model,
-            planning_model=cfg.planning_model,
+    if cfg.anthropic_api_key:
+        client = create_client(
+            LLMConfig(
+                api_key=cfg.anthropic_api_key,
+                analysis_model=cfg.analysis_model,
+                planning_model=cfg.planning_model,
+            )
         )
-    )
-    insights_obj = summarize_readiness(
-        client=client,
-        model=cfg.analysis_model,
-        snapshot=snap.to_dict(),
-        readiness=score,
-        user_prompt=req.prompt,
-    )
+        insights_obj = summarize_readiness(
+            client=client,
+            model=cfg.analysis_model,
+            snapshot=snap.to_dict(),
+            readiness=score,
+            user_prompt=req.prompt,
+        )
+    else:
+        # Deterministic fallback: still provides useful, formatted output based on agent-calculated metrics.
+        m = snap.metrics
+        agent_vo2 = (m.get("agent_vo2") or {}) if isinstance(m, dict) else {}
+
+        def _fmt_vo2_block(label: str, block: dict) -> list[str]:
+            if not isinstance(block, dict) or not block or not block.get("row_count"):
+                return [f"- **{label}**: no agent-derived activities in window (run **Derive metrics from activities** first)"]
+            lines = [f"- **{label}**:"]
+            if block.get("last_activity_time_utc"):
+                lines.append(f"  - **last activity (UTC)**: `{block.get('last_activity_time_utc')}` (id `{block.get('last_activity_id','')}`)")
+            if block.get("vo2_demand_best5m_last") is not None:
+                lines.append(f"  - **VO₂ demand (best 5-min) last**: {block['vo2_demand_best5m_last']:.1f} ml/kg/min")
+            if block.get("vo2max_est_last") is not None:
+                lines.append(f"  - **VO₂max estimate last**: {block['vo2max_est_last']:.1f} ml/kg/min")
+            if block.get("vo2max_est_mean") is not None:
+                lines.append(f"  - **VO₂max estimate mean (window)**: {block['vo2max_est_mean']:.1f} ml/kg/min")
+            if block.get("vo2max_est_best") is not None:
+                lines.append(f"  - **VO₂max estimate best (window)**: {block['vo2max_est_best']:.1f} ml/kg/min")
+            return lines
+
+        run_block = agent_vo2.get("running") if isinstance(agent_vo2, dict) else {}
+        cyc_block = agent_vo2.get("cycling") if isinstance(agent_vo2, dict) else {}
+        methods = agent_vo2.get("methods") if isinstance(agent_vo2, dict) else {}
+
+        lines: list[str] = []
+        lines.append(f"## Readiness Score: {score.get('score', 'n/a')}/100")
+        if req.prompt:
+            lines.append("")
+            lines.append("### Your question/context")
+            lines.append(f"- {req.prompt.strip()}")
+        lines.append("")
+        lines.append("### Summary")
+        for r in (score.get("reasons") or [])[:6]:
+            lines.append(f"- {r}")
+        if not (score.get("reasons") or []):
+            lines.append("- No strong drivers detected from available signals.")
+        lines.append("")
+        lines.append("### Agent-calculated VO₂ / VO₂max (from raw activity streams)")
+        lines.extend(_fmt_vo2_block("Running", run_block or {}))
+        lines.extend(_fmt_vo2_block("Cycling", cyc_block or {}))
+        if isinstance(methods, dict) and methods:
+            lines.append("")
+            lines.append("### Methods used (high level)")
+            for k in ["running_vo2_demand", "running_vo2max_est", "cycling_vo2_demand", "cycling_vo2max_est"]:
+                if methods.get(k):
+                    lines.append(f"- **{k}**: {methods[k]}")
+        lines.append("")
+        lines.append("### Caveats")
+        lines.append("- VO₂max estimates depend on having a reasonable HRmax and good-quality stream data (speed/altitude or power).")
+        lines.append("- This is **agent-calculated** from raw streams; it does **not** use Garmin’s VO₂max device estimate.")
+
+        insights_obj = "\n".join(lines).strip()
     return {"snapshot": snap.to_dict(), "readiness": score, "insights": insights_obj}
 
 
@@ -851,6 +921,121 @@ def derive_all_activities(req: DeriveActivitiesRequest, authorization: str | Non
             continue
 
     return {"ok": True, "processed": processed, "errors": errors[:20], "note": "Wrote AgentDerivedActivity from raw ActivityGPS streams"}
+
+
+@app.get("/metrics/catalog")
+def metrics_catalog(authorization: str | None = Header(default=None)):
+    _require_auth(authorization)
+    return {"metrics": metrics_engine.catalog()}
+
+
+@app.post("/metrics/compute")
+def metrics_compute(req: MetricsComputeRequest, authorization: str | None = Header(default=None)):
+    _require_auth(authorization)
+    computed = metrics_engine.compute_metrics(
+        _ro,
+        metrics=req.metrics,
+        window_days=req.window_days,
+        activity_limit=req.activity_limit,
+        cycling_gross_eff=cfg.cycling_gross_efficiency,
+    )
+    md = metrics_engine.render_markdown(computed)
+    return {"ok": True, "computed": computed, "insights": md}
+
+
+@app.post("/metrics/query")
+def metrics_query(req: MetricsQueryRequest, authorization: str | None = Header(default=None)):
+    """
+    Natural language convenience endpoint.
+    - If Anthropic is configured: use it to select metric names from the catalog.
+    - Otherwise: simple keyword matching fallback.
+    """
+    _require_auth(authorization)
+    q = (req.query or "").strip().lower()
+    cat = metrics_engine.catalog()
+    names = [m["name"] for m in cat]
+
+    picked: list[str] = []
+    # Keyword fallback (works offline)
+    if ("vo2" in q or "v02" in q) and ("cycle" in q or "bike" in q or "ride" in q or "cycling" in q):
+        picked.append("vo2_window_ride" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "vo2_last_ride")
+    if ("vo2" in q or "v02" in q) and ("run" in q or "running" in q or "pace" in q):
+        picked.append("vo2_window_run" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "vo2_last_run")
+    if "power curve" in q or ("power" in q and "curve" in q):
+        picked.append("power_curve_window_ride" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "power_curve_last_ride")
+    if "ftp" in q or "threshold power" in q or "cp" in q or "critical power" in q:
+        picked.append("ftp_est_window_ride" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "ftp_est_last_ride")
+    if "lthr" in q or "threshold hr" in q or "lactate threshold" in q:
+        if "cycle" in q or "bike" in q or "ride" in q or "cycling" in q:
+            picked.append("lthr_window_ride" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "lthr_last_ride")
+        else:
+            picked.append("lthr_window_run" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "lthr_last_run")
+    if "threshold pace" in q or "critical speed" in q or ("threshold" in q and ("pace" in q or "run" in q or "running" in q)):
+        picked.append("threshold_window_run")
+    if ("all" in q or "combined" in q) and ("vo2" in q or "v02" in q):
+        picked = ["vo2_window_all" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "vo2_window_all"]
+    if ("all" in q or "combined" in q) and ("lthr" in q or "threshold hr" in q or "lactate threshold" in q):
+        picked = ["lthr_window_all" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "lthr_window_all"]
+    if ("all" in q or "combined" in q) and ("threshold" in q or "ftp" in q or "critical speed" in q or "cp" in q):
+        picked = ["threshold_window_all"]
+
+    # If Anthropic exists, let it choose from the catalog (but keep it safe: only allow names we know)
+    if cfg.anthropic_api_key:
+        try:
+            client = create_client(
+                LLMConfig(
+                    api_key=cfg.anthropic_api_key,
+                    analysis_model=cfg.analysis_model,
+                    planning_model=cfg.planning_model,
+                )
+            )
+            system = (
+                "You map a user's metric request to a small set of metric function names from a provided catalog. "
+                "Return ONLY a comma-separated list of metric names. No extra text."
+            )
+            prompt = (
+                "Catalog metric names:\n"
+                + "\n".join(f"- {n}" for n in names)
+                + "\n\nUser request:\n"
+                + req.query
+                + "\n\nReturn metric names (comma-separated)."
+            )
+            msg = client.messages.create(
+                model=cfg.analysis_model,
+                max_tokens=80,
+                system=system,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            parts: list[str] = []
+            for c in msg.content:
+                if getattr(c, "type", None) == "text":
+                    parts.append(c.text)
+            raw = "\n".join(parts).strip()
+            llm_picked = [x.strip() for x in raw.split(",") if x.strip()]
+            llm_picked = [x for x in llm_picked if x in names]
+            if llm_picked:
+                picked = llm_picked
+        except Exception:
+            # fall back to keyword picks
+            pass
+
+    if not picked:
+        return {
+            "ok": False,
+            "detail": "Could not map query to known metrics. Try /metrics/catalog or include keywords like VO2, FTP, power curve, LTHR.",
+            "known_metrics": names,
+        }
+
+    # Pass activity_limit via ctx by encoding it into window_days-only compute and letting engine read defaults
+    computed = metrics_engine.compute_metrics(
+        _ro,
+        metrics=picked,
+        window_days=req.window_days,
+        activity_limit=req.activity_limit,
+        cycling_gross_eff=cfg.cycling_gross_efficiency,
+    )
+    md = metrics_engine.render_markdown(computed)
+    return {"ok": True, "picked": picked, "computed": computed, "insights": md}
 
 
 def main() -> None:
