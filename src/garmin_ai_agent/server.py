@@ -93,7 +93,8 @@ def web_ui():
         --muted:#94a3b8;
         --text:#e6edf3;
         --accent:#f59e0b;
-        --accent2:#60a5fa;
+        /* neutral highlight (replace blue) */
+        --accent2:#cbd5e1;
         --good:#22c55e;
       }
       *{ box-sizing:border-box; }
@@ -103,9 +104,10 @@ def web_ui():
         color:var(--text);
         font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
         line-height:1.35;
+        overflow-x: hidden;
         background-image:
           /* Dark marble veining (procedural SVG) */
-          url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%201000%201000'%3E%3Cdefs%3E%3Cfilter%20id='m'%20x='-20%25'%20y='-20%25'%20width='140%25'%20height='140%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.012'%20numOctaves='4'%20seed='11'%20stitchTiles='stitch'%20result='noise'/%3E%3CfeColorMatrix%20in='noise'%20type='matrix'%20values='4%200%200%200%20-1.6%200%204%200%200%20-1.6%200%200%204%200%20-1.6%200%200%200%201%200'%20result='hi'/%3E%3CfeComponentTransfer%20in='hi'%20result='thr'%3E%3CfeFuncR%20type='gamma'%20amplitude='1'%20exponent='2.4'%20offset='-0.28'/%3E%3CfeFuncG%20type='gamma'%20amplitude='1'%20exponent='2.4'%20offset='-0.28'/%3E%3CfeFuncB%20type='gamma'%20amplitude='1'%20exponent='2.4'%20offset='-0.28'/%3E%3C/feComponentTransfer%3E%3CfeGaussianBlur%20in='thr'%20stdDeviation='0.8'%20result='soft'%3E%3C/feGaussianBlur%3E%3CfeComponentTransfer%20in='soft'%3E%3CfeFuncA%20type='table'%20tableValues='0%200%200.02%200.06%200.12%200.20%200.32%200.48%200.68%200.90%201'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3ClinearGradient%20id='g'%20x1='0'%20y1='0'%20x2='0'%20y2='1'%3E%3Cstop%20offset='0%25'%20stop-color='%2303060b'/%3E%3Cstop%20offset='55%25'%20stop-color='%23060a12'/%3E%3Cstop%20offset='100%25'%20stop-color='%23010307'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width='1000'%20height='1000'%20fill='url(%23g)'/%3E%3Crect%20width='1000'%20height='1000'%20filter='url(%23m)'%20opacity='0.88'%20fill='%23e5e7eb'/%3E%3C/svg%3E"),
+          url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%201000%201000'%3E%3Cdefs%3E%3Cfilter%20id='m'%20x='-20%25'%20y='-20%25'%20width='140%25'%20height='140%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.012'%20numOctaves='5'%20seed='11'%20stitchTiles='stitch'%20result='noise'/%3E%3CfeColorMatrix%20in='noise'%20type='matrix'%20values='0.333%200.333%200.333%200%200%200.333%200.333%200.333%200%200%200.333%200.333%200.333%200%200%200%200%200%201%200'%20result='mono'/%3E%3CfeComponentTransfer%20in='mono'%20result='thr'%3E%3CfeFuncR%20type='gamma'%20amplitude='1'%20exponent='2.35'%20offset='-0.18'/%3E%3CfeFuncG%20type='gamma'%20amplitude='1'%20exponent='2.35'%20offset='-0.18'/%3E%3CfeFuncB%20type='gamma'%20amplitude='1'%20exponent='2.35'%20offset='-0.18'/%3E%3C/feComponentTransfer%3E%3CfeGaussianBlur%20in='thr'%20stdDeviation='0.7'%20result='soft'/%3E%3CfeComponentTransfer%20in='soft'%3E%3CfeFuncA%20type='table'%20tableValues='0%200%200.01%200.03%200.06%200.10%200.16%200.26%200.40%200.60%201'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3ClinearGradient%20id='g'%20x1='0'%20y1='0'%20x2='0'%20y2='1'%3E%3Cstop%20offset='0%25'%20stop-color='%23010102'/%3E%3Cstop%20offset='55%25'%20stop-color='%23050506'/%3E%3Cstop%20offset='100%25'%20stop-color='%23000000'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width='1000'%20height='1000'%20fill='url(%23g)'/%3E%3Crect%20width='1000'%20height='1000'%20filter='url(%23m)'%20opacity='0.92'%20fill='%23ffffff'/%3E%3C/svg%3E"),
           /* subtle vignette only (no color) */
           radial-gradient(1200px 900px at 50% 15%, rgba(255,255,255,0.03), rgba(0,0,0,0.0) 55%),
           linear-gradient(180deg, var(--bg0), var(--bg1));
@@ -114,7 +116,7 @@ def web_ui():
         background-size: cover, cover, cover;
         background-position: center, center, center;
         background-attachment: fixed, fixed, fixed;
-        background-blend-mode: normal, overlay, multiply;
+        background-blend-mode: normal, normal, normal;
       }
       .container{
         max-width: 1060px;
@@ -153,7 +155,7 @@ def web_ui():
       }
       .dot.busy{
         background: var(--accent2);
-        box-shadow: 0 0 0 3px rgba(96,165,250,0.15);
+        box-shadow: 0 0 0 3px rgba(203,213,225,0.14);
       }
       .banner{
         display:flex;
@@ -173,7 +175,7 @@ def web_ui():
         gap:14px;
       }
       @media(min-width: 980px){
-        .grid{ grid-template-columns: 420px 1fr; align-items:start; }
+        .grid{ grid-template-columns: 420px minmax(0, 1fr); align-items:start; }
       }
       .panel{
         background: var(--panel);
@@ -181,6 +183,7 @@ def web_ui():
         border-radius: 16px;
         padding: 14px;
         backdrop-filter: blur(10px);
+        min-width: 0; /* allows children to wrap instead of forcing horizontal overflow */
       }
       .panel h2{
         font-size: 12px;
@@ -203,13 +206,14 @@ def web_ui():
         padding: 10px 12px;
         border-radius: 12px;
         border: 1px solid rgba(148,163,184,0.18);
-        background: rgba(2,6,23,0.55);
+        /* neutral dark grey (avoid blue tint) */
+        background: rgba(18,18,18,0.72);
         color: var(--text);
         outline: none;
       }
       input:focus, textarea:focus{
-        border-color: rgba(96,165,250,0.55);
-        box-shadow: 0 0 0 4px rgba(96,165,250,0.12);
+        border-color: rgba(203,213,225,0.45);
+        box-shadow: 0 0 0 4px rgba(203,213,225,0.10);
       }
       textarea{ min-height: 120px; resize: vertical; }
       .actions{
@@ -226,7 +230,7 @@ def web_ui():
         cursor: pointer;
         transition: transform .05s ease, border-color .15s ease, background .15s ease;
       }
-      button:hover{ border-color: rgba(96,165,250,0.35); }
+      button:hover{ border-color: rgba(203,213,225,0.30); }
       button:active{ transform: translateY(1px); }
       button.primary{
         background: linear-gradient(180deg, rgba(245,158,11,0.95), rgba(245,158,11,0.75));
@@ -240,7 +244,7 @@ def web_ui():
         transform: none !important;
       }
       button.ghost{
-        background: rgba(2,6,23,0.35);
+        background: rgba(18,18,18,0.35);
       }
       .tabs{
         display:flex;
@@ -253,24 +257,35 @@ def web_ui():
         padding: 8px 10px;
         border-radius: 999px;
         border: 1px solid rgba(148,163,184,0.18);
-        background: rgba(2,6,23,0.35);
+        background: rgba(18,18,18,0.35);
         color: rgba(226,232,240,0.9);
         font-size: 12px;
         cursor:pointer;
       }
       .tab.active{
-        background: rgba(96,165,250,0.12);
-        border-color: rgba(96,165,250,0.30);
+        background: rgba(203,213,225,0.08);
+        border-color: rgba(203,213,225,0.22);
       }
       pre{
         margin:0;
-        background: rgba(2,6,23,0.55);
+        /* neutral dark grey output surface */
+        background: rgba(18,18,18,0.62);
         border: 1px solid rgba(148,163,184,0.16);
         color: #e6edf3;
         padding: 12px;
-        overflow: auto;
+        overflow-y: auto;
+        overflow-x: hidden;
         border-radius: 14px;
         min-height: 260px;
+        max-width: 100%;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      pre *{
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        word-break: break-word;
       }
       .hint{
         margin-top:8px;
@@ -456,7 +471,7 @@ def web_ui():
         const cards = sections.map((s, idx) => {
           const title = escapeHtml(s.title || (idx === 0 ? "Insights" : ""));
           const body = mdToHtml(s.body.join("\\n"));
-          return `<div style="border:1px solid rgba(148,163,184,0.16);border-radius:14px;background:rgba(2,6,23,0.35);padding:12px;margin-bottom:12px">
+          return `<div style="border:1px solid rgba(148,163,184,0.16);border-radius:14px;background:rgba(18,18,18,0.50);padding:12px;margin-bottom:12px">
             <div style="font-size:14px;font-weight:800;margin-bottom:8px">${title}</div>
             ${body}
           </div>`;
@@ -476,7 +491,7 @@ def web_ui():
         const reasonsHtml = reasons.length ? `<div style="margin-top:8px">${mdToHtml(reasons.map(v => `- ${v}`).join("\\n"))}</div>` : "";
         const inputsHtml = inputs ? `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Inputs used</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(inputs, null, 2))}</pre></details>` : "";
         const snapHtml = snap ? `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Snapshot (raw)</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(snap, null, 2))}</pre></details>` : "";
-        return `<div style="border:1px solid rgba(148,163,184,0.16);border-radius:14px;background:rgba(2,6,23,0.35);padding:12px;margin-bottom:12px">
+        return `<div style="border:1px solid rgba(148,163,184,0.16);border-radius:14px;background:rgba(18,18,18,0.50);padding:12px;margin-bottom:12px">
           <div style="font-size:14px;font-weight:800;margin-bottom:8px">Readiness</div>
           ${scoreLine}
           ${reasonsHtml}
@@ -494,7 +509,7 @@ def web_ui():
         const availHtml = Array.isArray(available) && available.length
           ? `<div style="margin-top:8px">${mdToHtml(["**Available signals:**", ...available.map(s => "- " + s)].join("\\n"))}</div>`
           : "";
-        return `<div style="border:1px solid rgba(148,163,184,0.16);border-radius:14px;background:rgba(2,6,23,0.35);padding:12px;margin-bottom:12px">
+        return `<div style="border:1px solid rgba(148,163,184,0.16);border-radius:14px;background:rgba(18,18,18,0.50);padding:12px;margin-bottom:12px">
           <div style="font-size:14px;font-weight:800;margin-bottom:8px">Snapshot</div>
           ${availHtml}
           <details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw snapshot</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(snap, null, 2))}</pre></details>
@@ -511,11 +526,11 @@ def web_ui():
         const errDetail = (x && typeof x === "object") ? (x.detail || x.error || x.message) : null;
 
         if (insightsCards) {
-          pre.innerHTML = insightsCards + `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw response</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>`;
+          pre.innerHTML = insightsCards + `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw response</summary><pre style="min-height:0;margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>`;
           return;
         }
         if (readinessCard) {
-          pre.innerHTML = readinessCard + `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw response</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>`;
+          pre.innerHTML = readinessCard + `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw response</summary><pre style="min-height:0;margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>`;
           return;
         }
         if (snapshotCard) {
@@ -523,7 +538,7 @@ def web_ui():
           return;
         }
         if (errDetail) {
-          pre.innerHTML = `<div style="border:1px solid rgba(245,158,11,0.22);border-radius:14px;background:rgba(245,158,11,0.08);padding:12px">
+          pre.innerHTML = `<div style="border:1px solid rgba(245,158,11,0.22);border-radius:14px;background:rgba(18,18,18,0.55);padding:12px">
             <div style="font-size:14px;font-weight:800;margin-bottom:8px">Error</div>
             ${mdToHtml(`- **Detail**: ${String(errDetail)}`)}
             <details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw error</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>
@@ -972,6 +987,15 @@ def metrics_query(req: MetricsQueryRequest, authorization: str | None = Header(d
             picked.append("lthr_window_run" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "lthr_last_run")
     if "threshold pace" in q or "critical speed" in q or ("threshold" in q and ("pace" in q or "run" in q or "running" in q)):
         picked.append("threshold_window_run")
+    if "trimp" in q:
+        if "all" in q or "combined" in q:
+            picked.append("trimp_window_all")
+        elif "cycle" in q or "bike" in q or "ride" in q or "cycling" in q:
+            picked.append("trimp_last_ride")
+        else:
+            picked.append("trimp_last_run")
+    if "tss" in q:
+        picked.append("tss_window_ride" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "tss_last_ride")
     if ("all" in q or "combined" in q) and ("vo2" in q or "v02" in q):
         picked = ["vo2_window_all" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "vo2_window_all"]
     if ("all" in q or "combined" in q) and ("lthr" in q or "threshold hr" in q or "lactate threshold" in q):

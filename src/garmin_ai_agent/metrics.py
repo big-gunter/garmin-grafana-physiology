@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from .activity_derivations import _acsm_vo2_running, _grade_from_dist_alt, _rolling_best_mean
+from .activity_derivations import _banister_trimp_series, _edwards_trimp_series
 from .influx_ro import InfluxRO, query_influxql_df
 
 
@@ -155,6 +156,30 @@ def _estimate_lthr(df_stream: pd.DataFrame) -> dict[str, Any]:
         "method": "best 30-minute mean HeartRate (field-test proxy)",
     }
 
+    # Window diagnostics for auto-explanations (steadiness + terrain)
+    try:
+        hr_win = hr[s_i : e_i + 1]
+        hr_win = hr_win[np.isfinite(hr_win) & (hr_win > 0)]
+        if hr_win.size >= 10:
+            out["hr_window_std_bpm"] = float(np.std(hr_win, ddof=1)) if hr_win.size >= 2 else 0.0
+            out["hr_window_p90_p10_bpm"] = float(np.percentile(hr_win, 90) - np.percentile(hr_win, 10))
+    except Exception:
+        pass
+
+    # If we have altitude+distance, add grade/downhill indicators for the same window
+    if "Altitude" in d.columns and "Distance" in d.columns:
+        try:
+            alt = pd.to_numeric(d["Altitude"], errors="coerce").to_numpy(dtype=float)
+            dist = pd.to_numeric(d["Distance"], errors="coerce").to_numpy(dtype=float)
+            grade = _grade_from_dist_alt(dist, alt)
+            gw = grade[s_i : e_i + 1]
+            gw = gw[np.isfinite(gw)]
+            if gw.size:
+                out["grade_window_mean"] = float(np.mean(gw))
+                out["downhill_fraction_gt3pct_window"] = float(np.mean(gw < -0.03))
+        except Exception:
+            pass
+
     # pace proxy (running): use Speed if present; also grade-adjusted speed if present
     if "Speed" in d.columns:
         sp = pd.to_numeric(d["Speed"], errors="coerce").to_numpy(dtype=float)
@@ -221,6 +246,28 @@ def _estimate_running_vo2(df_stream: pd.DataFrame) -> dict[str, Any]:
         out["vo2_demand_effort_filtered_p95_ml_kg_min"] = float(np.percentile(v, 95))
         out["effort_filter"] = "HeartRate >= 60% of activity max HR (if HR present); otherwise none"
 
+    # Terrain diagnostics (used for automatic explanations)
+    try:
+        g = np.asarray(grade, dtype=float)
+        g = g[np.isfinite(g)]
+        if g.size:
+            out["grade_mean"] = float(np.mean(g))
+            out["grade_p95"] = float(np.percentile(g, 95))
+            out["downhill_fraction_gt3pct"] = float(np.mean(g < -0.03))
+            out["uphill_fraction_gt3pct"] = float(np.mean(g > 0.03))
+    except Exception:
+        pass
+    try:
+        # Ascent/descent from altitude diffs (rough; depends on stream quality)
+        a = np.asarray(alt, dtype=float)
+        da = np.diff(a)
+        da = da[np.isfinite(da)]
+        if da.size:
+            out["ascent_m_rough"] = float(np.sum(da[da > 0]))
+            out["descent_m_rough"] = float(np.sum(-da[da < 0]))
+    except Exception:
+        pass
+
     # If Garmin provides GradeAdjustedSpeed, compute a grade-normalised VO2 proxy too.
     if "GradeAdjustedSpeed" in d.columns:
         gas = pd.to_numeric(d["GradeAdjustedSpeed"], errors="coerce").to_numpy(dtype=float)
@@ -253,6 +300,9 @@ def _estimate_cycling_lthr(df_stream: pd.DataFrame) -> dict[str, Any]:
         if np.isfinite(p).any():
             out["power_p95_w"] = float(np.nanpercentile(p, 95))
             out["power_mean_w"] = float(np.nanmean(p))
+            # power steadiness indicator (CV) — helps detect "not a steady effort"
+            if np.nanmean(p) and np.nanmean(p) > 0:
+                out["power_cv"] = float(np.nanstd(p) / np.nanmean(p))
     except Exception:
         pass
     return out
@@ -286,6 +336,18 @@ def _aggregate_numeric(values: list[float]) -> dict[str, float]:
         "p50": float(np.percentile(v, 50)),
         "p90": float(np.percentile(v, 90)),
     }
+
+
+def _diff_note(*, a: float | None, b: float | None, label_a: str, label_b: str, threshold_abs: float = 5.0) -> str | None:
+    if a is None or b is None:
+        return None
+    d = float(a) - float(b)
+    if not np.isfinite(d):
+        return None
+    if abs(d) < float(threshold_abs):
+        return None
+    direction = "higher" if d > 0 else "lower"
+    return f"{label_a} is {abs(d):.1f} ml/kg/min {direction} than {label_b}."
 
 
 def _pace_min_per_km(speed_mps: float | None) -> float | None:
@@ -420,6 +482,31 @@ def catalog() -> list[dict[str, Any]]:
             "description": "Combined LTHR summary over window (runs + rides).",
             "requires": ["ActivitySummary", "ActivityGPS.HeartRate"],
         },
+        {
+            "name": "trimp_last_run",
+            "description": "TRIMP (Banister + Edwards) for most recent run, from HR stream (needs HRmax and RHR).",
+            "requires": ["ActivitySummary", "ActivityGPS.HeartRate", "DailyStats.maxHeartRate", "DailyStats.restingHeartRate"],
+        },
+        {
+            "name": "trimp_last_ride",
+            "description": "TRIMP (Banister + Edwards) for most recent ride, from HR stream (needs HRmax and RHR).",
+            "requires": ["ActivitySummary", "ActivityGPS.HeartRate", "DailyStats.maxHeartRate", "DailyStats.restingHeartRate"],
+        },
+        {
+            "name": "trimp_window_all",
+            "description": "TRIMP summaries over window for running + cycling (computed per activity and summarised).",
+            "requires": ["ActivitySummary", "ActivityGPS.HeartRate", "DailyStats.maxHeartRate", "DailyStats.restingHeartRate"],
+        },
+        {
+            "name": "tss_last_ride",
+            "description": "Cycling TSS (power-based) for most recent ride, using per-ride FTP proxy (0.95*best20) and NP (30s, 4th power).",
+            "requires": ["ActivitySummary", "ActivityGPS.Power"],
+        },
+        {
+            "name": "tss_window_ride",
+            "description": "Cycling TSS summary over window (per-ride NP/IF/TSS computed and summarised).",
+            "requires": ["ActivitySummary", "ActivityGPS.Power"],
+        },
     ]
 
 
@@ -446,6 +533,35 @@ def _weight_kg_latest(ro: InfluxRO, *, since_iso: str) -> float | None:
     if w_raw > 500:  # grams
         w_raw = w_raw / 1000.0
     return w_raw if 20.0 <= w_raw <= 250.0 else None
+
+
+def _hr_profile(ro: InfluxRO, *, since_iso: str) -> dict[str, Any]:
+    """
+    Pull best-effort HR profile from raw Garmin imports.
+    - HRmax: DailyStats.maxHeartRate if present
+    - RHR: DailyStats.restingHeartRate if present
+    - Gender: UserProfileMaster.gender if present
+    """
+    out: dict[str, Any] = {"hrmax_bpm": None, "rhr_bpm": None, "gender": None}
+    df_daily = query_influxql_df(ro, f'SELECT * FROM "DailyStats" WHERE time >= \'{since_iso}\' ORDER BY time ASC')
+    if df_daily is not None and not df_daily.empty:
+        if "maxHeartRate" in df_daily.columns:
+            try:
+                out["hrmax_bpm"] = float(pd.to_numeric(df_daily["maxHeartRate"], errors="coerce").dropna().max())
+            except Exception:
+                pass
+        if "restingHeartRate" in df_daily.columns:
+            try:
+                out["rhr_bpm"] = float(pd.to_numeric(df_daily["restingHeartRate"], errors="coerce").dropna().iloc[-1])
+            except Exception:
+                pass
+    df_profile = query_influxql_df(ro, f'SELECT * FROM "UserProfileMaster" WHERE time >= \'{since_iso}\' ORDER BY time DESC LIMIT 1')
+    if df_profile is not None and not df_profile.empty and "gender" in df_profile.columns:
+        try:
+            out["gender"] = str(df_profile["gender"].iloc[0]).strip().lower()
+        except Exception:
+            pass
+    return out
 
 
 def compute_metrics(
@@ -484,12 +600,77 @@ def _compute_one(ro: InfluxRO, name: str, ctx: dict[str, Any]) -> "MetricResultE
         v["activity_time_utc"] = last.get("activity_time_utc")
         return MetricResultExt(name=n, ok=bool(v.get("ok")), data=v, notes=notes)
 
+    if n == "trimp_last_run":
+        last = _last_activity(ro, window_days=window_days, sport="run")
+        if not last.get("ok"):
+            return MetricResultExt(name=n, ok=False, data={"detail": last.get("note")}, notes=[])
+        df_stream = _fetch_activity_stream(ro, activity_id=last["activity_id"], since_iso=since_iso)
+        if df_stream.empty or "HeartRate" not in df_stream.columns:
+            return MetricResultExt(name=n, ok=False, data={"detail": "Missing HeartRate stream for this activity."}, notes=[])
+        prof = _hr_profile(ro, since_iso=since_iso)
+        hrmax = prof.get("hrmax_bpm")
+        rhr = prof.get("rhr_bpm")
+        gender = prof.get("gender") or "male"
+        if not hrmax or not rhr:
+            return MetricResultExt(name=n, ok=False, data={"detail": "Missing HRmax/RHR from DailyStats; cannot compute Banister TRIMP reliably.", **prof}, notes=[])
+        hr = pd.to_numeric(df_stream["HeartRate"], errors="coerce").to_numpy(dtype=float)
+        t_s = df_stream["time"].astype("int64").to_numpy(dtype=float) / 1e9
+        dt = _dt_seconds(t_s)
+        tr_b = _banister_trimp_series(dt, hr, float(rhr), float(hrmax), str(gender))
+        tr_e = _edwards_trimp_series(dt, hr, float(hrmax))
+        out = {
+            "sport": "running",
+            "activity_id": last["activity_id"],
+            "activity_time_utc": last.get("activity_time_utc"),
+            "hrmax_bpm_used": float(hrmax),
+            "rhr_bpm_used": float(rhr),
+            "gender_used": str(gender),
+            "trimp_banister": tr_b,
+            "trimp_edwards": tr_e,
+            "method": "TRIMP from HR time series (Banister HRR exponential + Edwards zones).",
+        }
+        return MetricResultExt(name=n, ok=(tr_b is not None or tr_e is not None), data=out, notes=notes)
+
+    if n == "trimp_last_ride":
+        last = _last_activity(ro, window_days=window_days, sport="cycle|ride|bike|cycling")
+        if not last.get("ok"):
+            return MetricResultExt(name=n, ok=False, data={"detail": last.get("note")}, notes=[])
+        df_stream = _fetch_activity_stream(ro, activity_id=last["activity_id"], since_iso=since_iso)
+        if df_stream.empty or "HeartRate" not in df_stream.columns:
+            return MetricResultExt(name=n, ok=False, data={"detail": "Missing HeartRate stream for this activity."}, notes=[])
+        prof = _hr_profile(ro, since_iso=since_iso)
+        hrmax = prof.get("hrmax_bpm")
+        rhr = prof.get("rhr_bpm")
+        gender = prof.get("gender") or "male"
+        if not hrmax or not rhr:
+            return MetricResultExt(name=n, ok=False, data={"detail": "Missing HRmax/RHR from DailyStats; cannot compute Banister TRIMP reliably.", **prof}, notes=[])
+        hr = pd.to_numeric(df_stream["HeartRate"], errors="coerce").to_numpy(dtype=float)
+        t_s = df_stream["time"].astype("int64").to_numpy(dtype=float) / 1e9
+        dt = _dt_seconds(t_s)
+        tr_b = _banister_trimp_series(dt, hr, float(rhr), float(hrmax), str(gender))
+        tr_e = _edwards_trimp_series(dt, hr, float(hrmax))
+        out = {
+            "sport": "cycling",
+            "activity_id": last["activity_id"],
+            "activity_time_utc": last.get("activity_time_utc"),
+            "hrmax_bpm_used": float(hrmax),
+            "rhr_bpm_used": float(rhr),
+            "gender_used": str(gender),
+            "trimp_banister": tr_b,
+            "trimp_edwards": tr_e,
+            "method": "TRIMP from HR time series (Banister HRR exponential + Edwards zones).",
+        }
+        return MetricResultExt(name=n, ok=(tr_b is not None or tr_e is not None), data=out, notes=notes)
+
     if n == "vo2_window_run":
         acts = _activities_in_window(ro, window_days=window_days, sport="run", limit=limit)
         if not acts:
             return MetricResultExt(name=n, ok=False, data={"detail": f"No runs found in last {window_days} days."}, notes=[])
         vals: list[float] = []
         vals_gap: list[float] = []
+        downhill_fracs: list[float] = []
+        ascents: list[float] = []
+        descents: list[float] = []
         used = 0
         for a in acts:
             df_stream = _fetch_activity_stream(ro, activity_id=a["activity_id"], since_iso=since_iso)
@@ -501,6 +682,12 @@ def _compute_one(ro: InfluxRO, name: str, ctx: dict[str, Any]) -> "MetricResultE
             xg = v.get("vo2_demand_gap_best5m_ml_kg_min")
             if xg is not None:
                 vals_gap.append(float(xg))
+            if v.get("downhill_fraction_gt3pct") is not None:
+                downhill_fracs.append(float(v["downhill_fraction_gt3pct"]))
+            if v.get("ascent_m_rough") is not None:
+                ascents.append(float(v["ascent_m_rough"]))
+            if v.get("descent_m_rough") is not None:
+                descents.append(float(v["descent_m_rough"]))
         out = {
             "sport": "running",
             "activities_considered": int(len(acts)),
@@ -509,6 +696,31 @@ def _compute_one(ro: InfluxRO, name: str, ctx: dict[str, Any]) -> "MetricResultE
             "vo2_demand_gap_best5m_summary": _aggregate_numeric(vals_gap),
             "notes": "Per-activity best 5-min VO₂ demand; downhill clamped; effort-filtered when HR present; GAP variant if available.",
         }
+
+        # Auto-explanations / anomaly flags
+        explain: list[str] = []
+        raw_mean = out["vo2_demand_best5m_summary"].get("mean") if isinstance(out.get("vo2_demand_best5m_summary"), dict) else None
+        gap_mean = out["vo2_demand_gap_best5m_summary"].get("mean") if isinstance(out.get("vo2_demand_gap_best5m_summary"), dict) else None
+        # Always explain what the two variants mean when GAP is available.
+        if gap_mean is not None:
+            explain.append("This report includes two running VO₂ variants: raw speed+grade (downhill clamped) and a grade-normalised variant using GradeAdjustedSpeed (GAP).")
+
+        # Flag substantive differences between raw and GAP summaries.
+        dn = _diff_note(a=raw_mean, b=gap_mean, label_a="Raw (speed+grade) mean", label_b="GAP-based mean", threshold_abs=3.0)
+        if dn:
+            explain.append(dn)
+            explain.append("Likely cause: terrain (downhills/uphill mix) meaning raw pace is not comparable across routes. Use the GAP-based value for cross-route comparisons.")
+        if downhill_fracs:
+            dfm = float(np.mean(np.asarray(downhill_fracs)))
+            out["downhill_fraction_gt3pct_mean"] = dfm
+            if dfm > 0.20:
+                explain.append(f"Detected substantial downhill running: ~{dfm*100:.0f}% of samples were steeper than -3% grade. Downhill can inflate speed without proportional effort.")
+        if ascents and descents:
+            out["ascent_m_rough_mean"] = float(np.mean(np.asarray(ascents)))
+            out["descent_m_rough_mean"] = float(np.mean(np.asarray(descents)))
+        if explain:
+            out["explain"] = explain
+
         ok = bool(out["vo2_demand_best5m_summary"])
         return MetricResultExt(name=n, ok=ok, data=out, notes=notes)
 
@@ -536,6 +748,11 @@ def _compute_one(ro: InfluxRO, name: str, ctx: dict[str, Any]) -> "MetricResultE
                 vals.append(float(v["lthr_bpm"]))
                 used += 1
         out = {"sport": "running", "activities_considered": int(len(acts)), "activities_used": int(used), "lthr_bpm_summary": _aggregate_numeric(vals)}
+        explain: list[str] = []
+        if used and len(acts) and used < max(3, int(0.6 * len(acts))):
+            explain.append("Many runs were skipped due to missing/low-quality HR data; the LTHR window summary may be biased.")
+        if explain:
+            out["explain"] = explain
         ok = bool(out["lthr_bpm_summary"])
         return MetricResultExt(name=n, ok=ok, data=out, notes=notes)
 
@@ -547,6 +764,14 @@ def _compute_one(ro: InfluxRO, name: str, ctx: dict[str, Any]) -> "MetricResultE
         v = _estimate_cycling_lthr(df_stream)
         v["activity_id"] = last["activity_id"]
         v["activity_time_utc"] = last.get("activity_time_utc")
+        # auto-explain if window seems unsteady / downhill-assisted
+        exp: list[str] = []
+        if v.get("hr_window_std_bpm") is not None and v["hr_window_std_bpm"] > 12:
+            exp.append(f"HR variability in the best-30min window is high (std ~{v['hr_window_std_bpm']:.1f} bpm). This may not represent a steady threshold effort.")
+        if v.get("power_cv") is not None and v["power_cv"] > 0.35:
+            exp.append("Power variability is high (CV > 0.35). If this was a variable ride, the best-30min HR window may not reflect true LTHR.")
+        if exp:
+            v["explain"] = exp
         ok = v.get("lthr_bpm") is not None
         return MetricResultExt(name=n, ok=bool(ok), data=v, notes=notes)
 
@@ -563,6 +788,11 @@ def _compute_one(ro: InfluxRO, name: str, ctx: dict[str, Any]) -> "MetricResultE
                 vals.append(float(v["lthr_bpm"]))
                 used += 1
         out = {"sport": "cycling", "activities_considered": int(len(acts)), "activities_used": int(used), "lthr_bpm_summary": _aggregate_numeric(vals)}
+        explain: list[str] = []
+        if used and len(acts) and used < max(2, int(0.6 * len(acts))):
+            explain.append("Many rides were skipped due to missing/low-quality HR data; the cycling LTHR window summary may be biased.")
+        if explain:
+            out["explain"] = explain
         ok = bool(out["lthr_bpm_summary"])
         return MetricResultExt(name=n, ok=ok, data=out, notes=notes)
 
@@ -664,6 +894,11 @@ def _compute_one(ro: InfluxRO, name: str, ctx: dict[str, Any]) -> "MetricResultE
             }
         )
         out = {"sport": "cycling", **ftp, "power_curve_used": {k: curve.get(k) for k in ["best_mean_power_180s_w", "best_mean_power_720s_w", "best_mean_power_1200s_w"]}}
+        out["explain"] = [
+            "This FTP/CP proxy is power-based and is not directly skewed by gradient the way speed/pace can be.",
+            "Terrain can still affect what efforts you performed (e.g., long climbs enabling sustained work), but the estimate is derived from power.",
+            "If the window contains no sustained hard efforts, the estimate will be conservative.",
+        ]
         ok = ftp.get("ftp_w") is not None
         return MetricResultExt(name=n, ok=ok, data=out, notes=notes)
 
@@ -716,6 +951,10 @@ def _compute_one(ro: InfluxRO, name: str, ctx: dict[str, Any]) -> "MetricResultE
             "critical_speed_pace_min_per_km": _pace_min_per_km(cs) if cs is not None else None,
             "method": "CS from aggregated best 3-min and 12-min mean speed (prefers GradeAdjustedSpeed; effort-filtered by HR if present).",
         }
+        out["explain"] = [
+            "Critical Speed is estimated from the best sustained 3–12 minute efforts in the window; it can differ materially from 30-day averages over easy days.",
+            "If GradeAdjustedSpeed is present it is preferred (reduces hill/downhill bias); otherwise CS is based on raw speed and may be more route-dependent.",
+        ]
         return MetricResultExt(name=n, ok=cs is not None, data=out, notes=notes)
 
     if n == "threshold_window_all":
@@ -760,6 +999,129 @@ def _compute_one(ro: InfluxRO, name: str, ctx: dict[str, Any]) -> "MetricResultE
         ok = bool((run or {}).get("vo2_demand_best5m_summary")) or bool((ride or {}).get("vo2_demand_best5m_summary"))
         return MetricResultExt(name=n, ok=ok, data=out, notes=notes)
 
+    if n == "trimp_window_all":
+        prof = _hr_profile(ro, since_iso=since_iso)
+        hrmax = prof.get("hrmax_bpm")
+        rhr = prof.get("rhr_bpm")
+        gender = prof.get("gender") or "male"
+        if not hrmax or not rhr:
+            return MetricResultExt(name=n, ok=False, data={"detail": "Missing HRmax/RHR from DailyStats; cannot compute Banister TRIMP reliably.", **prof}, notes=[])
+
+        def _trimp_for_sport(sport_filter: str) -> dict[str, Any]:
+            acts = _activities_in_window(ro, window_days=window_days, sport=sport_filter, limit=limit)
+            vals_b: list[float] = []
+            vals_e: list[float] = []
+            used = 0
+            for a in acts:
+                df_stream = _fetch_activity_stream(ro, activity_id=a["activity_id"], since_iso=since_iso)
+                if df_stream.empty or "HeartRate" not in df_stream.columns:
+                    continue
+                hr = pd.to_numeric(df_stream["HeartRate"], errors="coerce").to_numpy(dtype=float)
+                t_s = df_stream["time"].astype("int64").to_numpy(dtype=float) / 1e9
+                dt = _dt_seconds(t_s)
+                tb = _banister_trimp_series(dt, hr, float(rhr), float(hrmax), str(gender))
+                te = _edwards_trimp_series(dt, hr, float(hrmax))
+                if tb is not None:
+                    vals_b.append(float(tb))
+                if te is not None:
+                    vals_e.append(float(te))
+                if tb is not None or te is not None:
+                    used += 1
+            return {
+                "activities_considered": int(len(acts)),
+                "activities_used": int(used),
+                "trimp_banister_summary": _aggregate_numeric(vals_b),
+                "trimp_edwards_summary": _aggregate_numeric(vals_e),
+            }
+
+        run = _trimp_for_sport("run")
+        ride = _trimp_for_sport("cycle|ride|bike|cycling")
+        out = {
+            "running": {"sport": "running", **run},
+            "cycling": {"sport": "cycling", **ride},
+            "hrmax_bpm_used": float(hrmax),
+            "rhr_bpm_used": float(rhr),
+            "gender_used": str(gender),
+            "method": "TRIMP computed per activity from HR stream; window summaries show distribution across activities.",
+        }
+        ok = bool(run.get("trimp_banister_summary")) or bool(run.get("trimp_edwards_summary")) or bool(ride.get("trimp_banister_summary")) or bool(ride.get("trimp_edwards_summary"))
+        return MetricResultExt(name=n, ok=ok, data=out, notes=notes)
+
+    if n == "tss_last_ride" or n == "tss_window_ride":
+        # Prefer AgentDerivedActivity if it exists (already writes tss/np/if if power is present),
+        # otherwise compute directly from power stream for the selected ride(s).
+        if n == "tss_last_ride":
+            last = _last_activity(ro, window_days=window_days, sport="cycle|ride|bike|cycling")
+            if not last.get("ok"):
+                return MetricResultExt(name=n, ok=False, data={"detail": last.get("note")}, notes=[])
+            df_stream = _fetch_activity_stream(ro, activity_id=last["activity_id"], since_iso=since_iso)
+            if df_stream.empty or "Power" not in df_stream.columns:
+                return MetricResultExt(name=n, ok=False, data={"detail": "Missing Power stream for this activity."}, notes=[])
+            curve = _power_curve(df_stream, durations_s=[1200])
+            ftp = _estimate_ftp_from_power_curve(curve)
+            ftp_w = ftp.get("ftp_w")
+            p = pd.to_numeric(df_stream["Power"], errors="coerce").to_numpy(dtype=float)
+            p = np.where(np.isfinite(p) & (p > 0), p, 0.0)
+            # NP
+            ps = pd.Series(p)
+            p30 = ps.rolling(window=30, min_periods=10, center=True).mean().to_numpy(dtype=float)
+            p30 = np.where(np.isfinite(p30) & (p30 > 0), p30, 0.0)
+            np_w = float(np.power(np.mean(np.power(p30, 4.0)), 0.25)) if np.any(p30 > 0) else None
+            t_s = df_stream["time"].astype("int64").to_numpy(dtype=float) / 1e9
+            dur_s = float(np.sum(_dt_seconds(t_s)))
+            if ftp_w and np_w and ftp_w > 0:
+                if_ = float(np_w) / float(ftp_w)
+                tss = float((dur_s * float(np_w) * float(if_)) / (float(ftp_w) * 3600.0) * 100.0) if dur_s > 0 else None
+            else:
+                if_ = None
+                tss = None
+            out = {
+                "sport": "cycling",
+                "activity_id": last["activity_id"],
+                "activity_time_utc": last.get("activity_time_utc"),
+                "ftp_w_used": ftp_w,
+                "np_w": np_w,
+                "if": if_,
+                "tss": tss,
+                "method": "TSS = (sec * NP * IF) / (FTP * 3600) * 100; NP from 30s rolling power (4th power). FTP proxy from best20*0.95.",
+            }
+            ok = tss is not None
+            return MetricResultExt(name=n, ok=ok, data=out, notes=notes)
+
+        # window
+        acts = _activities_in_window(ro, window_days=window_days, sport="cycle|ride|bike|cycling", limit=limit)
+        if not acts:
+            return MetricResultExt(name=n, ok=False, data={"detail": f"No rides found in last {window_days} days."}, notes=[])
+        vals_tss: list[float] = []
+        used = 0
+        for a in acts:
+            df_stream = _fetch_activity_stream(ro, activity_id=a["activity_id"], since_iso=since_iso)
+            if df_stream.empty or "Power" not in df_stream.columns:
+                continue
+            curve = _power_curve(df_stream, durations_s=[1200])
+            ftp = _estimate_ftp_from_power_curve(curve)
+            ftp_w = ftp.get("ftp_w")
+            if not ftp_w:
+                continue
+            p = pd.to_numeric(df_stream["Power"], errors="coerce").to_numpy(dtype=float)
+            p = np.where(np.isfinite(p) & (p > 0), p, 0.0)
+            ps = pd.Series(p)
+            p30 = ps.rolling(window=30, min_periods=10, center=True).mean().to_numpy(dtype=float)
+            p30 = np.where(np.isfinite(p30) & (p30 > 0), p30, 0.0)
+            np_w = float(np.power(np.mean(np.power(p30, 4.0)), 0.25)) if np.any(p30 > 0) else None
+            if np_w is None:
+                continue
+            t_s = df_stream["time"].astype("int64").to_numpy(dtype=float) / 1e9
+            dur_s = float(np.sum(_dt_seconds(t_s)))
+            if_ = float(np_w) / float(ftp_w)
+            tss = float((dur_s * float(np_w) * float(if_)) / (float(ftp_w) * 3600.0) * 100.0) if dur_s > 0 else None
+            if tss is not None:
+                vals_tss.append(float(tss))
+                used += 1
+        out = {"sport": "cycling", "activities_considered": int(len(acts)), "activities_used": int(used), "tss_summary": _aggregate_numeric(vals_tss), "method": "Per-ride TSS using NP/FTP proxy; summary across rides."}
+        ok = bool(out.get("tss_summary"))
+        return MetricResultExt(name=n, ok=ok, data=out, notes=notes)
+
     return MetricResultExt(name=n, ok=False, data={"detail": f"Unknown metric '{name}'. See /metrics/catalog."}, notes=[])
 
 
@@ -792,11 +1154,28 @@ def render_markdown(result: dict[str, Any]) -> str:
             lines.append(f"{indent}- **detail**: missing")
             return
         # headline keys
-        for k in ["sport", "activities_considered", "activities_used", "weight_kg_used", "cycling_gross_eff_used", "method", "detail", "note", "notes"]:
+        for k in [
+            "sport",
+            "activities_considered",
+            "activities_used",
+            "weight_kg_used",
+            "cycling_gross_eff_used",
+            "downhill_fraction_gt3pct_mean",
+            "ascent_m_rough_mean",
+            "descent_m_rough_mean",
+            "method",
+            "detail",
+            "note",
+            "notes",
+        ]:
             if k in d and d.get(k) is not None and not isinstance(d.get(k), (dict, list)):
                 lines.append(f"{indent}- **{k}**: {d.get(k)}")
+        if isinstance(d.get("explain"), list) and d["explain"]:
+            lines.append(f"{indent}- **explain**:")
+            for msg in d["explain"][:8]:
+                lines.append(f"{indent}  - {msg}")
         # summaries
-        for sk in ["vo2_demand_best5m_summary", "vo2_demand_gap_best5m_summary", "lthr_bpm_summary"]:
+        for sk in ["vo2_demand_best5m_summary", "vo2_demand_gap_best5m_summary", "lthr_bpm_summary", "trimp_banister_summary", "trimp_edwards_summary", "tss_summary"]:
             if sk in d and isinstance(d[sk], dict) and d[sk]:
                 lines.append(f"{indent}- **{sk}**:")
                 for kk, vv in d[sk].items():
@@ -834,7 +1213,7 @@ def render_markdown(result: dict[str, Any]) -> str:
                     lines.append(f"- **{k}**: {data.get(k)}")
 
             # summary dicts
-            for sk in ["vo2_demand_best5m_summary", "vo2_demand_gap_best5m_summary", "lthr_bpm_summary"]:
+            for sk in ["vo2_demand_best5m_summary", "vo2_demand_gap_best5m_summary", "lthr_bpm_summary", "trimp_banister_summary", "trimp_edwards_summary", "tss_summary"]:
                 if sk in data and isinstance(data[sk], dict) and data[sk]:
                     lines.append(f"- **{sk}**:")
                     for kk, vv in data[sk].items():
@@ -850,6 +1229,10 @@ def render_markdown(result: dict[str, Any]) -> str:
                     _render_dict_block("Running", data["running"], indent="")
                 if isinstance(data.get("cycling"), dict):
                     _render_dict_block("Cycling", data["cycling"], indent="")
+            if isinstance(data.get("explain"), list) and data["explain"]:
+                lines.append("- **explain**:")
+                for msg in data["explain"][:8]:
+                    lines.append(f"  - {msg}")
         lines.append("")
     return "\n".join(lines).strip()
 

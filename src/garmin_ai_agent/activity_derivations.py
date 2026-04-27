@@ -240,6 +240,39 @@ def derive_activity_metrics_from_streams(
                 fields["vo2max_est_cycling"] = None
                 fields["vo2max_est_cycling_method"] = "insufficient_HRmax"
 
+        # Cycling load metrics (TSS-style) using power time series.
+        # This is intentionally self-contained per activity, so it can be written to AgentDerivedActivity
+        # and visualized in Grafana without additional configuration.
+        try:
+            p = np.asarray(power, dtype=float)
+            p = np.where(np.isfinite(p) & (p > 0), p, 0.0)  # coasting/missing as 0W
+            # FTP proxy from this activity (best 20-min mean)
+            p20, _, _ = _rolling_best_mean(p, t_s, window_s=1200.0)
+            ftp_w = float(p20) * 0.95 if (p20 is not None and np.isfinite(p20) and p20 > 0) else None
+            fields["ftp_est_w_activity"] = ftp_w
+            fields["ftp_est_method_activity"] = "0.95 * best 20-min mean power (within activity)"
+
+            # Normalized Power (NP): 30s rolling mean, 4th-power average, 4th-root
+            if p.size >= 10 and np.any(p > 0):
+                # approximate dt-weighting by resampling to median dt via rolling on samples
+                # Use time-based rolling via pandas over the existing sample spacing.
+                ps = pd.Series(p)
+                roll = ps.rolling(window=30, min_periods=10, center=True).mean()
+                p30 = roll.to_numpy(dtype=float)
+                p30 = np.where(np.isfinite(p30) & (p30 > 0), p30, 0.0)
+                np_w = float(np.power(np.mean(np.power(p30, 4.0)), 0.25)) if np.any(p30 > 0) else None
+                fields["np_w"] = np_w
+
+                if ftp_w is not None and np_w is not None and ftp_w > 0:
+                    intensity = float(np_w) / float(ftp_w)
+                    fields["if"] = float(np.clip(intensity, 0.0, 2.0))
+                    dur_s = float(fields.get("duration_s_stream") or np.sum(dt[np.isfinite(dt) & (dt > 0)]))
+                    # Standard cycling TSS definition:
+                    # TSS = (sec * NP * IF) / (FTP * 3600) * 100
+                    fields["tss"] = float((dur_s * float(np_w) * float(fields["if"])) / (float(ftp_w) * 3600.0) * 100.0) if dur_s > 0 else None
+        except Exception:
+            pass
+
     # TRIMP (raw HR time series)
     if hr.size and hrmax_bpm is not None and rhr_bpm is not None:
         g = (gender or "male").strip().lower()
