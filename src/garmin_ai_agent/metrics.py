@@ -324,6 +324,70 @@ def _activities_in_window(ro: InfluxRO, *, window_days: int, sport: str | None, 
     return out
 
 
+def _hr_percentile_window(
+    ro: InfluxRO,
+    *,
+    window_days: int,
+    activity_limit: int,
+    sport: str | None,
+    percentile: float,
+) -> dict[str, Any]:
+    """
+    Compute HR percentile directly from raw ActivityGPS.HeartRate streams for recent activities.
+    This avoids "pre-prepping" derived tables when the raw data exists.
+    """
+    since_iso = _iso(_utc_now() - timedelta(days=int(window_days)))
+    acts = _activities_in_window(ro, window_days=window_days, sport=sport, limit=activity_limit)
+    if not acts:
+        return {"ok": False, "detail": "No activities found for that sport/window.", "count_samples": 0, "activities_considered": 0}
+
+    hr_all: list[float] = []
+    used = 0
+    max_total_samples = 200_000
+    max_samples_per_activity = 20_000
+    for a in acts:
+        df_stream = _fetch_activity_stream(ro, activity_id=a["activity_id"], since_iso=since_iso)
+        if df_stream.empty or "HeartRate" not in df_stream.columns:
+            continue
+        hr = pd.to_numeric(df_stream["HeartRate"], errors="coerce").to_numpy(dtype=float)
+        hr = hr[np.isfinite(hr) & (hr > 0)]
+        if hr.size:
+            # Downsample large streams to avoid OOM / huge payloads.
+            if hr.size > max_samples_per_activity:
+                step = int(np.ceil(hr.size / max_samples_per_activity))
+                hr = hr[::step]
+            # Stop if we've accumulated enough samples.
+            if len(hr_all) + int(hr.size) > max_total_samples:
+                remaining = max_total_samples - len(hr_all)
+                if remaining > 0:
+                    hr_all.extend([float(x) for x in hr[:remaining]])
+                used += 1
+                break
+            hr_all.extend([float(x) for x in hr])
+            used += 1
+
+    if not hr_all:
+        return {
+            "ok": False,
+            "detail": "No usable HeartRate samples found in ActivityGPS streams for this window.",
+            "activities_considered": int(len(acts)),
+            "activities_used": int(used),
+            "count_samples": 0,
+        }
+
+    v = np.asarray(hr_all, dtype=float)
+    p = float(np.percentile(v, float(percentile) * 100.0))
+    return {
+        "ok": True,
+        "percentile": float(percentile),
+        "hr_percentile_bpm": float(p),
+        "count_samples": int(v.size),
+        "activities_considered": int(len(acts)),
+        "activities_used": int(used),
+        "method": "Computed directly from raw ActivityGPS.HeartRate samples over recent activities (no pre-derived table).",
+    }
+
+
 def _aggregate_numeric(values: list[float]) -> dict[str, float]:
     v = np.asarray(values, dtype=float)
     v = v[np.isfinite(v)]
@@ -506,6 +570,11 @@ def catalog() -> list[dict[str, Any]]:
             "name": "tss_window_ride",
             "description": "Cycling TSS summary over window (per-ride NP/IF/TSS computed and summarised).",
             "requires": ["ActivitySummary", "ActivityGPS.Power"],
+        },
+        {
+            "name": "hr_p95_window_all",
+            "description": "95th percentile HR over the window from raw ActivityGPS.HeartRate across running + cycling.",
+            "requires": ["ActivitySummary", "ActivityGPS.HeartRate"],
         },
     ]
 
@@ -1122,6 +1191,15 @@ def _compute_one(ro: InfluxRO, name: str, ctx: dict[str, Any]) -> "MetricResultE
         ok = bool(out.get("tss_summary"))
         return MetricResultExt(name=n, ok=ok, data=out, notes=notes)
 
+    if n == "hr_p95_window_all":
+        run = _hr_percentile_window(ro, window_days=window_days, activity_limit=limit, sport="run", percentile=0.95)
+        ride = _hr_percentile_window(ro, window_days=window_days, activity_limit=limit, sport="cycle|ride|bike|cycling", percentile=0.95)
+        # combined (all samples)
+        all_ = _hr_percentile_window(ro, window_days=window_days, activity_limit=limit, sport=None, percentile=0.95)
+        out = {"running": {"sport": "running", **run}, "cycling": {"sport": "cycling", **ride}, "all": all_, "note": "If 'all' differs from per-sport, it's because running/cycling HR distributions differ."}
+        ok = bool(all_.get("ok"))
+        return MetricResultExt(name=n, ok=ok, data=out, notes=notes)
+
     return MetricResultExt(name=n, ok=False, data={"detail": f"Unknown metric '{name}'. See /metrics/catalog."}, notes=[])
 
 
@@ -1158,6 +1236,9 @@ def render_markdown(result: dict[str, Any]) -> str:
             "sport",
             "activities_considered",
             "activities_used",
+            "percentile",
+            "hr_percentile_bpm",
+            "count_samples",
             "weight_kg_used",
             "cycling_gross_eff_used",
             "downhill_fraction_gt3pct_mean",
@@ -1199,6 +1280,9 @@ def render_markdown(result: dict[str, Any]) -> str:
                 "sport",
                 "activity_time_utc",
                 "activity_id",
+                "percentile",
+                "hr_percentile_bpm",
+                "count_samples",
                 "vo2_demand_best5m_ml_kg_min",
                 "vo2_demand_gap_best5m_ml_kg_min",
                 "lthr_bpm",

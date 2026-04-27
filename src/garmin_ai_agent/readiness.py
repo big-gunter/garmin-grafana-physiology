@@ -175,6 +175,51 @@ def build_snapshot(ro: InfluxRO, *, window_days: int = 42) -> Snapshot:
             "cycling": _summarise(is_ride, "vo2_demand_best5m_cycling", "vo2max_est_cycling"),
         }
 
+    def _agent_load_summary(df: pd.DataFrame) -> dict[str, Any]:
+        """
+        Summaries from AgentDerivedActivity:
+          - TRIMP: trimp_banister, trimp_edwards
+          - TSS: tss (cycling)
+        """
+        if df is None or df.empty:
+            return {"has_agent_derived_activity": False, "note": "No AgentDerivedActivity rows found in window."}
+
+        d = df.copy()
+        if "time" in d.columns:
+            d["time"] = pd.to_datetime(d["time"], errors="coerce", utc=True)
+            d = d.dropna(subset=["time"]).sort_values("time")
+        sport = d["sport_tag"].astype(str).str.lower() if "sport_tag" in d.columns else pd.Series([""] * len(d), index=d.index)
+
+        def _summ(col: str, mask: pd.Series | None = None) -> dict[str, Any]:
+            dd = d[mask] if mask is not None else d
+            if col not in dd.columns:
+                return {"count": 0}
+            s = pd.to_numeric(dd[col], errors="coerce").dropna()
+            if s.empty:
+                return {"count": 0}
+            return {"count": int(s.size), "mean": float(s.mean()), "p50": float(s.median()), "p90": float(s.quantile(0.9)), "best": float(s.max())}
+
+        is_ride = sport.str.contains("cycling|biking|cyclocross|gravel|mountain", na=False, regex=True)
+        is_run = sport.str.contains("running", na=False)
+
+        return {
+            "has_agent_derived_activity": True,
+            "running": {
+                "trimp_banister": _summ("trimp_banister", is_run),
+                "trimp_edwards": _summ("trimp_edwards", is_run),
+            },
+            "cycling": {
+                "trimp_banister": _summ("trimp_banister", is_ride),
+                "trimp_edwards": _summ("trimp_edwards", is_ride),
+                "tss": _summ("tss", is_ride),
+            },
+            "methods": {
+                "trimp_banister": "Banister TRIMP computed from HR time series (HRR-based exponential weighting).",
+                "trimp_edwards": "Edwards TRIMP computed from time-in-zone using %HRmax weights.",
+                "tss": "Cycling TSS computed from power stream using NP/IF and an activity-level FTP proxy.",
+            },
+        }
+
     # Simple load from raw ActivitySummary: acute (7d) vs chronic (28d) moving duration
     acute_7d_s = None
     chronic_28d_s = None
@@ -259,6 +304,8 @@ def build_snapshot(ro: InfluxRO, *, window_days: int = 42) -> Snapshot:
         "sleep_time_s": _safe_float(sleep_time_s),
         # Agent-calculated VO₂/VO₂max summaries from raw activity streams.
         "agent_vo2": _agent_vo2_summary(df_agent_act),
+        # Agent-derived load metrics from raw streams (TRIMP/TSS).
+        "agent_load": _agent_load_summary(df_agent_act),
         "acute_7d_moving_s": _safe_float(acute_7d_s),
         "chronic_28d_moving_s": _safe_float(chronic_28d_s),
         "load_ratio": _safe_float(load_ratio),

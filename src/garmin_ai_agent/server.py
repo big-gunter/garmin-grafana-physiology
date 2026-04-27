@@ -292,6 +292,36 @@ def web_ui():
         font-size:12px;
         color: rgba(148,163,184,0.85);
       }
+      .chat{
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+        height: calc(100vh - 240px);
+        min-height: 360px;
+        max-height: 70vh;
+        overflow-y:auto;
+        overflow-x:hidden;
+        padding: 2px;
+      }
+      .msg{
+        border:1px solid rgba(148,163,184,0.16);
+        border-radius: 14px;
+        padding: 12px;
+        background: rgba(18,18,18,0.50);
+      }
+      .msg .meta{
+        font-size:12px;
+        letter-spacing:0.12em;
+        text-transform:uppercase;
+        color: rgba(148,163,184,0.9);
+        margin-bottom: 8px;
+      }
+      .msg.user{
+        background: rgba(18,18,18,0.38);
+      }
+      .msg.assistant{
+        background: rgba(18,18,18,0.52);
+      }
     </style>
   </head>
   <body>
@@ -358,7 +388,12 @@ def web_ui():
             <div class="tab" id="tabActivity">Activity log</div>
             <div class="tab" id="tabMetrics">Metrics</div>
           </div>
-          <pre id="out">Run an action to see results.</pre>
+          <div id="chat" class="chat">
+            <div class="msg assistant">
+              <div class="meta">Assistant</div>
+              <div style="color:rgba(226,232,240,0.92)">Ask a question or run an action to start.</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -366,11 +401,30 @@ def web_ui():
     <script>
       function byId(id){ return document.getElementById(id); }
 
+      function chatEl(){ return byId("chat"); }
+
+      function scrollChatToBottom(){
+        const c = chatEl();
+        if (!c) return;
+        c.scrollTop = c.scrollHeight;
+      }
+
+      function appendMsg(role, html){
+        const c = chatEl();
+        if (!c) return null;
+        const el = document.createElement("div");
+        el.className = "msg " + role;
+        const who = role === "user" ? "You" : "Assistant";
+        el.innerHTML = `<div class="meta">${who}</div>` + html;
+        c.appendChild(el);
+        scrollChatToBottom();
+        return el;
+      }
+
       function safeSetOut(msg){
         try { setOut(msg); }
         catch (e) {
-          const pre = byId("out");
-          if (pre) pre.textContent = String(msg);
+          appendMsg("assistant", `<div style="color:rgba(226,232,240,0.92)">${escapeHtml(String(msg))}</div>`);
         }
       }
 
@@ -420,23 +474,6 @@ def web_ui():
           .replace(/"/g,"&quot;")
           .replace(/'/g,"&#39;");
       }
-      function parseSections(md){
-        const lines = String((md === null || md === undefined) ? "" : md).split("\\n");
-        const sections = [];
-        let cur = { title: "Insights", body: [] };
-        for (const ln of lines){
-          const m = ln.match(/^#{2,3}\\s+(.*)$/);
-          if (m){
-            if (cur.body.length || cur.title) sections.push(cur);
-            cur = { title: m[1].trim(), body: [] };
-          } else {
-            cur.body.push(ln);
-          }
-        }
-        sections.push(cur);
-        return sections.filter(s => (s.title || "").trim() || s.body.join("").trim());
-      }
-
       function mdToHtml(md){
         // minimal markdown: bullets, bold, code, paragraphs (no tables).
         const esc = escapeHtml;
@@ -467,16 +504,8 @@ def web_ui():
 
       function renderInsights(md){
         if (!md || typeof md !== "string") return null;
-        const sections = parseSections(md);
-        const cards = sections.map((s, idx) => {
-          const title = escapeHtml(s.title || (idx === 0 ? "Insights" : ""));
-          const body = mdToHtml(s.body.join("\\n"));
-          return `<div style="border:1px solid rgba(148,163,184,0.16);border-radius:14px;background:rgba(18,18,18,0.50);padding:12px;margin-bottom:12px">
-            <div style="font-size:14px;font-weight:800;margin-bottom:8px">${title}</div>
-            ${body}
-          </div>`;
-        }).join("");
-        return cards;
+        const body = mdToHtml(md);
+        return `<div>${body}</div>`;
       }
 
       function renderReadiness(x){
@@ -517,7 +546,6 @@ def web_ui():
       }
 
       function setOut(x) {
-        const pre = document.getElementById("out");
         // Prefer formatted rendering over raw JSON.
         const insightsMd = (x && typeof x.insights === "string") ? x.insights : null;
         const insightsCards = renderInsights(insightsMd);
@@ -526,32 +554,37 @@ def web_ui():
         const errDetail = (x && typeof x === "object") ? (x.detail || x.error || x.message) : null;
 
         if (insightsCards) {
-          pre.innerHTML = insightsCards + `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw response</summary><pre style="min-height:0;margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>`;
+          appendMsg("assistant", insightsCards + `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw response</summary><pre style="min-height:0;margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>`);
           return;
         }
         if (readinessCard) {
-          pre.innerHTML = readinessCard + `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw response</summary><pre style="min-height:0;margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>`;
+          appendMsg("assistant", readinessCard + `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw response</summary><pre style="min-height:0;margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>`);
           return;
         }
         if (snapshotCard) {
-          pre.innerHTML = snapshotCard;
+          appendMsg("assistant", snapshotCard);
           return;
         }
         if (errDetail) {
-          pre.innerHTML = `<div style="border:1px solid rgba(245,158,11,0.22);border-radius:14px;background:rgba(18,18,18,0.55);padding:12px">
+          appendMsg("assistant", `<div style="border:1px solid rgba(245,158,11,0.22);border-radius:14px;background:rgba(18,18,18,0.55);padding:12px">
             <div style="font-size:14px;font-weight:800;margin-bottom:8px">Error</div>
             ${mdToHtml(`- **Detail**: ${String(errDetail)}`)}
             <details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw error</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>
-          </div>`;
+          </div>`);
           return;
         }
-        pre.textContent = (typeof x === "string") ? x : JSON.stringify(x, null, 2);
+        appendMsg("assistant", `<div style="color:rgba(226,232,240,0.92)">${escapeHtml((typeof x === "string") ? x : JSON.stringify(x, null, 2))}</div>`);
       }
       function getWindowDays() { return parseInt(document.getElementById("windowDays").value || "42", 10); }
 
       async function runAction(label, fn){
         setBusy(true, label);
-        try { setOut(await fn()); }
+        const pending = appendMsg("assistant", `<div style="color:rgba(148,163,184,0.95)">${escapeHtml(label)}</div>`);
+        try {
+          const res = await fn();
+          if (pending) pending.remove();
+          setOut(res);
+        }
         catch(e) { setOut(e); }
         finally { setBusy(false); }
       }
@@ -564,6 +597,8 @@ def web_ui():
       }
 
       function submitInsights(){
+        const pv = promptValue();
+        if (pv) appendMsg("user", `<div style="color:rgba(226,232,240,0.92)">${escapeHtml(pv)}</div>`);
         return runAction("Insights…", () => call("/insights", { window_days: getWindowDays(), prompt: promptValue() }));
       }
 
@@ -573,8 +608,15 @@ def web_ui():
       byId("btnStoreInsights").onclick = () => runAction("Storing…", () => call("/insights/store", { window_days: getWindowDays(), prompt: promptValue() }));
       byId("btnGrafana").onclick = () => runAction("Writing dashboard…", () => call("/grafana/write_dashboard_file", {}));
       byId("btnGrafanaPush").onclick = () => runAction("Pushing dashboard…", () => call("/grafana/push_dashboard_api", {}));
-      byId("btnDeriveAll").onclick = () => runAction("Deriving metrics…", () => call("/activities/derive_all", { window_days: getWindowDays(), limit: 500 }));
-      byId("btnMetrics").onclick = () => runAction("Computing metrics…", () => call("/metrics/query", { window_days: getWindowDays(), query: byId("prompt").value || "" }));
+      byId("btnDeriveAll").onclick = () => runAction("Deriving metrics…", async () => {
+        const res = await call("/activities/derive_all", { window_days: getWindowDays(), limit: 500 });
+        return res;
+      });
+      byId("btnMetrics").onclick = () => {
+        const q = byId("prompt").value || "";
+        if (q && q.trim()) appendMsg("user", `<div style="color:rgba(226,232,240,0.92)">${escapeHtml(q)}</div>`);
+        return runAction("Computing metrics…", () => call("/metrics/query", { window_days: getWindowDays(), query: q }));
+      };
 
       byId("btnClear").onclick = () => { byId("prompt").value = ""; byId("prompt").focus(); };
 
@@ -805,7 +847,10 @@ def insights_store(req: InsightsRequest, authorization: str | None = Header(defa
 def derive_all_activities(req: DeriveActivitiesRequest, authorization: str | None = Header(default=None)):
     _require_auth(authorization)
     if not cfg.allow_db_write:
-        raise HTTPException(status_code=400, detail="AI_ALLOW_DB_WRITE is false; refusing to write to DB")
+        raise HTTPException(
+            status_code=400,
+            detail="AI_ALLOW_DB_WRITE is false; refusing to write to DB. Set AI_ALLOW_DB_WRITE=true in .env and restart the stack to enable Derive metrics.",
+        )
     if cfg.influx_version != "1":
         raise HTTPException(status_code=400, detail="Activity derivations currently support InfluxDB v1 only")
 
@@ -971,6 +1016,7 @@ def metrics_query(req: MetricsQueryRequest, authorization: str | None = Header(d
     names = [m["name"] for m in cat]
 
     picked: list[str] = []
+    forced = False
     # Keyword fallback (works offline)
     if ("vo2" in q or "v02" in q) and ("cycle" in q or "bike" in q or "ride" in q or "cycling" in q):
         picked.append("vo2_window_ride" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "vo2_last_ride")
@@ -996,6 +1042,9 @@ def metrics_query(req: MetricsQueryRequest, authorization: str | None = Header(d
             picked.append("trimp_last_run")
     if "tss" in q:
         picked.append("tss_window_ride" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "tss_last_ride")
+    if ("p95" in q or "95th" in q or "percentile" in q) and ("hr" in q or "heart rate" in q):
+        picked.append("hr_p95_window_all")
+        forced = True
     if ("all" in q or "combined" in q) and ("vo2" in q or "v02" in q):
         picked = ["vo2_window_all" if ("30" in q or "days" in q or "window" in q or "weeks" in q) else "vo2_window_all"]
     if ("all" in q or "combined" in q) and ("lthr" in q or "threshold hr" in q or "lactate threshold" in q):
@@ -1004,7 +1053,8 @@ def metrics_query(req: MetricsQueryRequest, authorization: str | None = Header(d
         picked = ["threshold_window_all"]
 
     # If Anthropic exists, let it choose from the catalog (but keep it safe: only allow names we know)
-    if cfg.anthropic_api_key:
+    # Do not override "forced" keyword picks (e.g. HR percentiles).
+    if cfg.anthropic_api_key and not forced:
         try:
             client = create_client(
                 LLMConfig(

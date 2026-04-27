@@ -7,6 +7,7 @@ This document defines the model the agent should reason within. It is intentiona
 - Trail running
 - Cycling (road)
 - Gravel cycling
+- Inline Skating
 - Strength training (gym)
 
 ### Primary signals (inputs from DB)
