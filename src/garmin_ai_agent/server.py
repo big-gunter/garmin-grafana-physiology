@@ -135,6 +135,10 @@ def web_ui():
         background: var(--good);
         box-shadow: 0 0 0 3px rgba(34,197,94,0.15);
       }
+      .dot.busy{
+        background: var(--accent2);
+        box-shadow: 0 0 0 3px rgba(96,165,250,0.15);
+      }
       .banner{
         display:flex;
         gap:10px;
@@ -214,6 +218,11 @@ def web_ui():
         color: rgba(15,23,42,0.95);
         font-weight: 700;
       }
+      button:disabled{
+        opacity: 0.55;
+        cursor: not-allowed;
+        transform: none !important;
+      }
       button.ghost{
         background: rgba(2,6,23,0.35);
       }
@@ -247,6 +256,11 @@ def web_ui():
         border-radius: 14px;
         min-height: 260px;
       }
+      .hint{
+        margin-top:8px;
+        font-size:12px;
+        color: rgba(148,163,184,0.85);
+      }
     </style>
   </head>
   <body>
@@ -259,7 +273,7 @@ def web_ui():
           </div>
           <div class="subtitle">Browser UI calling the agent API. Metrics computed from raw Garmin-imported data in InfluxDB.</div>
         </div>
-        <div class="status"><span class="dot"></span> Ready</div>
+        <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Ready</span></div>
       </header>
 
       <div class="banner">
@@ -295,7 +309,15 @@ def web_ui():
 
           <div style="height: 12px;"></div>
           <h2>Prompt / context</h2>
-          <textarea id="prompt" placeholder="e.g., I feel a bit flat today; race in 8 weeks; what should I do?"></textarea>
+          <form id="promptForm">
+            <textarea id="prompt" placeholder="e.g., I feel a bit flat today; race in 8 weeks; what should I do?"></textarea>
+            <div style="height: 10px;"></div>
+            <div class="actions">
+              <button class="primary" id="btnSubmitPrompt" type="submit">Send prompt (Insights)</button>
+              <button class="ghost" id="btnClear" type="button">Clear</button>
+            </div>
+            <div class="hint">Tip: press <strong>Enter</strong> to send, <strong>Shift+Enter</strong> for a newline.</div>
+          </form>
         </div>
 
         <div class="panel">
@@ -304,12 +326,43 @@ def web_ui():
             <div class="tab" id="tabActivity">Activity log</div>
             <div class="tab" id="tabMetrics">Metrics</div>
           </div>
-          <pre id="out">{}</pre>
+          <pre id="out">Run an action to see results.</pre>
         </div>
       </div>
     </div>
 
     <script>
+      function byId(id){ return document.getElementById(id); }
+
+      function safeSetOut(msg){
+        try { setOut(msg); }
+        catch (e) {
+          const pre = byId("out");
+          if (pre) pre.textContent = String(msg);
+        }
+      }
+
+      // Surface JS errors in the Output pane (helps debug "nothing happens")
+      window.addEventListener("error", function(ev){
+        const m = ev && ev.message ? ev.message : "Unknown JS error";
+        safeSetOut({ error: "UI script error", detail: m });
+      });
+      window.addEventListener("unhandledrejection", function(ev){
+        const r = ev && ev.reason ? ev.reason : "Unhandled promise rejection";
+        safeSetOut({ error: "UI promise rejection", detail: String(r && (r.detail || r.message) ? (r.detail || r.message) : r) });
+      });
+
+      function setBusy(busy, msg){
+        const dot = byId("statusDot");
+        const text = byId("statusText");
+        if (dot) dot.classList.toggle("busy", !!busy);
+        if (text) text.textContent = busy ? (msg || "Working…") : "Ready";
+        for (const id of ["btnInsights","btnSnapshot","btnReadiness","btnDeriveAll","btnStoreInsights","btnGrafana","btnGrafanaPush","btnSubmitPrompt","btnClear"]) {
+          const el = byId(id);
+          if (el) el.disabled = !!busy;
+        }
+      }
+
       function headers() {
         const t = document.getElementById("authToken").value.trim();
         const h = { "Content-Type": "application/json" };
@@ -317,7 +370,9 @@ def web_ui():
         return h;
       }
       async function call(path, body) {
-        const res = await fetch(path, { method: "POST", headers: headers(), body: JSON.stringify(body) });
+        // Use an absolute URL so this works behind reverse proxies/base paths.
+        const url = new URL(path, window.location.href).toString();
+        const res = await fetch(url, { method: "POST", headers: headers(), body: JSON.stringify(body) });
         const txt = await res.text();
         let json;
         try { json = JSON.parse(txt); } catch { json = { raw: txt }; }
@@ -325,10 +380,16 @@ def web_ui():
         return json;
       }
       function escapeHtml(s){
-        return String(s ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll("\"","&quot;").replaceAll("'","&#39;");
+        const x = (s === null || s === undefined) ? "" : String(s);
+        return x
+          .replace(/&/g,"&amp;")
+          .replace(/</g,"&lt;")
+          .replace(/>/g,"&gt;")
+          .replace(/"/g,"&quot;")
+          .replace(/'/g,"&#39;");
       }
       function parseSections(md){
-        const lines = String(md ?? "").split("\\n");
+        const lines = String((md === null || md === undefined) ? "" : md).split("\\n");
         const sections = [];
         let cur = { title: "Insights", body: [] };
         for (const ln of lines){
@@ -347,7 +408,7 @@ def web_ui():
       function mdToHtml(md){
         // minimal markdown: bullets, bold, code, paragraphs (no tables).
         const esc = escapeHtml;
-        const lines = String(md ?? "").split("\\n");
+        const lines = String((md === null || md === undefined) ? "" : md).split("\\n");
         const out = [];
         let inList = false;
         const flushList = () => { if(inList){ out.push("</ul>"); inList=false; } };
@@ -356,16 +417,16 @@ def web_ui():
           if (li){
             if(!inList){ out.push("<ul style=\\"margin:10px 0 0 18px;color:rgba(226,232,240,0.92)\\">"); inList=true; }
             let t = esc(li[1]);
-            t = t.replaceAll(/\\*\\*(.+?)\\*\\*/g, "<strong>$1</strong>");
-            t = t.replaceAll(/`([^`]+)`/g, "<code style=\\"background:rgba(148,163,184,0.10);padding:1px 6px;border-radius:8px;border:1px solid rgba(148,163,184,0.12)\\">$1</code>");
+            t = t.replace(/\\*\\*(.+?)\\*\\*/g, "<strong>$1</strong>");
+            t = t.replace(/`([^`]+)`/g, "<code style=\\"background:rgba(148,163,184,0.10);padding:1px 6px;border-radius:8px;border:1px solid rgba(148,163,184,0.12)\\">$1</code>");
             out.push(`<li>${t}</li>`);
             continue;
           }
           flushList();
           if (!ln.trim()) { out.push("<div style=\\"height:8px\\"></div>"); continue; }
           let t = esc(ln);
-          t = t.replaceAll(/\\*\\*(.+?)\\*\\*/g, "<strong>$1</strong>");
-          t = t.replaceAll(/`([^`]+)`/g, "<code style=\\"background:rgba(148,163,184,0.10);padding:1px 6px;border-radius:8px;border:1px solid rgba(148,163,184,0.12)\\">$1</code>");
+          t = t.replace(/\\*\\*(.+?)\\*\\*/g, "<strong>$1</strong>");
+          t = t.replace(/`([^`]+)`/g, "<code style=\\"background:rgba(148,163,184,0.10);padding:1px 6px;border-radius:8px;border:1px solid rgba(148,163,184,0.12)\\">$1</code>");
           out.push(`<div style=\\"color:rgba(226,232,240,0.92)\\">${t}</div>`);
         }
         flushList();
@@ -386,48 +447,115 @@ def web_ui():
         return cards;
       }
 
+      function renderReadiness(x){
+        const r = (x && x.readiness) ? x.readiness : null;
+        const snap = (x && x.snapshot) ? x.snapshot : null;
+        if (!r || typeof r !== "object") return null;
+        const score = (r.score !== undefined && r.score !== null) ? r.score
+          : ((r.readiness_score !== undefined && r.readiness_score !== null) ? r.readiness_score : r.value);
+        const reasons = Array.isArray(r.reasons) ? r.reasons : [];
+        const inputs = (r.inputs && typeof r.inputs === "object") ? r.inputs : null;
+        const scoreLine = (score === undefined || score === null) ? "" : `<div style="font-size:34px;font-weight:900;letter-spacing:-0.02em">${escapeHtml(score)}</div>`;
+        const reasonsHtml = reasons.length ? `<div style="margin-top:8px">${mdToHtml(reasons.map(v => `- ${v}`).join("\\n"))}</div>` : "";
+        const inputsHtml = inputs ? `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Inputs used</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(inputs, null, 2))}</pre></details>` : "";
+        const snapHtml = snap ? `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Snapshot (raw)</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(snap, null, 2))}</pre></details>` : "";
+        return `<div style="border:1px solid rgba(148,163,184,0.16);border-radius:14px;background:rgba(2,6,23,0.35);padding:12px;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:800;margin-bottom:8px">Readiness</div>
+          ${scoreLine}
+          ${reasonsHtml}
+          ${inputsHtml}
+          ${snapHtml}
+        </div>`;
+      }
+
+      function renderSnapshot(x){
+        const snap = (x && typeof x === "object" && !Array.isArray(x)) ? x : null;
+        if (!snap) return null;
+        // Heuristic: snapshot responses tend to have a "debug" object plus metric groups.
+        const debug = snap.debug && typeof snap.debug === "object" ? snap.debug : null;
+        const available = debug && debug.available_signals ? debug.available_signals : null;
+        const availHtml = Array.isArray(available) && available.length
+          ? `<div style="margin-top:8px">${mdToHtml(["**Available signals:**", ...available.map(s => "- " + s)].join("\\n"))}</div>`
+          : "";
+        return `<div style="border:1px solid rgba(148,163,184,0.16);border-radius:14px;background:rgba(2,6,23,0.35);padding:12px;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:800;margin-bottom:8px">Snapshot</div>
+          ${availHtml}
+          <details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw snapshot</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(snap, null, 2))}</pre></details>
+        </div>`;
+      }
+
       function setOut(x) {
         const pre = document.getElementById("out");
-        const md = (typeof x?.insights === "string") ? x.insights : null;
-        const cards = renderInsights(md);
-        if (cards) {
-          pre.innerHTML = cards + `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw JSON</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>`;
-        } else {
-          pre.textContent = JSON.stringify(x, null, 2);
+        // Prefer formatted rendering over raw JSON.
+        const insightsMd = (x && typeof x.insights === "string") ? x.insights : null;
+        const insightsCards = renderInsights(insightsMd);
+        const readinessCard = renderReadiness(x);
+        const snapshotCard = (!insightsCards && !readinessCard) ? renderSnapshot(x) : null;
+        const errDetail = (x && typeof x === "object") ? (x.detail || x.error || x.message) : null;
+
+        if (insightsCards) {
+          pre.innerHTML = insightsCards + `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw response</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>`;
+          return;
         }
+        if (readinessCard) {
+          pre.innerHTML = readinessCard + `<details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw response</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>`;
+          return;
+        }
+        if (snapshotCard) {
+          pre.innerHTML = snapshotCard;
+          return;
+        }
+        if (errDetail) {
+          pre.innerHTML = `<div style="border:1px solid rgba(245,158,11,0.22);border-radius:14px;background:rgba(245,158,11,0.08);padding:12px">
+            <div style="font-size:14px;font-weight:800;margin-bottom:8px">Error</div>
+            ${mdToHtml(`- **Detail**: ${String(errDetail)}`)}
+            <details style="margin-top:10px"><summary style="cursor:pointer;color:rgba(148,163,184,0.95)">Raw error</summary><pre style="min-height:0;margin-top:10px">${escapeHtml(JSON.stringify(x, null, 2))}</pre></details>
+          </div>`;
+          return;
+        }
+        pre.textContent = (typeof x === "string") ? x : JSON.stringify(x, null, 2);
       }
       function getWindowDays() { return parseInt(document.getElementById("windowDays").value || "42", 10); }
 
-      document.getElementById("btnSnapshot").onclick = async () => {
-        try { setOut(await call("/snapshot", { window_days: getWindowDays() })); }
+      async function runAction(label, fn){
+        setBusy(true, label);
+        try { setOut(await fn()); }
         catch(e) { setOut(e); }
-      };
-      document.getElementById("btnReadiness").onclick = async () => {
-        try { setOut(await call("/readiness", { window_days: getWindowDays() })); }
-        catch(e) { setOut(e); }
-      };
-      document.getElementById("btnInsights").onclick = async () => {
-        const prompt = document.getElementById("prompt").value || null;
-        try { setOut(await call("/insights", { window_days: getWindowDays(), prompt })); }
-        catch(e) { setOut(e); }
-      };
-      document.getElementById("btnStoreInsights").onclick = async () => {
-        const prompt = document.getElementById("prompt").value || null;
-        try { setOut(await call("/insights/store", { window_days: getWindowDays(), prompt })); }
-        catch(e) { setOut(e); }
-      };
-      document.getElementById("btnGrafana").onclick = async () => {
-        try { setOut(await call("/grafana/write_dashboard_file", {})); }
-        catch(e) { setOut(e); }
-      };
-      document.getElementById("btnGrafanaPush").onclick = async () => {
-        try { setOut(await call("/grafana/push_dashboard_api", {})); }
-        catch(e) { setOut(e); }
-      };
-      document.getElementById("btnDeriveAll").onclick = async () => {
-        try { setOut(await call("/activities/derive_all", { window_days: getWindowDays(), limit: 500 })); }
-        catch(e) { setOut(e); }
-      };
+        finally { setBusy(false); }
+      }
+
+      function promptValue(){
+        const el = byId("prompt");
+        const v = el && typeof el.value === "string" ? el.value : "";
+        const t = v.replace(/^\\s+|\\s+$/g, "");
+        return t ? t : null;
+      }
+
+      function submitInsights(){
+        return runAction("Insights…", () => call("/insights", { window_days: getWindowDays(), prompt: promptValue() }));
+      }
+
+      byId("btnSnapshot").onclick = () => runAction("Snapshot…", () => call("/snapshot", { window_days: getWindowDays() }));
+      byId("btnReadiness").onclick = () => runAction("Readiness…", () => call("/readiness", { window_days: getWindowDays() }));
+      byId("btnInsights").onclick = () => submitInsights();
+      byId("btnStoreInsights").onclick = () => runAction("Storing…", () => call("/insights/store", { window_days: getWindowDays(), prompt: promptValue() }));
+      byId("btnGrafana").onclick = () => runAction("Writing dashboard…", () => call("/grafana/write_dashboard_file", {}));
+      byId("btnGrafanaPush").onclick = () => runAction("Pushing dashboard…", () => call("/grafana/push_dashboard_api", {}));
+      byId("btnDeriveAll").onclick = () => runAction("Deriving metrics…", () => call("/activities/derive_all", { window_days: getWindowDays(), limit: 500 }));
+
+      byId("btnClear").onclick = () => { byId("prompt").value = ""; byId("prompt").focus(); };
+
+      // Prompt submit (button + Enter-to-send)
+      byId("promptForm").addEventListener("submit", (ev) => {
+        ev.preventDefault();
+        submitInsights();
+      });
+      byId("prompt").addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" && !ev.shiftKey) {
+          ev.preventDefault();
+          submitInsights();
+        }
+      });
 
       // simple local tabs (all show same output for now; reserved for future enhancements)
       function setActive(tabId){
