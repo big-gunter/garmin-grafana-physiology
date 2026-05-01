@@ -8,3 +8,4 @@ kubernetes-spec.yaml
 .DS_Store
 __pycache__/
 *.py[cod]
+agent-memory/

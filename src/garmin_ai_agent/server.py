@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -9,6 +10,13 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from .config import load_config
+from .conversation_store import (
+    ConversationState,
+    delete_conversation,
+    load_conversation,
+    sanitize_session_id,
+    save_conversation,
+)
 from .influx_ro import create_influx_ro
 from .readiness import build_snapshot, readiness_score
 from .anthropic_client import LLMConfig, create_client, summarize_readiness
@@ -51,6 +59,18 @@ class SnapshotRequest(BaseModel):
 class InsightsRequest(BaseModel):
     window_days: int = Field(42, ge=1, le=365)
     prompt: str | None = Field(default=None, description="Optional user context/question")
+    session_id: str | None = Field(
+        default=None,
+        description="Client-generated id for multi-turn chat; conversations persist under AGENT_MEMORY_DIR when set",
+    )
+    reset_conversation: bool = Field(
+        default=False,
+        description="If true, discard stored turns for this session_id before processing",
+    )
+
+
+def _conversation_path_for_session(session_id: str) -> Path:
+    return Path(cfg.memory_dir or "") / f"{session_id}.json"
 
 
 class DeriveActivitiesRequest(BaseModel):
@@ -793,6 +813,22 @@ def web_ui():
         if (t) h["Authorization"] = "Bearer " + t;
         return h;
       }
+      function agentSessionId(){
+        try {
+          let id = localStorage.getItem("garmin_agent_session_id");
+          if (!id) {
+            id = (crypto.randomUUID && crypto.randomUUID()) || ("" + Date.now() + "-" + Math.random());
+            localStorage.setItem("garmin_agent_session_id", id);
+          }
+          return id;
+        } catch (e) {
+          return null;
+        }
+      }
+      function resetAgentSession(){
+        try { localStorage.removeItem("garmin_agent_session_id"); } catch (e) {}
+        return agentSessionId();
+      }
       async function call(path, body) {
         const url = new URL(path, window.location.href).toString();
         const res = await fetch(url, { method: "POST", headers: headers(), body: JSON.stringify(body) });
@@ -949,13 +985,14 @@ def web_ui():
             byId("prompt").value = "";
             byId("prompt").style.height = "56px";
         }
-        return runAction("Analyzing data and generating insights...", () => call("/insights", { window_days: getWindowDays(), prompt: pv }));
+        const sid = agentSessionId();
+        return runAction("Analyzing data and generating insights...", () => call("/insights", { window_days: getWindowDays(), prompt: pv, session_id: sid }));
       }
 
       byId("btnSnapshot").onclick = () => runAction("Generating snapshot...", () => call("/snapshot", { window_days: getWindowDays() }));
       byId("btnReadiness").onclick = () => runAction("Calculating readiness...", () => call("/readiness", { window_days: getWindowDays() }));
       byId("btnInsights").onclick = () => submitInsights();
-      byId("btnStoreInsights").onclick = () => runAction("Storing insights...", () => call("/insights/store", { window_days: getWindowDays(), prompt: promptValue() }));
+      byId("btnStoreInsights").onclick = () => runAction("Storing insights...", () => call("/insights/store", { window_days: getWindowDays(), prompt: promptValue(), session_id: agentSessionId() }));
       byId("btnGrafana").onclick = () => runAction("Writing dashboard...", () => call("/grafana/write_dashboard_file", {}));
       byId("btnGrafanaPush").onclick = () => runAction("Pushing dashboard...", () => call("/grafana/push_dashboard_api", {}));
       byId("btnDeriveAll").onclick = () => runAction("Deriving metrics...", async () => {
@@ -981,6 +1018,7 @@ def web_ui():
       };
 
       byId("btnClear").onclick = () => { 
+        resetAgentSession();
         byId("chat").innerHTML = `
           <div class="msg-wrapper assistant">
             <div class="msg assistant">
@@ -1106,6 +1144,30 @@ def insights(req: InsightsRequest, authorization: str | None = Header(default=No
     score = readiness_score(snap)
     snap_dict = snap.to_dict()
 
+    sid = sanitize_session_id(req.session_id)
+    conv_path: Path | None = None
+    conv_state: ConversationState | None = None
+    if sid and cfg.memory_dir:
+        conv_path = _conversation_path_for_session(sid)
+        if req.reset_conversation:
+            delete_conversation(conv_path)
+        loaded = load_conversation(conv_path)
+        if loaded and loaded.window_days == req.window_days:
+            conv_state = loaded
+        else:
+            conv_state = ConversationState(window_days=req.window_days, turns=[])
+
+    api_prior: list[dict[str, str]] = []
+    if conv_state and conv_state.turns:
+        for t in conv_state.turns:
+            u = (t.get("user") or "").strip()
+            a = (t.get("assistant") or "").strip()
+            if not u:
+                continue
+            api_prior.append({"role": "user", "content": u[:8000]})
+            if a:
+                api_prior.append({"role": "assistant", "content": a[:12000]})
+
     # On-demand computations from raw streams for specific questions (no pre-derived tables required).
     prompt_l = (req.prompt or "").strip().lower()
 
@@ -1155,6 +1217,15 @@ def insights(req: InsightsRequest, authorization: str | None = Header(default=No
     if want_threshold:
         on_demand.append("threshold_window_all")
 
+    # Follow-up: a bare HR number often answers "what is your LTHR?" from the prior turn.
+    if (
+        api_prior
+        and prompt_l
+        and re.fullmatch(r"[0-9]{2,3}(?:\.[0-9]+)?", prompt_l.strip())
+        and "lthr_window_all" not in on_demand
+    ):
+        on_demand.append("lthr_window_all")
+
     if on_demand:
         _inject_on_demand(on_demand)
     if cfg.anthropic_api_key:
@@ -1171,6 +1242,7 @@ def insights(req: InsightsRequest, authorization: str | None = Header(default=No
             snapshot=snap_dict,
             readiness=score,
             user_prompt=req.prompt,
+            conversation_messages=api_prior or None,
         )
     else:
         # Deterministic fallback: still provides useful, formatted output based on agent-calculated metrics.
@@ -1262,7 +1334,21 @@ def insights(req: InsightsRequest, authorization: str | None = Header(default=No
                     pass
 
         insights_obj = "\n".join(lines).strip()
-    return {"snapshot": snap_dict, "readiness": score, "insights": insights_obj}
+
+    if conv_path is not None and conv_state is not None:
+        user_save = (req.prompt or "").strip() or "(insight request)"
+        assistant_save = insights_obj.strip() if isinstance(insights_obj, str) else str(insights_obj)
+        if len(assistant_save) > 16000:
+            assistant_save = assistant_save[:16000] + "\n…(truncated)"
+        conv_state.window_days = req.window_days
+        conv_state.turns.append({"user": user_save, "assistant": assistant_save})
+        save_conversation(conv_path, conv_state, max_pairs=cfg.memory_max_turn_pairs)
+
+    out: dict = {"snapshot": snap_dict, "readiness": score, "insights": insights_obj}
+    if sid:
+        out["session_id"] = sid
+        out["conversation_turn_pairs"] = len(conv_state.turns) if conv_state is not None else 0
+    return out
 
 
 @app.post("/insights/store")

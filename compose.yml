@@ -81,12 +81,16 @@ services:
       # Optional: allow the agent to write its own measurements (for display only)
       - AI_ALLOW_DB_WRITE=${AI_ALLOW_DB_WRITE:-false}
       - AI_CYCLING_GROSS_EFF=${AI_CYCLING_GROSS_EFF:-0.23}
+      # Multi-turn chat memory (JSON files per session); bind mount lives on the host
+      - AGENT_MEMORY_DIR=/data/agent-memory
+      - AGENT_MEMORY_MAX_TURN_PAIRS=${AGENT_MEMORY_MAX_TURN_PAIRS:-12}
     volumes:
       # Optional: allow agent to write/update provisioned dashboards as source-of-truth
       - ./Grafana_Dashboard:/app/Grafana_Dashboard
       - ./docs:/app/docs
       # Allow the agent to clear Garmin token cache for re-login
       - ./garminconnect-tokens:/home/appuser/.garminconnect
+      - ./agent-memory:/data/agent-memory
     ports:
       - "8000:8000"
     command: ["python", "-m", "garmin_ai_agent.server"]

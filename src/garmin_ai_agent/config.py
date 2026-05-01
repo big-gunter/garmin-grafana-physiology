@@ -19,6 +19,8 @@ class AgentConfig:
     host: str
     port: int
     auth_token: str | None
+    memory_dir: str | None
+    memory_max_turn_pairs: int
 
     # Influx
     influx_version: str
@@ -50,6 +52,14 @@ def load_config() -> AgentConfig:
 
     auth_token = os.getenv("AGENT_AUTH_TOKEN") or None
 
+    memory_dir_raw = (os.getenv("AGENT_MEMORY_DIR") or "").strip()
+    memory_dir = memory_dir_raw if memory_dir_raw else None
+    memory_max_turn_pairs = int(os.getenv("AGENT_MEMORY_MAX_TURN_PAIRS", "12"))
+    if memory_max_turn_pairs < 1:
+        memory_max_turn_pairs = 1
+    if memory_max_turn_pairs > 50:
+        memory_max_turn_pairs = 50
+
     influx_version = os.getenv("INFLUXDB_VERSION", "1")
     influx_host = os.getenv("INFLUXDB_HOST", "influxdb")
     influx_port = int(os.getenv("INFLUXDB_PORT", "8086"))
@@ -78,6 +88,8 @@ def load_config() -> AgentConfig:
         host=host,
         port=port,
         auth_token=auth_token,
+        memory_dir=memory_dir,
+        memory_max_turn_pairs=memory_max_turn_pairs,
         influx_version=influx_version,
         influx_host=influx_host,
         influx_port=influx_port,
