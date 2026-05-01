@@ -57,6 +57,7 @@ def serve():
 def insights(
     window_days: int = typer.Option(42, min=1, max=365),
     prompt: str = typer.Option("", help="Optional context/question"),
+    json_out: bool = typer.Option(False, "--json", help="Print full JSON payload (snapshot + readiness + insights)"),
 ):
     """Print a concise AI summary from DB-derived snapshot + readiness."""
     cfg, ro = _client()
@@ -78,8 +79,12 @@ def insights(
         readiness=score,
         user_prompt=prompt or None,
     )
-    out = {"snapshot": snap.to_dict(), "readiness": score, "insights": text}
-    print(json.dumps(out, indent=2, sort_keys=True))
+    if json_out:
+        out = {"snapshot": snap.to_dict(), "readiness": score, "insights": text}
+        print(json.dumps(out, indent=2, sort_keys=True))
+    else:
+        # Default: print only the narrative to avoid UI truncation.
+        print(text)
 
 
 @app.command()

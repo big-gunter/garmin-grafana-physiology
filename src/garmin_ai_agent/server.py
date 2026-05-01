@@ -1198,31 +1198,46 @@ def insights(req: InsightsRequest, authorization: str | None = Header(default=No
         methods = agent_vo2.get("methods") if isinstance(agent_vo2, dict) else {}
 
         lines: list[str] = []
-        lines.append(f"## Readiness Score: {score.get('score', 'n/a')}/100")
-        if req.prompt:
+        score_v = score.get("score", "n/a")
+        reasons = (score.get("reasons") or [])[:3]
+        reasons_txt = "; ".join([str(r) for r in reasons if r]) if reasons else "no single strong driver detected"
+
+        # Conversational, low-markdown fallback. Keep it compact to avoid truncation.
+        lines.append(
+            f"Readiness is {score_v}/100 today — {reasons_txt}. "
+            "This is a quick read based on what’s available in your database window."
+        )
+        if req.prompt and req.prompt.strip():
             lines.append("")
-            lines.append("### Your question/context")
-            lines.append(f"- {req.prompt.strip()}")
-        lines.append("")
-        lines.append("### Summary")
-        for r in (score.get("reasons") or [])[:6]:
-            lines.append(f"- {r}")
-        if not (score.get("reasons") or []):
-            lines.append("- No strong drivers detected from available signals.")
-        lines.append("")
-        lines.append("### Agent-calculated VO₂ / VO₂max (from raw activity streams)")
-        lines.extend(_fmt_vo2_block("Running", run_block or {}))
-        lines.extend(_fmt_vo2_block("Cycling", cyc_block or {}))
-        if isinstance(methods, dict) and methods:
+            lines.append(f"You asked: {req.prompt.strip()}")
+
+        # Mention agent-derived VO2 only if present and non-empty, but avoid long lists.
+        def _one_line_vo2(label: str, block: dict) -> str | None:
+            if not isinstance(block, dict) or not block or not block.get("row_count"):
+                return None
+            parts: list[str] = []
+            if block.get("vo2max_est_last") is not None:
+                parts.append(f"VO₂max proxy last ~{block['vo2max_est_last']:.1f} ml/kg/min")
+            if block.get("vo2max_est_mean") is not None:
+                parts.append(f"mean ~{block['vo2max_est_mean']:.1f}")
+            if not parts:
+                return None
+            return f"{label}: " + ", ".join(parts) + "."
+
+        vo2_run = _one_line_vo2("Running", run_block or {})
+        vo2_cyc = _one_line_vo2("Cycling", cyc_block or {})
+        if vo2_run or vo2_cyc:
             lines.append("")
-            lines.append("### Methods used (high level)")
-            for k in ["running_vo2_demand", "running_vo2max_est", "cycling_vo2_demand", "cycling_vo2max_est"]:
-                if methods.get(k):
-                    lines.append(f"- **{k}**: {methods[k]}")
+            lines.append("From your activity streams (agent-derived estimates):")
+            if vo2_run:
+                lines.append(vo2_run)
+            if vo2_cyc:
+                lines.append(vo2_cyc)
+
         lines.append("")
-        lines.append("### Caveats")
-        lines.append("- VO₂max estimates depend on having a reasonable HRmax and good-quality stream data (speed/altitude or power).")
-        lines.append("- This is **agent-calculated** from raw streams; it does **not** use Garmin’s VO₂max device estimate.")
+        lines.append(
+            "If you want a detailed breakdown (full metric list + methods), ask for “debug” or use the JSON output."
+        )
 
         # Surface on-demand metrics in the deterministic fallback too
         if isinstance(m, dict) and isinstance(m.get("on_demand_metrics"), dict) and m["on_demand_metrics"]:
@@ -1234,14 +1249,15 @@ def insights(req: InsightsRequest, authorization: str | None = Header(default=No
                     run_p = (hrp.get("running") or {}).get("hr_percentile_bpm")
                     cyc_p = (hrp.get("cycling") or {}).get("hr_percentile_bpm")
                     lines.append("")
-                    lines.append("### HR percentile (on-demand from raw streams)")
+                    pieces: list[str] = []
                     if all_p is not None:
-                        lines.append(f"- **p95 HR (all sports)**: {float(all_p):.0f} bpm")
+                        pieces.append(f"p95 HR all sports ~{float(all_p):.0f} bpm")
                     if run_p is not None:
-                        lines.append(f"- **p95 HR (running)**: {float(run_p):.0f} bpm")
+                        pieces.append(f"running ~{float(run_p):.0f}")
                     if cyc_p is not None:
-                        lines.append(f"- **p95 HR (cycling)**: {float(cyc_p):.0f} bpm")
-                    lines.append("- Computed directly from raw `ActivityGPS.HeartRate` samples (no pre-derived table).")
+                        pieces.append(f"cycling ~{float(cyc_p):.0f}")
+                    if pieces:
+                        lines.append("On-demand HR percentile from raw streams: " + ", ".join(pieces) + ".")
                 except Exception:
                     pass
 

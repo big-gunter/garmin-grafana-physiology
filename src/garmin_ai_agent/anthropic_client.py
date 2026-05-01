@@ -45,11 +45,11 @@ def summarize_readiness(
     snapshot: dict,
     readiness: dict,
     user_prompt: str | None = None,
-) -> dict[str, Any]:
+) -> str:
     """
     Produces a concise narrative from already-derived numbers.
 
-    Returns markdown text. The server/UI will render it into sections/cards.
+    Returns plain text (not markdown-heavy). Keep it short to avoid UI truncation.
     """
     ref = _load_reference_docs()
     system = (
@@ -65,27 +65,26 @@ def summarize_readiness(
         "If snapshot.metrics.on_demand_metrics is present, those metrics were computed on-the-fly from raw streams in response to the user's question. "
         "Prefer answering using on_demand_metrics when the question asks for them (e.g., HR percentiles, TRIMP, TSS, VO2 window summaries) rather than saying the snapshot does not include them. "
         "Do NOT introduce medication topics (e.g., beta blockers) unless the user's prompt explicitly mentions medication/beta blocker. "
-        "Tone: write like a helpful coach: 1-2 short paragraphs, then bullets for key metrics and actions. "
-        "Formatting rules: do not use markdown tables. Use short headings and bullet points."
+        "Tone: write like a helpful coach: short, conversational, and specific. "
+        "Formatting rules: avoid markdown headings (#/##/###) and avoid long bullet lists. "
+        "If you include metrics, weave them into sentences or use at most 3 short lines (not nested bullets). "
+        "Hard limit: keep the entire response under ~1500 characters unless the user explicitly asks for a detailed breakdown."
     )
     if ref:
         system = system + "\n\nRuntime reference docs (authoritative):\n" + ref
     prompt = (
-        "Write a concise readiness note using ONLY the provided values.\n\n"
-        "Output structure:\n"
-        "## Title (1 line)\n"
-        "### Summary (2-4 bullets)\n"
-        "### Key metrics (bullets; include numbers + units where possible; no tables)\n"
-        "### Actions (3-6 bullets)\n"
-        "### Caveats (0-4 bullets; mention missing metrics or assumptions)\n\n"
-        f"Snapshot (DB-derived):\n{snapshot}\n\n"
-        f"Readiness (DB-derived):\n{readiness}\n\n"
-        f"User context:\n{user_prompt or ''}\n"
+        "Write a concise readiness note using ONLY the provided values.\n"
+        "Do not use markdown headings. Prefer 2-4 short paragraphs.\n"
+        "Include: what it means, what to do today, and one key caution if needed.\n"
+        "Only mention a few numbers if they materially support the point.\n\n"
+        f"Snapshot (DB-derived JSON):\n{snapshot}\n\n"
+        f"Readiness (DB-derived JSON):\n{readiness}\n\n"
+        f"User context/question:\n{user_prompt or ''}\n"
     )
 
     msg = client.messages.create(
         model=model,
-        max_tokens=700,
+        max_tokens=450,
         system=system,
         messages=[{"role": "user", "content": prompt}],
     )
