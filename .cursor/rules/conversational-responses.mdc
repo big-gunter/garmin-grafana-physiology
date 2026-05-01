@@ -1,0 +1,12 @@
+---
+description: Prefer conversational prose over stat dumps; keep answers complete and scannable
+alwaysApply: true
+---
+
+# Response style
+
+- Default to **short paragraphs** (often 2–4) that read like a clear explanation to a colleague. Lead with the direct answer or outcome, then supporting detail.
+- **Avoid long bullet lists of numbers or intermediate metrics** unless the user asked for a breakdown, a checklist, or copy-paste data. When metrics matter, **weave them into sentences** (“load was moderate at ~X”) instead of isolating each on its own line.
+- Use bullets **sparingly**: for steps, options, or when the user explicitly wants a list. Do not default to bullets for every paragraph.
+- If the reply risks **truncation**, prioritize: (1) the conclusion and what to do next, (2) one concrete example if needed, (3) defer edge cases to a brief “If you need X, ask” line rather than a long appendix.
+- Match the user’s depth: simple questions get concise answers; complex tasks can go longer but should stay **structured in prose** with headings only when it genuinely helps scan a long answer.
