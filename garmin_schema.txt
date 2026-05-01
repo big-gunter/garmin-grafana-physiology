@@ -81,37 +81,6 @@ maxHR           float
 maxSpeed        float
 movingDuration  float
 
-name: AgentDerivedActivity
-fieldKey                     fieldType
---------                     ---------
-cycling_gross_eff_used       float
-distance_m_stream_end        float
-duration_s_stream            float
-ftp_est_method_activity      string
-ftp_est_w_activity           float
-hr_best5m_cycling_median_bpm float
-hr_best5m_median_bpm         float
-if                           float
-np_w                         float
-trimp_banister               float
-trimp_edwards                float
-tss                          float
-vo2_demand_best5m            float
-vo2_demand_best5m_cycling    float
-vo2max_est                   float
-vo2max_est_cycling           float
-vo2max_est_cycling_method    string
-vo2max_est_method            string
-weight_kg_used               float
-
-name: AgentInsights
-fieldKey        fieldType
---------        ---------
-insights        string
-prompt          string
-readiness_score float
-window_days     integer
-
 name: BodyBatteryIntraday
 fieldKey         fieldType
 --------         ---------
@@ -178,50 +147,6 @@ uncategorizedStressDuration   integer
 uncategorizedStressPercentage float
 vigorousIntensityMinutes      integer
 
-name: DemoPoint
-fieldKey  fieldType
---------  ---------
-DemoField integer
-
-name: DerivedActivity
-fieldKey                  fieldType
---------                  ---------
-Activity_ID               integer
-best20m_distance_m        float
-best20m_hr_median         float
-best20m_vam_m_per_h       float
-best20m_vert_m_per_min    float
-best30m_vam_m_per_h       float
-best30m_vert_m_per_min    float
-best5m_grade_median       float
-best5m_speed_mps_raw      float
-best5m_vo2_all            float
-best5m_vo2_masked         float
-cs_mps                    float
-cs_pace_s_per_km          float
-dprime_m                  float
-gap_distance_km           float
-gap_distance_m            float
-lt_pace_s_per_km          float
-lthr_band                 float
-lthr_min_contig_s         integer
-lthr_target_mps           float
-raw_distance_m_from_fit   float
-raw_distance_m_from_speed float
-vam_hr_floor              float
-vam_speed_floor_mps       float
-vam_warmup_exclude_s      integer
-vo2_mask_grade_ceil       float
-vo2_mask_grade_floor      float
-vo2_mask_speed_floor_mps  float
-vo2max_est                float
-
-name: DeviceSync
-fieldKey    fieldType
---------    ---------
-Device_Name string
-imageUrl    string
-
 name: FitnessAge
 fieldKey             fieldType
 --------             ---------
@@ -238,41 +163,6 @@ name: HeartRateIntraday
 fieldKey  fieldType
 --------  ---------
 HeartRate integer
-
-name: PerformanceDaily
-fieldKey                       fieldType
---------                       ---------
-CS_mps                         float
-CS_pace_s_per_km               float
-Dprime_m                       float
-FitnessAge_model               float
-FitnessAge_model_source        string
-MountainFitness_source         string
-VAM20_best_42d_m_per_h         float
-VAM30_best_42d_m_per_h         float
-VO2max_est_run                 float
-best5m_vo2_last                float
-gap_distance_km_last           float
-raw_distance_m_from_fit_last   float
-raw_distance_m_from_speed_last float
-
-name: PhysiologyDaily
-fieldKey         fieldType
---------         ---------
-HRR              float
-HRmax_est        float
-HRmax_est_source string
-RHR_7d_median    float
-Z1_High          float
-Z1_Low           float
-Z2_High          float
-Z2_Low           float
-Z3_High          float
-Z3_Low           float
-Z4_High          float
-Z4_Low           float
-Z5_High          float
-Z5_Low           float
 
 name: RacePredictions
 fieldKey         fieldType
@@ -330,24 +220,6 @@ name: StressIntraday
 fieldKey    fieldType
 --------    ---------
 stressLevel integer
-
-name: TrainingLoadDaily
-fieldKey             fieldType
---------             ---------
-ATL_7_TRIMP          float
-ATL_7_TSS            float
-CTL_42_TRIMP         float
-CTL_42_TSS           float
-HRmax_used           float
-RHR_used             float
-TRIMP                float
-TSB_TRIMP            float
-TSB_TSS              float
-TSS                  float
-activities_used      integer
-gender_code_used     integer
-gender_is_known_used integer
-lthr_used            float
 
 name: UserProfile
 fieldKey        fieldType
