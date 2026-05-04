@@ -60,7 +60,7 @@ This branch **does not** run an in-stack AI container. Integrate **Claude Deskto
 
 - **Domain reference for prompts:** `docs/agent-domain.md` (also exposed as MCP resource `docs://agent-domain`).
 - **Detailed MCP setup, mobile HTTPS gateway, networks:** `docs/claude-mcp-integration.md`.
-- **MCP entrypoints:** **`garmin-mcp`** (stdio — read-only InfluxQL + SQLite agent memory). **`garmin-mcp-http`** (streamable HTTP for remote clients). Optional: **`garmin-mcp-grafana`** (Grafana HTTP API). Host-side MCP needs Influx reachable from the host (see `compose.yml` optional Influx **ports**).
+- **MCP entrypoints:** **`garmin-mcp`** (stdio — read-only InfluxQL + SQLite agent memory). **`garmin-mcp-http`** (streamable HTTP for remote clients). Optional: **`garmin-mcp-grafana`** (Grafana HTTP API). **`compose.yml`** publishes Influx on **`127.0.0.1:8086`** for host-side MCP; remove or comment that **`ports`** block if you do not want the DB on loopback.
 - **Schema export CLI:** `garmin-export-schema` (uses `INFLUXDB_*`).
 
 After dependency changes, run **`uv lock`** and **`uv sync`** (see `DEVELOP.md`). Rebuild the Docker image when `pyproject.toml` or `uv.lock` changes.
@@ -142,7 +142,7 @@ First runs usually populate roughly the **last seven days**; older history uses 
 ### 7. Optional: MCP and CLI on the host
 
 1. Install Python tooling: **`uv sync`** from the repo root (installs `garmin-mcp`, `garmin-mcp-http`, `garmin-export-schema`, etc.).
-2. **Influx from the host:** in **`compose.yml`**, uncomment the **Influx** `ports` mapping so the DB is available at **`127.0.0.1:8086`**, and point tools at `INFLUXDB_HOST=127.0.0.1`.
+2. **Influx from the host:** **`compose.yml`** maps Influx to **`127.0.0.1:8086`** for MCP/CLI. Recreate the **`influxdb`** service after edits. Point tools at **`INFLUXDB_HOST=127.0.0.1`**. (Comment out **`ports`** if you prefer Influx only on the Docker network.)
 3. **Claude Desktop:** configure **`garmin-mcp`** (and optionally **`garmin-mcp-grafana`**) per **`docs/claude-mcp-integration.md`**.
 4. **Remote HTTPS MCP (e.g. mobile):** run **`garmin-mcp-http`** or Compose profile **`mcp-public`**; terminate TLS on the host and set **`MCP_AUTH_TOKEN`** — see **`docs/claude-mcp-integration.md`**.
 

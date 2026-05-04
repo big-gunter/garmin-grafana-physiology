@@ -4,12 +4,22 @@ This branch removes the in-stack **AI agent container** in favour of connecting 
 
 **Agent memory (sidecar):** The primary command **`garmin-mcp`** combines **read-only Influx** tools with a **local SQLite** store for prior conclusions (`remember_finding`, `search_past_findings`, …). Nothing is written to Influx by the agent.
 
+### MCP checklist (Claude Desktop + same machine as Docker)
+
+1. **Influx on loopback** — This repo’s **`compose.yml`** publishes Influx as **`127.0.0.1:8086`**. After changing ports, run **`docker compose up -d`** (or recreate the **`influxdb`** container) so the bind takes effect.  
+2. **Repo Python env** — From the repo root: **`uv sync`**.  
+3. **Influx password** — Use the same **`INFLUXDB_USERNAME` / `INFLUXDB_PASSWORD`** as in **`compose.yml`** for **`garmin-fetch-data`** (defaults are `influxdb_user` / `influxdb_secret_password` unless you changed them).  
+4. **Claude Desktop config** — Edit **`claude_desktop_config.json`** (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`) and add the **`garmin-stack`** block under **`mcpServers`** using the [example below](#claude-desktop-configuration-stdio). Replace every **`/ABSOLUTE/PATH/TO/garmin-grafana-physiology`** with your real repo path and **`YOUR_PASSWORD`** with your Influx password.  
+5. **Restart Claude Desktop** completely (quit the app, reopen). Open a new chat and confirm **MCP tools** appear for the Garmin server.  
+6. **Optional Grafana MCP** — Add **`garmin-grafana`** only if you want dashboard API tools; create a Grafana **service account token** first.
+
+If **`docs://agent-domain`** is missing in tools, set **`GARMIN_DOCS_DIR`** in the MCP `env` to your repo’s **`docs`** folder (absolute path).
+
 ### Use it today (Claude Desktop on the same machine as Docker)
 
-1. `docker compose up -d` — stack running.  
-2. In **`compose.yml`**, uncomment **Influx → `127.0.0.1:8086:8086`** so MCP on the host can reach the DB.  
-3. In the project: **`uv sync`** then add **`garmin-mcp`** to Claude Desktop config (see below).  
-4. Restart **Claude Desktop**. Chat in Desktop — **not** the Claude mobile app (see table).
+1. `docker compose up -d` — stack running (Influx on **`127.0.0.1:8086`** per `compose.yml`).  
+2. In the project: **`uv sync`**, then add **`garmin-mcp`** to Claude Desktop config (see [checklist](#mcp-checklist-claude-desktop--same-machine-as-docker) and [example JSON](#claude-desktop-configuration-stdio)).  
+3. Restart **Claude Desktop**. Chat in Desktop — **not** the Claude mobile app (see table).
 
 ---
 
@@ -110,7 +120,9 @@ Example fragment for **macOS** Claude Desktop (`~/Library/Application Support/Cl
         "INFLUXDB_PASSWORD": "YOUR_PASSWORD",
         "INFLUXDB_DATABASE": "GarminStats",
         "INFLUXDB_VERSION": "1",
-        "GARMIN_AGENT_MEMORY_DIR": "/ABSOLUTE/PATH/TO/garmin-grafana-physiology/data/agent-memory"
+        "INFLUXDB_ENDPOINT_IS_HTTP": "true",
+        "GARMIN_AGENT_MEMORY_DIR": "/ABSOLUTE/PATH/TO/garmin-grafana-physiology/data/agent-memory",
+        "GARMIN_DOCS_DIR": "/ABSOLUTE/PATH/TO/garmin-grafana-physiology/docs"
       }
     },
     "garmin-grafana": {

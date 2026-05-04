@@ -77,9 +77,9 @@ services:
       # - INFLUXDB3_QUERY_FILE_LIMIT=5000 # this set to be a very high value if you want to view long term data
     expose:
       - '8086' # Influxdb V3 should expose "8181" (Change INFLUXDB_PORT on garmin-fetch-data appropriately for InfluxDB V3)
-    # Optional: expose Influx to the host for MCP / CLI tools running on your laptop (bind to loopback only).
-    # ports:
-    #   - "127.0.0.1:8086:8086"
+    # Host MCP / CLI: Influx reachable at 127.0.0.1:8086 (loopback only — not the public internet).
+    ports:
+      - "127.0.0.1:8086:8086"
     volumes:
       - influxdb_data:/var/lib/influxdb # InfluxDB V3 bind mount should be set like - influxdb_data:/data if you set INFLUXDB3_DB_DIR=/data (instead of /var/lib/influxdb)
     image: 'influxdb:1.11' # You must change this to 'quay.io/influxdb/influxdb3-core:latest' for influxdb V3
