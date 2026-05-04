@@ -40,21 +40,14 @@ def create_influx_ro(
 
 
 def query_influxql_df(ro: InfluxRO, influxql: str) -> pd.DataFrame:
-    """
-    InfluxDB v1: execute InfluxQL and return a DataFrame.
-
-    This is intentionally read-only; the agent never calls write APIs here.
-    """
+    """InfluxDB v1: execute InfluxQL and return a DataFrame (read-only)."""
     if ro.version != "1":
         raise NotImplementedError("Read-only query currently supports InfluxDB v1 (InfluxQL) only.")
     res = ro.client.query(influxql)
-    # influxdb-python can return ResultSet with multiple series; we take the first one
     if not res:
         return pd.DataFrame()
     try:
         points = list(res.get_points())
     except Exception:
-        # fallback: attempt to coerce to list
         points = list(res)
     return pd.DataFrame(points)
-

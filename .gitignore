@@ -4,6 +4,8 @@ kubernetes-spec.yaml
 .env
 .env.*
 !.env.example
+.venv/
+dist/
 .ipynb_checkpoints/
 .DS_Store
 __pycache__/

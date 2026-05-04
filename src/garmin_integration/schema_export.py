@@ -35,7 +35,6 @@ def export_schema_influxql(ro: InfluxRO) -> list[MeasurementSchema]:
 
     schemas: list[MeasurementSchema] = []
     for m in sorted(set(measurements)):
-        # Field keys
         fk = query_influxql_df(ro, f'SHOW FIELD KEYS FROM "{m}"')
         field_keys: list[tuple[str, str]] = []
         if fk is not None and not fk.empty:
@@ -45,7 +44,6 @@ def export_schema_influxql(ro: InfluxRO) -> list[MeasurementSchema]:
                         continue
                     field_keys.append((str(a), str(b)))
 
-        # Tag keys
         tk = query_influxql_df(ro, f'SHOW TAG KEYS FROM "{m}"')
         tag_keys = []
         if tk is not None and not tk.empty and "tagKey" in tk.columns:
@@ -85,4 +83,3 @@ def write_schema_markdown(*, schemas: list[MeasurementSchema], out_path: str) ->
             lines.append("")
 
     p.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
-

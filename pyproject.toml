@@ -5,21 +5,29 @@ description = "A Python application to fetch Garmin health data and populate it 
 readme = "README.md"
 requires-python = "==3.13.*"
 dependencies = [
-    "anthropic>=0.62.0",
     "dotenv==0.9.9",
     "fitparse==1.2.0",
-    "fastapi>=0.116.0",
     "garminconnect>=0.2.35",
     "gpxpy>=1.6.2",
     "httpx>=0.28.1",
     "influxdb==5.3.2",
     "influxdb3-python==0.12.0",
+    "mcp>=1.8.0,<2",
     "pandas==2.2.3",
     "rich>=14.0.0",
     "typer>=0.16.0",
-    "uvicorn>=0.35.0",
 ]
 
 [project.scripts]
 garmin-fetch = "garmin_grafana:main"
-ai-agent = "garmin_ai_agent.cli:app"
+garmin-export-schema = "garmin_integration.cli:cli"
+garmin-mcp-influx = "garmin_mcp.influx_read:main"
+garmin-mcp-grafana = "garmin_mcp.grafana_tools:main"
+
+# Install console scripts when using `uv sync` (src/ layout).
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/garmin_grafana", "src/garmin_integration", "src/garmin_mcp"]

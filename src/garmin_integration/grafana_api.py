@@ -20,17 +20,13 @@ def push_dashboard_json(
     overwrite: bool = True,
 ) -> dict[str, Any]:
     """
-    Pushes a dashboard JSON file to Grafana via HTTP API.
-
-    Uses POST /api/dashboards/db with:
-      { dashboard: <json>, folderId, overwrite }
+    Pushes a dashboard JSON file to Grafana via HTTP API (POST /api/dashboards/db).
     """
     p = Path(dashboard_path)
     if not p.exists():
         raise FileNotFoundError(str(p))
 
     dashboard = json.loads(p.read_text(encoding="utf-8"))
-    # Grafana recommends null id on import/update payload
     if "id" in dashboard:
         dashboard["id"] = None
 
@@ -49,10 +45,7 @@ def push_dashboard_json(
     try:
         return _post(url)
     except httpx.ConnectError:
-        # Common docker-compose pitfall: using http://localhost:3000 inside a container.
-        # If the configured URL targets localhost, retry with the compose service name.
         if _normalize_url(grafana_url).startswith(("http://localhost", "http://127.0.0.1", "https://localhost", "https://127.0.0.1")):
             fallback = "http://grafana:3000/api/dashboards/db"
             return _post(fallback)
         raise
-

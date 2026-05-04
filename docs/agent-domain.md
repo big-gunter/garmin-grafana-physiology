@@ -1,5 +1,7 @@
 ## Sports-science domain spec (runtime reference)
 
+> **Integration note (Claude / MCP):** This fork removed the in-container AI service. Use this file as **authoritative domain context** when you configure Claude (e.g. attach in Claude Desktop project knowledge, or mount `docs/` into an MCP server). Operational setup: **`docs/claude-mcp-integration.md`**.
+
 This document defines the **sports-science reasoning model** the agent should operate within. It is intentionally explicit so the agent can recompute metrics from raw DB signals reliably.
 
 This is a **runtime reference**: when the LLM writes insights, it should be grounded in these definitions and prefer **agent-calculated** values (computed from raw streams) over vendor/device estimates.

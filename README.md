@@ -2,7 +2,7 @@
 <img src="https://i.imgur.com/PYsbwqj.png" width="450" height="164" align="center">
 </p>
 
-# Garmin Grafana Physiology (with AI Coach)
+# Garmin Grafana Physiology (Claude / MCP branch)
 
 A docker container to fetch data from Garmin servers and store the data in a local influxdb database for appealing visualization with Grafana.
 
@@ -17,7 +17,7 @@ A docker container to fetch data from Garmin servers and store the data in a loc
 - [Dashboard Example](#dashboard-example)
 - [Features](#features)
 - [Quickstart (Docker Compose)](#quickstart-docker-compose)
-- [AI Coach (browser UI)](#ai-coach-browser-ui)
+- [Claude + MCP (this branch)](#claude--mcp-this-branch)
 - [Grafana dashboards](#grafana-dashboards)
 - [Configuration](#configuration)
 - [Historical data fetching (bulk update)](#historical-data-fetching-bulk-update)
@@ -53,19 +53,18 @@ A docker container to fetch data from Garmin servers and store the data in a loc
 - Automated data fetching in regular interval (set and forget)
 - Historical data backfilling
 
-### AI Coach (this fork)
+### Claude + MCP (this branch)
 
-This fork adds an **agentic AI service** (`ai-agent`) that runs **inside the same Docker Compose stack**, can query your InfluxDB on the internal network, and provides:
+This branch **does not** run an in-stack AI container. Integrate **Claude Desktop** (MCP) with your **InfluxDB** and **Grafana** stack.
 
-- **Browser UI** at `http://localhost:8000/` for snapshot/readiness/insights
-- **Raw-Garmin-only physiology model** for calculations (see constraint below)
-- **Grafana dashboard automation**:
-  - Source-of-truth dashboard file: `Grafana_Dashboard/AI-Coach.json`
-  - Optional push via Grafana HTTP API (token-based)
-- **Optional insights storage** to InfluxDB for display in Grafana (`AgentInsights`)
+- **Domain reference for prompts:** `docs/agent-domain.md` (also exposed as MCP resource `docs://agent-domain`).
+- **Setup, keys, networks, remote access:** `docs/claude-mcp-integration.md`.
+- **MCP entrypoints:** `garmin-mcp-influx` (read-only InfluxQL) and `garmin-mcp-grafana` (dashboard HTTP API). Uncomment Influx `ports` in `compose.yml` when MCP runs on your host against `127.0.0.1:8086`.
+- **Schema export CLI:** `garmin-export-schema` (`INFLUXDB_*` env).
 
-> [!IMPORTANT]
-> **Constraint enforced**: agent calculations must use only **fields directly imported from Garmin**.\n+> The agent does **not** use derived/rollup measurements created by ingestion (e.g. `DerivedActivity`, `TrainingLoadDaily`, `PhysiologyDaily`).\n+> (The project can still ingest those measurements; the AI simply won’t rely on them for calculations.)
+After dependency changes, run **`uv lock`** (see `DEVELOP.md`). The Docker image uses `uv sync` and expects `uv.lock` to match `pyproject.toml`.
+
+The stack still provisions Grafana dashboards from `Grafana_Dashboard/`. Push dashboards with `GRAFANA_API_TOKEN` via `garmin_integration.grafana_api` or the Grafana MCP tools.
 
 ## Quickstart (Docker Compose)
 
@@ -76,7 +75,7 @@ mkdir -p garminconnect-tokens
 sudo chown -R 1000:1000 garminconnect-tokens
 ```
 
-2) Copy `.env.example` to `.env` (optional but recommended for AI/Grafana tokens):
+2) Copy `.env.example` to `.env` (optional; required if you add MCP tooling or Grafana API push):
 
 ```bash
 cp .env.example .env
@@ -88,45 +87,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-4) Open:
-- **Grafana**: `http://localhost:3000` (default `admin` / `admin`)
-- **AI Coach (browser UI)**: `http://localhost:8000/`
-
-> [!NOTE]
-> If you use the AI features that call Anthropic, set `ANTHROPIC_API_KEY` in `.env`.
-
-## AI Coach (browser UI)
-
-The AI agent is served from the `ai-agent` container and provides:
-
-- `http://localhost:8000/` web UI (no CLI required)
-- Snapshot/readiness derived from **raw Garmin-imported measurements**:
-  - `DailyStats`, `SleepSummary`, `HRV_Intraday`, `ActivitySummary`
-- Optional “store insights” writes to an **agent-owned** measurement:
-  - `AgentInsights` (for display in Grafana)
-- Optional “derive metrics from activities” reads raw activity streams (`ActivityGPS`) and writes:
-  - `AgentDerivedActivity` (agent-owned; derived from raw Garmin activity samples)
-
-### Environment variables (AI)
-
-In `.env` (never commit):
-
-- `ANTHROPIC_API_KEY`: required for insights
-- `ANALYSIS_MODEL`, `PLANNING_MODEL`: model routing
-- `GRAFANA_API_TOKEN`: optional, enables Grafana API push
-- `GRAFANA_URL`: default is the internal URL `http://grafana:3000` for Compose
-- `AI_ALLOW_DB_WRITE`: default `false`; must be `true` to write `AgentInsights`
-- `AI_CYCLING_GROSS_EFF`: cycling gross efficiency used for power→VO₂ conversion (default `0.23`)
-
-### Agent-derived metrics (from raw activities)
-
-When enabled (`AI_ALLOW_DB_WRITE=true`) the agent can compute additional metrics from **raw activity samples** in `ActivityGPS`:
-
-- **Running**: VO₂ demand and VO₂max estimate from speed + grade (grade derived from distance+altitude)
-- **Cycling**: VO₂ demand and VO₂max estimate from **power** using assumed gross efficiency (`AI_CYCLING_GROSS_EFF`) and your body weight from `BodyComposition.weight`
-- **TRIMP** (Banister / Edwards): derived from raw heart-rate time series where HRmax/RHR are available
-
-These results are written to the agent-owned measurement `AgentDerivedActivity` and can be visualized on the AI Coach Grafana dashboard.
+4) Open **Grafana**: `http://localhost:3000` (default `admin` / `admin`).
 
 ## Grafana dashboards
 
@@ -134,12 +95,11 @@ This repo provisions dashboards via the `Grafana_Dashboard/` folder.
 
 - Upstream dashboard: `Grafana_Dashboard/Garmin-Grafana-Dashboard.json`
 - Training metrics dashboard: `Grafana_Dashboard/Garmin-Training-Metrics.json`
-- **AI Coach dashboard (this fork)**: `Grafana_Dashboard/AI-Coach.json`
-  - Panels are based on **raw Garmin-imported** measurements plus the optional `AgentInsights` display-only measurement.
+- **AI Coach dashboard (optional)**: `Grafana_Dashboard/AI-Coach.json`
 
 ### Grafana “push via API” (optional)
 
-If `GRAFANA_API_TOKEN` is set, the AI UI can push `AI-Coach.json` to Grafana immediately via API.\n+If not set, Grafana will still pick up changes via file provisioning (polls every ~10 seconds by default).
+If `GRAFANA_API_TOKEN` is set, you can push dashboard JSON from a script using `garmin_integration.grafana_api.push_dashboard_json`. Otherwise Grafana picks up changes via file provisioning (polls periodically).
 
 ## Why use this project?
 
@@ -334,7 +294,7 @@ Updating with docker is super simple. Just go to the folder where the `compose.y
 See [here](docs/manual-import-instructions.md) for instructions on how to manually import local files from (e.g, Garmin Bulk Export or local .FIT file). Please make note that it will not import intraday level data. Just the basic average daily stats and the activity or workout stats from the FIT file. For intraday level detailed data use the bulk import option given [above](#historical-data-fetching-bulk-update). 
 
 ## Export Data to CSV files
-This project still supports CSV export for external analysis.\n+However, for interactive insights from your database, prefer the built-in **AI Coach** service at `http://localhost:8000/`.\n+You can always export from Grafana panels as CSV when needed.
+This project still supports CSV export for external analysis. Use Grafana panel exports, or connect Claude via MCP (see `docs/claude-mcp-integration.md`) when implemented.
 
 ## Backup InfluxDB Database
 
