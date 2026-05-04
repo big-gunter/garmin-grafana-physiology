@@ -9,7 +9,7 @@ uv lock
 uv sync
 ```
 
-`uv sync` installs the project (via **hatchling**) into `.venv` and wires up console scripts (`garmin-fetch`, `garmin-mcp-influx`, etc.).
+`uv sync` installs the project (via **hatchling**) into `.venv` and wires up console scripts (`garmin-fetch`, `garmin-mcp`, `garmin-mcp-http`, `garmin-mcp-influx`, `garmin-mcp-grafana`, `garmin-export-schema`, etc.).
 
 Rebuild the Docker image after lockfile changes so the image’s `uv sync` matches.
 
@@ -20,7 +20,7 @@ Requires the `mcp` package (declared in `pyproject.toml`). From the repo root wi
 ```bash
 # example: Influx must be reachable (e.g. 127.0.0.1:8086 with compose ports uncommented)
 export INFLUXDB_HOST=127.0.0.1
-garmin-mcp-influx
+garmin-mcp
 ```
 
 See `docs/claude-mcp-integration.md` for Claude Desktop configuration.

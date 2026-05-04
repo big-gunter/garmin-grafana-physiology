@@ -2,6 +2,15 @@
 
 This branch removes the in-stack **AI agent container** in favour of connecting **Claude** (typically **Claude Desktop** with MCP) to your own tooling. Keep **`docs/agent-domain.md`** as the sports-science reference you attach or expose to the model.
 
+**Agent memory (sidecar):** The primary command **`garmin-mcp`** combines **read-only Influx** tools with a **local SQLite** store for prior conclusions (`remember_finding`, `search_past_findings`, …). Nothing is written to Influx by the agent.
+
+### Use it today (Claude Desktop on the same machine as Docker)
+
+1. `docker compose up -d` — stack running.  
+2. In **`compose.yml`**, uncomment **Influx → `127.0.0.1:8086:8086`** so MCP on the host can reach the DB.  
+3. In the project: **`uv sync`** then add **`garmin-mcp`** to Claude Desktop config (see below).  
+4. Restart **Claude Desktop**. Chat in Desktop — **not** the Claude mobile app (see table).
+
 ---
 
 ## Realistic expectations: laptop, phone, and “where the data lives”
@@ -9,8 +18,8 @@ This branch removes the in-stack **AI agent container** in favour of connecting 
 | Scenario | What works |
 |----------|------------|
 | **Claude Desktop on the same machine as Docker** | Run MCP **on the host** (stdio). Use `INFLUXDB_HOST=127.0.0.1` and **publish** Influx to the host (see `compose.yml` commented `ports`) or use a dev container network alias; Grafana is already on `127.0.0.1:3000`. |
-| **Claude mobile app (`claude.ai` / phone)** | Does **not** attach to a private MCP server on your laptop. There is **no path** from the phone app alone to `localhost` or your Docker bridge network. |
-| **Phone + laptop both online** | To query DB from “outside”, you must expose a **controlled endpoint** to your phone/VPN: e.g. **Tailscale**, **WireGuard**, or an **HTTPS reverse proxy** + auth to an MCP or API gateway running on the laptop or a small home server. |
+| **Claude mobile app (`claude.ai` / phone)** | Attaches only to **remote** MCP servers over **HTTPS** (Anthropic’s connector flow). It cannot reach `localhost` or your Docker bridge. Use **`garmin-mcp-http`** behind TLS + `MCP_AUTH_TOKEN`. |
+| **Phone + laptop both online** | Same as mobile: **public HTTPS URL** to your gateway (with bearer auth), or **VPN** to a machine running MCP on the private network. Do **not** publish InfluxDB or Grafana admin ports to the internet—only the MCP route (e.g. `/mcp`). |
 
 **Recommended mental model:** data stays on the laptop (or NAS); **remote access = VPN or tunnel**, never raw public Influx ports.
 
@@ -42,14 +51,21 @@ If you expose MCP over HTTP/SSE (for VPN-only access), use a **random bearer tok
 
 ---
 
-## Two MCP processes (recommended isolation)
+## MCP commands (this repo)
 
-To minimise blast radius, split responsibilities:
+| Command | Purpose |
+|---------|---------|
+| **`garmin-mcp`** | **Recommended:** Influx (read-only) + **SQLite agent memory** + `docs://agent-domain` |
+| **`garmin-mcp-http`** | Same as **`garmin-mcp`**, **streamable HTTP** for remote / mobile connector URLs (see section below) |
+| **`garmin-mcp-influx`** | Influx read-only + domain doc **only** (no memory DB) |
+| **`garmin-mcp-grafana`** | Grafana HTTP API (dashboards); optional second MCP |
+
+To minimise credential exposure you can run **`garmin-mcp`** (data + memory, no Grafana token) and only add **`garmin-mcp-grafana`** when editing dashboards.
 
 | MCP server | Credentials | Capabilities |
 |------------|-------------|--------------|
-| **`garmin-mcp-influx`** (package) | Read-only Influx user | `influxql_query`, `list_measurements`, `describe_measurement`, resource `docs://agent-domain` |
-| **`garmin-mcp-grafana`** (package) | Grafana API token | Search/get dashboard, push JSON file, list `Grafana_Dashboard/*.json` |
+| **`garmin-mcp`** | Read-only Influx user | `influxql_query`, `list_measurements`, `describe_measurement`, `remember_finding`, `search_past_findings`, `list_recent_findings`, `get_finding`, resource `docs://agent-domain` |
+| **`garmin-mcp-grafana`** | Grafana API token | Search/get dashboard, push JSON file, list `Grafana_Dashboard/*.json` |
 
 **Host vs container:** For **Claude Desktop on your laptop**, run the MCP commands on the host and point Influx at **`127.0.0.1:8086`** (uncomment the `ports` block in `compose.yml` for Influx). For an **all-container** design, you would use different transports (e.g. streamable HTTP) and different auth (out of scope for the default stdio flow).
 
@@ -77,23 +93,24 @@ Attach or mount into the MCP container:
 
 ## Claude Desktop configuration (stdio)
 
-The repo ships two console scripts: **`garmin-mcp-influx`** and **`garmin-mcp-grafana`** (after `uv sync` in the project).
+After **`uv sync`**, use **`garmin-mcp`** for data + sidecar memory (and optionally **`garmin-mcp-grafana`**).
 
 Example fragment for **macOS** Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`) — adjust absolute paths and secrets:
 
 ```json
 {
   "mcpServers": {
-    "garmin-influx": {
+    "garmin-stack": {
       "command": "uv",
-      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/garmin-grafana-physiology", "garmin-mcp-influx"],
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/garmin-grafana-physiology", "garmin-mcp"],
       "env": {
         "INFLUXDB_HOST": "127.0.0.1",
         "INFLUXDB_PORT": "8086",
         "INFLUXDB_USERNAME": "influxdb_user",
         "INFLUXDB_PASSWORD": "YOUR_PASSWORD",
         "INFLUXDB_DATABASE": "GarminStats",
-        "INFLUXDB_VERSION": "1"
+        "INFLUXDB_VERSION": "1",
+        "GARMIN_AGENT_MEMORY_DIR": "/ABSOLUTE/PATH/TO/garmin-grafana-physiology/data/agent-memory"
       }
     },
     "garmin-grafana": {
@@ -113,6 +130,26 @@ Restart Claude Desktop after editing. Use a **read-only** Influx user for the fi
 ### Optional: `GARMIN_DOCS_DIR`
 
 If `docs/agent-domain.md` is not found, set `GARMIN_DOCS_DIR` to the folder containing that file (e.g. your repo `docs/` path).
+
+---
+
+## Remote HTTPS MCP (`garmin-mcp-http`) — Claude iOS / connector URL
+
+Use the **same tools** as **`garmin-mcp`** (Influx read-only + SQLite memory + `docs://agent-domain`), but over **streamable HTTP** so a client can use a **public base URL**.
+
+1. **Run the gateway** on a host that can reach Influx (same Docker network or VPN).
+   - Local: `uv sync` then `uv run garmin-mcp-http` with `INFLUXDB_*` and optional `GARMIN_AGENT_MEMORY_*`.
+   - Compose (optional): `docker compose --profile mcp-public up -d` starts **`mcp-gateway`** on port **8765** inside the stack (`expose` only). Publish **`127.0.0.1:8765:8765`** if TLS terminates on the host (Caddy/nginx).
+
+2. **TLS + hostname:** Terminate HTTPS on the host (e.g. **Caddy** + Let’s Encrypt). Reverse-proxy `https://mcp.example.com` → `http://127.0.0.1:8765`. Keep **Influx** and **Grafana** off the public internet.
+
+3. **Auth:** Set **`MCP_AUTH_TOKEN`** (e.g. `openssl rand -hex 32`). Clients must send **`Authorization: Bearer <token>`** on MCP requests. **`GET /health`** stays open for load balancers.
+
+4. **Host validation:** Set **`MCP_PUBLIC_HOSTS`** to the hostname(s) clients send in **`Host:`** (comma-separated, e.g. `mcp.example.com`). This enables MCP streamable HTTP **DNS rebinding** checks for that name.
+
+5. **Connector URL:** The streamable HTTP path defaults to **`/mcp`** (`MCP_STREAMABLE_HTTP_PATH`). Your MCP base URL is typically **`https://mcp.example.com/mcp`** (confirm what Claude’s remote MCP UI asks for—path must match).
+
+**Security checklist:** TLS only on the public side; long random bearer token; never expose **8086** / raw Influx; firewall everything except **443** (and SSH/VPN if you use them).
 
 ---
 

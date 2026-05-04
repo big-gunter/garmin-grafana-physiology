@@ -16,7 +16,8 @@ A docker container to fetch data from Garmin servers and store the data in a loc
 
 - [Dashboard Example](#dashboard-example)
 - [Features](#features)
-- [Quickstart (Docker Compose)](#quickstart-docker-compose)
+- [Deployment, initialization, and execution](#deployment-initialization-and-execution)
+- [Credentials and API keys](#credentials-and-api-keys)
 - [Claude + MCP (this branch)](#claude--mcp-this-branch)
 - [Grafana dashboards](#grafana-dashboards)
 - [Configuration](#configuration)
@@ -55,43 +56,117 @@ A docker container to fetch data from Garmin servers and store the data in a loc
 
 ### Claude + MCP (this branch)
 
-This branch **does not** run an in-stack AI container. Integrate **Claude Desktop** (MCP) with your **InfluxDB** and **Grafana** stack.
+This branch **does not** run an in-stack AI container. Integrate **Claude Desktop** or a **remote MCP URL** with your **InfluxDB** and **Grafana** stack.
 
 - **Domain reference for prompts:** `docs/agent-domain.md` (also exposed as MCP resource `docs://agent-domain`).
-- **Setup, keys, networks, remote access:** `docs/claude-mcp-integration.md`.
-- **MCP entrypoints:** `garmin-mcp-influx` (read-only InfluxQL) and `garmin-mcp-grafana` (dashboard HTTP API). Uncomment Influx `ports` in `compose.yml` when MCP runs on your host against `127.0.0.1:8086`.
-- **Schema export CLI:** `garmin-export-schema` (`INFLUXDB_*` env).
+- **Detailed MCP setup, mobile HTTPS gateway, networks:** `docs/claude-mcp-integration.md`.
+- **MCP entrypoints:** **`garmin-mcp`** (stdio — read-only InfluxQL + SQLite agent memory). **`garmin-mcp-http`** (streamable HTTP for remote clients). Optional: **`garmin-mcp-grafana`** (Grafana HTTP API). Host-side MCP needs Influx reachable from the host (see `compose.yml` optional Influx **ports**).
+- **Schema export CLI:** `garmin-export-schema` (uses `INFLUXDB_*`).
 
-After dependency changes, run **`uv lock`** (see `DEVELOP.md`). The Docker image uses `uv sync` and expects `uv.lock` to match `pyproject.toml`.
+After dependency changes, run **`uv lock`** and **`uv sync`** (see `DEVELOP.md`). Rebuild the Docker image when `pyproject.toml` or `uv.lock` changes.
 
-The stack still provisions Grafana dashboards from `Grafana_Dashboard/`. Push dashboards with `GRAFANA_API_TOKEN` via `garmin_integration.grafana_api` or the Grafana MCP tools.
+The stack still provisions Grafana dashboards from `Grafana_Dashboard/`. Optional dashboard push uses `GRAFANA_API_TOKEN` (see [Credentials and API keys](#credentials-and-api-keys)).
 
-## Quickstart (Docker Compose)
+---
 
-1) Create a `garminconnect-tokens` folder (persist Garmin auth session tokens):
+## Deployment, initialization, and execution
+
+This section is the **recommended end-to-end path** for this repository: Docker Compose for **Garmin → Influx → Grafana**, plus optional **Python/MCP** tooling on your machine. For Windows/WSL, one-shot scripts, or unusual layouts, see [Manual Install with Docker](#manual-install-with-docker-recommended-if-you-understand-linux-concepts) below.
+
+### Prerequisites
+
+- **Docker** and **Docker Compose** on the host ([Install Docker](https://docs.docker.com/engine/install/)).
+- **Git** to clone the repo.
+- Optional: **[uv](https://docs.astral.sh/uv/)** if you run MCP or CLI tools from the repo (`uv sync`).
+
+### 1. Clone and token directory
 
 ```bash
+git clone <your-fork-or-upstream-url> garmin-grafana-physiology
+cd garmin-grafana-physiology
 mkdir -p garminconnect-tokens
 sudo chown -R 1000:1000 garminconnect-tokens
 ```
 
-2) Copy `.env.example` to `.env` (optional; required if you add MCP tooling or Grafana API push):
+The fetch container stores **Garmin Connect session tokens** here (not an “API key” from a vendor portal—OAuth/session files created on first successful login).
+
+### 2. Environment file
+
+Copy the template and edit values (passwords, optional tokens):
 
 ```bash
 cp .env.example .env
 ```
 
-3) Bring the stack up:
+- **Never commit `.env`.** Use it for secrets referenced by Compose overrides or host-side tools.
+- Match **Influx usernames/passwords** to what you use in `compose.yml` (defaults are illustrated in `.env.example`).
+- Optional keys (`GRAFANA_API_TOKEN`, `MCP_AUTH_TOKEN`, memory paths) are documented in [Credentials and API keys](#credentials-and-api-keys).
+
+**`.env`** is for host-side tools (e.g. `uv run garmin-mcp`) and for optional **`${VAR}`** substitution in Compose if you add variable references. The bundled **`compose.yml`** lists most container variables explicitly — keep **`INFLUXDB_*`**, **`GRAFANA_*`**, etc. **in sync** between **`.env`** and **`compose.yml`**, or add **`env_file: .env`** under a service when you want the container to load the file.
+
+### 3. Build and start the stack
+
+From the repo root (where **`compose.yml`** lives):
 
 ```bash
+docker compose build   # or: docker compose pull — if you use a prebuilt image tag
 docker compose up -d
 ```
 
-4) Open **Grafana**: `http://localhost:3000` (default `admin` / `admin`).
+Services typically include **`garmin-fetch-data`** (periodic sync), **`influxdb`**, and **`grafana`**. InfluxDB is **not** published to the host by default (only **exposed** on the internal Docker network), which reduces accidental exposure.
+
+### 4. First-time Garmin authentication
+
+If you **did not** put `GARMINCONNECT_EMAIL` / `GARMINCONNECT_BASE64_PASSWORD` in `compose.yml`, perform a **one-time interactive login** so tokens land in `garminconnect-tokens/`:
+
+```bash
+docker compose run --rm garmin-fetch-data
+```
+
+Enter email, password, and 2FA if enabled. When authentication succeeds, continue with `docker compose up -d` if the stack is not already running. Full alternatives (base64 password, China region, permission issues) are in [Manual Install with Docker](#manual-install-with-docker-recommended-if-you-understand-linux-concepts).
+
+### 5. Verify deployment
+
+- **Grafana:** open **`http://localhost:3000`** (default login **`admin` / `admin`** — change after first login).
+- **Logs:** `docker compose logs -f garmin-fetch-data` should show successful fetch cycles; fix credential or network issues before relying on dashboards.
+- **Dashboards:** under **Dashboards**, open the provisioned Garmin dashboards if datasource provisioning is enabled.
+
+First runs usually populate roughly the **last seven days**; older history uses a **bulk backfill** command (see [Historical data fetching](#historical-data-fetching-bulk-update)).
+
+### 6. Ongoing execution
+
+- **Start:** `docker compose up -d`
+- **Stop:** `docker compose stop` (or `docker compose down` — **avoid** `docker compose down -v` unless you intend to wipe volumes)
+- **Update images:** `docker compose pull && docker compose up -d` (see [Update to new versions](#update-to-new-versions))
+
+### 7. Optional: MCP and CLI on the host
+
+1. Install Python tooling: **`uv sync`** from the repo root (installs `garmin-mcp`, `garmin-mcp-http`, `garmin-export-schema`, etc.).
+2. **Influx from the host:** in **`compose.yml`**, uncomment the **Influx** `ports` mapping so the DB is available at **`127.0.0.1:8086`**, and point tools at `INFLUXDB_HOST=127.0.0.1`.
+3. **Claude Desktop:** configure **`garmin-mcp`** (and optionally **`garmin-mcp-grafana`**) per **`docs/claude-mcp-integration.md`**.
+4. **Remote HTTPS MCP (e.g. mobile):** run **`garmin-mcp-http`** or Compose profile **`mcp-public`**; terminate TLS on the host and set **`MCP_AUTH_TOKEN`** — see **`docs/claude-mcp-integration.md`**.
+
+---
+
+## Credentials and API keys
+
+Use **`.env`** (from `.env.example`) for values you do not want in shell history or compose commits. **Compose environment** blocks in `compose.yml` already mirror the Influx credentials used by the stack; keep them **consistent** with `.env` when you copy secrets for host-side tools.
+
+| Credential | Where you get it | Where you put it |
+|--------------|------------------|------------------|
+| **Garmin Connect** | Your Garmin account; first login via `docker compose run --rm garmin-fetch-data` (or email + base64 password in compose — see manual section). | Session data in **`garminconnect-tokens/`**; optional **`GARMINCONNECT_EMAIL`**, **`GARMINCONNECT_BASE64_PASSWORD`** in `compose.yml`. |
+| **InfluxDB (fetch + dashboards)** | Defined at stack creation: same user/password as in **`compose.yml`** for `garmin-fetch-data` and the Influx container (`INFLUXDB_USERNAME` / `INFLUXDB_PASSWORD` for the app; DB uses `INFLUXDB_USER` / `INFLUXDB_USER_PASSWORD`). | **`compose.yml`**; optional **`.env`** for **`INFLUXDB_*`** when running CLI/MCP on the host. For MCP read-only access, create a **read-only** DB user and use those vars only on the client. |
+| **Grafana HTTP API** | Grafana UI → **Administration → Service accounts** (or **API keys**) → create a token with permission to **view/edit dashboards** as needed. | **`.env`:** `GRAFANA_URL` (e.g. `http://localhost:3000` on host, or `http://grafana:3000` from another container), **`GRAFANA_API_TOKEN`**. Used by **`garmin-mcp-grafana`** and scripts under `garmin_integration`. |
+| **MCP HTTP gateway** | You generate a secret (not from Garmin/Grafana): e.g. `openssl rand -hex 32`. | **`.env`:** **`MCP_AUTH_TOKEN`**; optional **`MCP_PUBLIC_HOSTS`** for HTTPS hostname validation. Clients send **`Authorization: Bearer <token>`**. |
+| **Anthropic** | Only if you call Anthropic’s **HTTP API** from your own app — **not** required for Claude Desktop local MCP. | A console/API key from Anthropic’s console — separate from this stack. |
+
+**Security practices:** do not publish **Influx (8086)** or **Grafana admin** to the public internet. For remote MCP, expose only the **MCP HTTPS endpoint** (reverse proxy to **`garmin-mcp-http`**) with a strong **`MCP_AUTH_TOKEN`**. Details: **`docs/claude-mcp-integration.md`**.
+
+---
 
 ## Grafana dashboards
 
-This repo provisions dashboards via the `Grafana_Dashboard/` folder.
+Browse dashboards at **`http://localhost:3000`** (after deployment). This repo provisions JSON via the `Grafana_Dashboard/` folder.
 
 - Upstream dashboard: `Grafana_Dashboard/Garmin-Grafana-Dashboard.json`
 - Training metrics dashboard: `Grafana_Dashboard/Garmin-Training-Metrics.json`

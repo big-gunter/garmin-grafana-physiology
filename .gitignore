@@ -11,3 +11,4 @@ dist/
 __pycache__/
 *.py[cod]
 agent-memory/
+data/agent-memory/

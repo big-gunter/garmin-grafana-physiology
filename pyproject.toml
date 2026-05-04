@@ -21,6 +21,8 @@ dependencies = [
 [project.scripts]
 garmin-fetch = "garmin_grafana:main"
 garmin-export-schema = "garmin_integration.cli:cli"
+garmin-mcp = "garmin_mcp.stack:main"
+garmin-mcp-http = "garmin_mcp.http_server:main"
 garmin-mcp-influx = "garmin_mcp.influx_read:main"
 garmin-mcp-grafana = "garmin_mcp.grafana_tools:main"
 

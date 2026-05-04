@@ -109,6 +109,50 @@ services:
       - '3000:3000'
     image: 'grafana/grafana:latest'
 
+  # Streamable HTTP MCP (same tools as `garmin-mcp`): expose only this behind HTTPS — not Influx.
+  # Usage: `docker compose --profile mcp-public up -d`
+  # Reverse-proxy https://mcp.example.com → http://127.0.0.1:8765 (see docs/claude-mcp-integration.md).
+  mcp-gateway:
+    profiles:
+      - mcp-public
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: garmin-fetch-data:physiology
+    container_name: garmin-mcp-gateway
+    user: appuser
+    working_dir: /app
+    networks:
+      - garmin_internal
+    depends_on:
+      - influxdb
+    environment:
+      - INFLUXDB_HOST=influxdb
+      - INFLUXDB_PORT=8086
+      - INFLUXDB_USERNAME=influxdb_user
+      - INFLUXDB_PASSWORD=influxdb_secret_password
+      - INFLUXDB_DATABASE=GarminStats
+      - INFLUXDB_VERSION=1
+      - INFLUXDB_ENDPOINT_IS_HTTP=true
+      - GARMIN_DOCS_DIR=/app/docs
+      - MCP_HTTP_HOST=0.0.0.0
+      - MCP_HTTP_PORT=8765
+      - MCP_STREAMABLE_HTTP_PATH=/mcp
+      # Set a long random token; pass the same in your mobile connector (or use Caddy forwardAuth).
+      # - MCP_AUTH_TOKEN=
+      # Comma-separated public hostnames (TLS SNI) for streamable HTTP host validation, e.g. mcp.example.com
+      # - MCP_PUBLIC_HOSTS=mcp.example.com
+      - GARMIN_AGENT_MEMORY_DIR=/data/agent-memory
+    volumes:
+      - ./data/agent-memory:/data/agent-memory
+      - ./docs:/app/docs:ro
+    command: ["garmin-mcp-http"]
+    expose:
+      - "8765"
+    # Optional: publish loopback only so Caddy/nginx on the host can reach the gateway.
+    # ports:
+    #   - "127.0.0.1:8765:8765"
+
 volumes:
   influxdb_data:
   grafana_data:
