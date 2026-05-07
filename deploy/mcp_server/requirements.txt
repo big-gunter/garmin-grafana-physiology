@@ -1,0 +1,7 @@
+mcp[cli]>=1.27.0
+influxdb>=5.3.2
+uvicorn
+httpx
+pyjwt>=2.8.0
+starlette
+python-multipart

@@ -1,0 +1,83 @@
+services:
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    restart: unless-stopped
+    networks:
+      - physiology-net
+    security_opt:
+      - no-new-privileges:true
+
+  influxdb:
+    image: influxdb:1.11
+    volumes:
+      - /opt/physiology/data/influxdb:/var/lib/influxdb
+    environment:
+      - INFLUXDB_DB=${INFLUX_DATABASE}
+      - INFLUXDB_ADMIN_USER=admin
+      - INFLUXDB_ADMIN_PASSWORD=${INFLUX_PASSWORD}
+    restart: unless-stopped
+    networks:
+      - physiology-net
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "influx", "-username", "admin", "-password", "${INFLUX_PASSWORD}", "-execute", "SHOW DATABASES"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - /opt/physiology/data/grafana:/var/lib/grafana
+    environment:
+      - GF_SERVER_ROOT_URL=https://grafana.big-gunter.com
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_SECURITY_DISABLE_GRAVATAR=true
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+    networks:
+      - physiology-net
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mcp-server:
+    build: ./mcp_server
+    environment:
+      - INFLUX_HOST=influxdb
+      - INFLUX_PORT=8086
+      - INFLUX_USER=mcp_reader
+      - INFLUX_PASSWORD=${INFLUX_MCP_PASSWORD}
+      - INFLUX_DATABASE=${INFLUX_DATABASE}
+      - GARMIN_DEVICENAME=${GARMIN_DEVICENAME}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - GITHUB_ALLOWED_USER=${GITHUB_ALLOWED_USER}
+      - MCP_BASE_URL=https://mcp.big-gunter.com
+      - TOKEN_SECRET=${TOKEN_SECRET}
+    restart: unless-stopped
+    networks:
+      - physiology-net
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  physiology-net:
+    driver: bridge
