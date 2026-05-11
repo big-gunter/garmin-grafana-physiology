@@ -1,6 +1,6 @@
-# Physiology Stack — Deployment Runbook
+# Physiology Stack — Cloud Deployment Runbook
 
-Full deployment guide for the Garmin Grafana Physiology stack.
+Full deployment guide for the Garmin Grafana Physiology stack on a cloud server.
 Tested on Hetzner CAX21 ARM (Ubuntu 22.04) with Cloudflare tunnel.
 
 ---
@@ -15,18 +15,22 @@ Cloudflare (DNS + Tunnel + Access)
     │
     │  Encrypted tunnel (zero open ports on server)
     ▼
-Hetzner CAX21 (ARM, 3 vCPU, 8GB RAM, ~€5.49/mo)
-    ├── cloudflared     → Cloudflare tunnel daemon
-    ├── InfluxDB 1.11   → Time series database (internal only)
-    ├── Grafana         → grafana.your-domain.com (Cloudflare Access protected)
-    └── MCP Server      → mcp.your-domain.com (GitHub OAuth protected)
+Server (e.g. Hetzner CAX21, Ubuntu 22.04)
+    ├── cloudflared       → Cloudflare tunnel daemon
+    ├── influxdb          → Time-series database (internal only)
+    ├── grafana           → grafana.your-domain.com (Cloudflare Access protected)
+    ├── garmin-fetch-data → Garmin Connect ingest, writes to InfluxDB
+    └── mcp-server        → mcp.your-domain.com (GitHub OAuth protected)
 ```
+
+All services share a single internal Docker network (`physiology-net`).
+No ports are exposed to the public internet — Cloudflare tunnel handles all external traffic.
 
 ---
 
 ## Prerequisites
 
-- Ubuntu 22.04 VM (Hetzner CAX21 recommended)
+- Ubuntu 22.04 VM (Hetzner CAX21 ARM recommended — ~€5.49/mo)
 - Domain on Cloudflare (nameservers pointed at Cloudflare)
 - GitHub account (for MCP OAuth)
 - Claude Pro subscription (for MCP connector)
@@ -36,45 +40,46 @@ Hetzner CAX21 (ARM, 3 vCPU, 8GB RAM, ~€5.49/mo)
 ## Phase 1 — Cloudflare Setup (manual, do first)
 
 ### 1.1 Create Tunnel
+
 1. **Zero Trust → Networks → Tunnels → Create a tunnel**
 2. Name: `physiology-stack`
 3. Connector type: Docker
-4. Copy the tunnel token → goes in `.env` as `CLOUDFLARE_TUNNEL_TOKEN`
+4. Copy the tunnel token → goes in `deploy/.env` as `CLOUDFLARE_TUNNEL_TOKEN`
 
-### 1.2 Add Public Hostnames in tunnel config
+### 1.2 Add Public Hostnames
+
+In your tunnel config:
+
 | Subdomain | Domain | Service |
 |---|---|---|
 | `grafana` | your-domain.com | `http://grafana:3000` |
 | `mcp` | your-domain.com | `http://mcp-server:8000` |
-| `influxdb` | your-domain.com | `http://influxdb:8086` |
 
 ### 1.3 Add DNS Records
-Go to **your-domain.com → DNS → Records**, add:
+
+**your-domain.com → DNS → Records:**
 
 | Type | Name | Target | Proxy |
 |---|---|---|---|
-| CNAME | `grafana` | `<tunnel-id>.cfargotunnel.com` | ✅ Proxied |
-| CNAME | `mcp` | `<tunnel-id>.cfargotunnel.com` | ✅ Proxied |
-| CNAME | `influxdb` | `<tunnel-id>.cfargotunnel.com` | ✅ Proxied |
+| CNAME | `grafana` | `<tunnel-id>.cfargotunnel.com` | Proxied |
+| CNAME | `mcp` | `<tunnel-id>.cfargotunnel.com` | Proxied |
 
-The tunnel ID is the `t` field in your tunnel token (base64 decode to find it),
-or visible in the tunnel URL on the Cloudflare dashboard.
+### 1.4 Cloudflare Access (protects Grafana)
 
-### 1.4 Cloudflare Access (protects Grafana + InfluxDB)
 **Zero Trust → Access → Applications → Add application**
-- Type: **Connect a private web application**
-- For Grafana: hostname `grafana`, port `3000`
-- For InfluxDB: hostname `influxdb`, port `8086`
+- Type: Connect a private web application
+- Hostname: `grafana.your-domain.com`
 - Policy: Allow → Email → your email address
 
-⚠️ Do NOT add Access protection to `mcp.your-domain.com` —
-Claude.ai needs direct access for OAuth.
+Do NOT add Access protection to `mcp.your-domain.com` — Claude.ai needs direct access for OAuth.
 
 ### 1.5 Security Settings
+
 - **Security → Bots → Bot Fight Mode → On**
 - **Security → Settings → Security Level → High**
 
 ### 1.6 GitHub OAuth App
+
 **github.com → Settings → Developer Settings → OAuth Apps → New OAuth App**
 
 | Field | Value |
@@ -83,78 +88,131 @@ Claude.ai needs direct access for OAuth.
 | Homepage URL | `https://mcp.your-domain.com` |
 | Authorization callback URL | `https://mcp.your-domain.com/oauth/callback` |
 
-Copy Client ID and Client Secret → goes in `.env`
+Copy Client ID and Client Secret → go in `deploy/.env`.
 
 ---
 
 ## Phase 2 — Server Setup
 
-SSH into fresh Ubuntu 22.04 as root:
+SSH into a fresh Ubuntu 22.04 server as root, then clone the repo to `/opt/physiology` and run the server hardening script:
 
 ```bash
-git clone https://github.com/big-gunter/garmin-grafana-physiology.git
-cd garmin-grafana-physiology
+git clone https://github.com/big-gunter/garmin-grafana-physiology.git /opt/physiology
+cd /opt/physiology
 bash deploy/setup/01_server_setup.sh
 ```
 
-⚠️ This moves SSH to port 22444. Open a second terminal and verify:
-```bash
-ssh -p 22444 -i your-key root@<IP>
-```
-before closing the original session.
+> **Warning:** This moves SSH to port **22444**. Before closing your current session, open a second terminal and verify:
+> ```bash
+> ssh -p 22444 root@<server-ip>
+> ```
 
 ---
 
-## Phase 3 — Folder Structure
+## Phase 3 — Create Data Directories
 
 ```bash
+cd /opt/physiology
 bash deploy/setup/02_folders.sh
 ```
 
-This creates `/opt/physiology/` with correct permissions and copies deployment files.
+This creates `/opt/physiology/data/{influxdb,grafana}`, `/opt/physiology/garminconnect-tokens/`, and `/opt/physiology/backups/` with correct ownership, patches the Grafana dashboard JSON, and creates `deploy/.env` from the template.
 
 ---
 
 ## Phase 4 — Configure Environment
 
 ```bash
-nano /opt/physiology/.env
+nano /opt/physiology/deploy/.env
 ```
 
-Fill in every value. Key things:
-- `CLOUDFLARE_TUNNEL_TOKEN` — from Phase 1.1
-- `INFLUX_PASSWORD` — strong password, set once on first init
-- `INFLUX_MCP_PASSWORD` — separate password for read-only MCP user
-- `GRAFANA_ADMIN_PASSWORD` — Grafana admin login
-- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — from Phase 1.6
-- `GITHUB_ALLOWED_USER` — your GitHub username (only this account can connect)
-- `TOKEN_SECRET` — run `openssl rand -hex 32` to generate
+Fill in every value:
+
+| Variable | Description |
+|---|---|
+| `CLOUDFLARE_TUNNEL_TOKEN` | From Phase 1.1 |
+| `INFLUX_PASSWORD` | Strong password for InfluxDB admin — set once, do not change |
+| `INFLUX_MCP_PASSWORD` | Password for read-only `mcp_reader` user (Grafana datasource + MCP server) |
+| `INFLUX_WRITER_PASSWORD` | Password for `garmin_writer` user (Garmin ingest container) |
+| `INFLUX_DATABASE` | Leave as `GarminStats` unless you have a reason to change it |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana admin login |
+| `GARMIN_DEVICENAME` | Your Garmin device name — leave blank to match all devices |
+| `GITHUB_CLIENT_ID` | From Phase 1.6 |
+| `GITHUB_CLIENT_SECRET` | From Phase 1.6 |
+| `GITHUB_ALLOWED_USER` | Your GitHub username — only this account can connect to MCP |
+| `TOKEN_SECRET` | Run `openssl rand -hex 32` to generate |
 
 ---
 
-## Phase 5 — Start Stack
+## Phase 5 — Build the Image
 
 ```bash
-cd /opt/physiology
+cd /opt/physiology/deploy
+docker compose build garmin-fetch-data
+```
+
+---
+
+## Phase 6 — Start InfluxDB and Create Users
+
+Start InfluxDB on its own first, then create the application users:
+
+```bash
+cd /opt/physiology/deploy
+docker compose up -d influxdb
+docker compose ps   # wait until influxdb shows (healthy)
+```
+
+Once healthy:
+
+```bash
+bash /opt/physiology/deploy/setup/03_influxdb_users.sh
+```
+
+This creates `mcp_reader` (read-only, used by Grafana and the MCP server) and `garmin_writer` (write access, used by the ingest container).
+
+---
+
+## Phase 7 — Authenticate with Garmin Connect
+
+Run the ingest container interactively once to complete the Garmin OAuth/MFA flow:
+
+```bash
+cd /opt/physiology/deploy
+docker compose run --rm garmin-fetch-data
+```
+
+You will be prompted for your Garmin Connect email, password, and 2FA code. Tokens are saved to `/opt/physiology/garminconnect-tokens/` and persist across container restarts. This step only needs to be repeated if tokens expire (~1 year).
+
+---
+
+## Phase 8 — Start the Full Stack
+
+```bash
+cd /opt/physiology/deploy
 docker compose up -d
-docker compose ps   # wait for all to be Up
+docker compose ps
 ```
 
-InfluxDB takes ~30 seconds to initialise on first boot.
+All five services should reach `Up` or `Up (healthy)`:
 
----
+| Service | Expected state |
+|---|---|
+| cloudflared | Up |
+| influxdb | Up (healthy) |
+| grafana | Up (healthy) |
+| garmin-fetch-data | Up |
+| mcp-server | Up (healthy) |
 
-## Phase 6 — Create Read-Only InfluxDB User
-
-Wait until InfluxDB shows healthy, then:
+Follow the ingest logs to confirm Garmin data is flowing:
 
 ```bash
-bash deploy/setup/03_influxdb_users.sh
+docker compose logs -f garmin-fetch-data
 ```
 
 ---
 
-## Phase 7 — Connect Claude.ai
+## Phase 9 — Connect Claude.ai
 
 1. **claude.ai → Settings → Connectors → Add custom connector**
 2. URL: `https://mcp.your-domain.com`
@@ -163,13 +221,15 @@ bash deploy/setup/03_influxdb_users.sh
 
 ---
 
-## Phase 8 — Automated Backups
+## Phase 10 — Automated Backups
 
 ```bash
 crontab -e
 # Add:
-0 2 * * * /opt/physiology/deploy/setup/04_backup.sh >> /var/log/physiology-backup.log 2>&1
+0 2 * * * bash /opt/physiology/deploy/setup/04_backup.sh >> /var/log/physiology-backup.log 2>&1
 ```
+
+Backs up InfluxDB (portable format) and Grafana data daily at 02:00, retaining 7 days.
 
 ---
 
@@ -178,6 +238,7 @@ crontab -e
 ```bash
 cd /opt/physiology
 git pull
+cd deploy
 docker compose down
 docker compose up -d --build
 ```
@@ -186,30 +247,42 @@ docker compose up -d --build
 
 ## Troubleshooting
 
-**MCP connector fails in Claude.ai:**
+**Garmin tokens expired:**
 ```bash
-docker compose logs mcp-server --tail=50
-# Look for OAuth flow completing then 500 errors
+cd /opt/physiology/deploy
+docker compose stop garmin-fetch-data
+docker compose run --rm garmin-fetch-data   # re-authenticate interactively
+docker compose up -d garmin-fetch-data
 ```
 
 **InfluxDB permission denied on startup:**
 ```bash
-# InfluxDB runs as uid 1500
 chown -R 1500:1500 /opt/physiology/data/influxdb
 docker compose restart influxdb
 ```
 
 **Grafana permission denied on startup:**
 ```bash
-# Grafana runs as uid 472
 chown -R 472:472 /opt/physiology/data/grafana
 docker compose restart grafana
+```
+
+**MCP connector fails in Claude.ai:**
+```bash
+docker compose logs mcp-server --tail=50
 ```
 
 **Tunnel not connecting:**
 ```bash
 docker compose logs cloudflared
-# Check CLOUDFLARE_TUNNEL_TOKEN in .env
+# Check CLOUDFLARE_TUNNEL_TOKEN in deploy/.env
+```
+
+**Garmin ingest not writing data:**
+```bash
+docker compose logs garmin-fetch-data --tail=50
+# Common causes: wrong INFLUX_WRITER_PASSWORD, influxdb not healthy yet,
+# or garmin_writer user not created (run 03_influxdb_users.sh)
 ```
 
 ---
@@ -217,14 +290,14 @@ docker compose logs cloudflared
 ## Security Checklist
 
 - [ ] SSH on port 22444, key authentication only
-- [ ] UFW blocking all except port 22444
+- [ ] UFW blocking all ports except 22444
 - [ ] Fail2ban protecting SSH (3600s ban, 5 attempts)
 - [ ] Kernel network hardening applied (sysctl)
 - [ ] Cloudflare Bot Fight Mode enabled
-- [ ] Cloudflare Access protecting Grafana and InfluxDB
-- [ ] MCP server using read-only InfluxDB user (mcp_reader)
+- [ ] Cloudflare Access protecting Grafana
+- [ ] MCP server using read-only InfluxDB user (`mcp_reader`)
+- [ ] Grafana datasource using read-only InfluxDB user (`mcp_reader`)
 - [ ] GitHub OAuth restricting access to single GitHub account
-- [ ] PKCE enforced on OAuth flow
-- [ ] `.env` permissions 600, owned by root
+- [ ] `deploy/.env` permissions 600, owned by root
 - [ ] Automatic security updates enabled
 - [ ] Automated daily backups configured

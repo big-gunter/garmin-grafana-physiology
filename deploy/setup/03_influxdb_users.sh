@@ -2,22 +2,23 @@
 # =============================================================================
 # 03_influxdb_users.sh
 # Creates InfluxDB users:
-#   - mcp_reader: READ-ONLY access for MCP server
-#   - garmin_writer: WRITE access for Garmin ingest script
+#   - mcp_reader: READ-ONLY access for MCP server and Grafana datasource
+#   - garmin_writer: WRITE access for Garmin ingest container
 # Run AFTER docker compose up -d and InfluxDB shows healthy
+# Run from repo root: bash deploy/setup/03_influxdb_users.sh
 # =============================================================================
 set -euo pipefail
 
-BASE=/opt/physiology
-CONTAINER="physiology-influxdb-1"
+REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+ENV_FILE="$REPO_DIR/deploy/.env"
+CONTAINER="influxdb"
 
-# Load env
-if [ -f $BASE/.env ]; then
-    export $(grep -v '^#' $BASE/.env | grep -v '^$' | xargs)
-else
-    echo "ERROR: $BASE/.env not found"
+if [ ! -f "$ENV_FILE" ]; then
+    echo "ERROR: $ENV_FILE not found — run 02_folders.sh first"
     exit 1
 fi
+
+export $(grep -v '^#' "$ENV_FILE" | grep -v '^$' | xargs)
 
 DB="${INFLUX_DATABASE:-GarminStats}"
 ADMIN_PASSWORD="${INFLUX_PASSWORD:-}"
@@ -25,15 +26,15 @@ MCP_PASSWORD="${INFLUX_MCP_PASSWORD:-}"
 WRITER_PASSWORD="${INFLUX_WRITER_PASSWORD:-}"
 
 if [ -z "$ADMIN_PASSWORD" ]; then
-    echo "ERROR: INFLUX_PASSWORD not set in .env"
+    echo "ERROR: INFLUX_PASSWORD not set in deploy/.env"
     exit 1
 fi
 if [ -z "$MCP_PASSWORD" ]; then
-    echo "ERROR: INFLUX_MCP_PASSWORD not set in .env"
+    echo "ERROR: INFLUX_MCP_PASSWORD not set in deploy/.env"
     exit 1
 fi
 if [ -z "$WRITER_PASSWORD" ]; then
-    echo "ERROR: INFLUX_WRITER_PASSWORD not set in .env"
+    echo "ERROR: INFLUX_WRITER_PASSWORD not set in deploy/.env"
     exit 1
 fi
 
@@ -89,5 +90,5 @@ docker exec "$CONTAINER" influx \
 
 echo ""
 echo "==> Done."
-echo "    mcp_reader  → READ-ONLY on $DB"
+echo "    mcp_reader    → READ-ONLY on $DB"
 echo "    garmin_writer → ALL on $DB"

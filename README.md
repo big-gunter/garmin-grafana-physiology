@@ -9,7 +9,8 @@ Self-host a **Garmin Connect → InfluxDB → Grafana** pipeline on your own mac
 - [What you get](#what-you-get)
 - [Architecture](#architecture)
 - [Requirements](#requirements)
-- [Deploy the stack](#deploy-the-stack)
+- [Local deployment](#local-deployment)
+- [Cloud deployment](#cloud-deployment)
 - [Claude and MCP](#claude-and-mcp)
 - [Credentials](#credentials)
 - [Grafana dashboards](#grafana-dashboards)
@@ -50,7 +51,9 @@ Network: bridge **`garmin-grafana-internal`**; services talk as **`influxdb`**, 
 - **Git**
 - For MCP on the host: **[uv](https://docs.astral.sh/uv/)** and **`uv sync`** from this repo
 
-## Deploy the stack
+## Local deployment
+
+Runs the full stack on your own machine. Data stays local; Grafana is at `http://localhost:3000`.
 
 1. **Clone** and create the token directory (owned by UID **1000**, the fetch container user):
 
@@ -61,7 +64,7 @@ Network: bridge **`garmin-grafana-internal`**; services talk as **`influxdb`**, 
    sudo chown -R 1000:1000 garminconnect-tokens
    ```
 
-2. **Secrets template** (host tools + optional Compose substitution):
+2. **Secrets template:**
 
    ```bash
    cp .env.example .env
@@ -87,6 +90,55 @@ Network: bridge **`garmin-grafana-internal`**; services talk as **`influxdb`**, 
 5. **Verify:** open **Grafana** at **`http://localhost:3000`** (default **`admin` / `admin`** — change it). Follow logs with `docker compose logs -f garmin-fetch-data`.
 
 The first regular sync typically backfills on the order of **the last week**; use [bulk fetch](#bulk-historical-fetch) for older ranges.
+
+## Cloud deployment
+
+Runs the stack on a remote server, exposed via Cloudflare tunnel (no open ports). Includes Cloudflare Access protecting Grafana, GitHub OAuth protecting the MCP server, automated backups, and server hardening. Tested on Hetzner CAX21 ARM (Ubuntu 22.04).
+
+The cloud stack lives under **`deploy/`**:
+
+| Path | Purpose |
+|---|---|
+| `deploy/docker-compose.yml` | Full cloud stack: cloudflared, influxdb, grafana, garmin-fetch-data, mcp-server |
+| `deploy/.env.example` | All required environment variables |
+| `deploy/setup/01_server_setup.sh` | Docker, UFW firewall, fail2ban, SSH hardening |
+| `deploy/setup/02_folders.sh` | Data directories, permissions, dashboard patch, `.env` template |
+| `deploy/setup/03_influxdb_users.sh` | Creates `garmin_writer` and `mcp_reader` InfluxDB users |
+| `deploy/setup/04_backup.sh` | Daily InfluxDB + Grafana backup (cron) |
+| `deploy/mcp_server/` | GitHub OAuth MCP gateway |
+
+**Quick summary of deployment steps:**
+
+```bash
+# 1. On the server — clone to /opt/physiology
+git clone https://github.com/big-gunter/garmin-grafana-physiology.git /opt/physiology
+cd /opt/physiology
+
+# 2. Harden server (moves SSH to port 22444)
+bash deploy/setup/01_server_setup.sh
+
+# 3. Create data dirs, patch dashboard, create deploy/.env
+bash deploy/setup/02_folders.sh
+
+# 4. Fill in credentials
+nano deploy/.env
+
+# 5. Build image
+cd deploy && docker compose build garmin-fetch-data
+
+# 6. Start InfluxDB and create users
+docker compose up -d influxdb
+# wait for healthy, then:
+bash /opt/physiology/deploy/setup/03_influxdb_users.sh
+
+# 7. Authenticate with Garmin (interactive, one-time)
+docker compose run --rm garmin-fetch-data
+
+# 8. Start everything
+docker compose up -d
+```
+
+See **[`deploy/README.md`](deploy/README.md)** for the full step-by-step runbook including Cloudflare setup, GitHub OAuth, connecting Claude.ai, and automated backups.
 
 ## Claude and MCP
 
@@ -119,15 +171,19 @@ JSON in **`Grafana_Dashboard/`** (e.g. `Garmin-Grafana-Dashboard.json`, `Garmin-
 
 ## Day-to-day operations
 
-**Lifecycle**
+**Lifecycle (local)**
 
 - Start: `docker compose up -d`
-- Stop: `docker compose stop` or `docker compose down`  
+- Stop: `docker compose stop` or `docker compose down`
 - **Do not** use `docker compose down -v` unless you intend to **delete** named volumes (Influx/Grafana data).
-
-**Updates**
-
 - Rebuild after changing Python deps: `docker compose build && docker compose up -d`
+
+**Lifecycle (cloud — run from `deploy/`)**
+
+- Start: `docker compose up -d`
+- Stop: `docker compose stop`
+- Update: `git pull && docker compose down && docker compose up -d --build`
+- Re-authenticate Garmin: `docker compose stop garmin-fetch-data && docker compose run --rm garmin-fetch-data && docker compose up -d garmin-fetch-data`
 
 ### Bulk historical fetch
 

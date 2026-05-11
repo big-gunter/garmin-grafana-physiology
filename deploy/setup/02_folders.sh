@@ -1,40 +1,51 @@
 #!/bin/bash
 # =============================================================================
 # 02_folders.sh
-# Creates /opt/physiology directory structure with correct permissions
-# Run as root after 01_server_setup.sh
+# Creates data directories and prepares deploy/.env for the physiology stack.
+# The repo must be cloned to /opt/physiology before running this.
+# Run as root: bash deploy/setup/02_folders.sh
 # =============================================================================
 set -euo pipefail
 
 BASE=/opt/physiology
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 
-echo "==> Creating directory structure at $BASE..."
-mkdir -p $BASE/{data/influxdb,data/grafana,mcp_server,backups}
+if [ "$REPO_DIR" != "$BASE" ]; then
+    echo "WARNING: repo is at $REPO_DIR but compose volume paths expect /opt/physiology"
+    echo "         Continuing — update absolute paths in deploy/docker-compose.yml if needed"
+fi
+
+echo "==> Creating data directories..."
+mkdir -p $BASE/data/influxdb
+mkdir -p $BASE/data/grafana
+mkdir -p $BASE/garminconnect-tokens
+mkdir -p $BASE/backups
 
 echo "==> Setting permissions..."
 # Grafana runs as uid 472
 chown -R 472:472 $BASE/data/grafana
-
 # InfluxDB runs as uid 1500 (confirmed from influxdb:1.11 image)
 chown -R 1500:1500 $BASE/data/influxdb
+# garmin-fetch-data runs as appuser (uid 1000)
+chown -R 1000:1000 $BASE/garminconnect-tokens
 
-echo "==> Copying deployment files..."
-cp $REPO_DIR/deploy/docker-compose.yml $BASE/docker-compose.yml
-cp -r $REPO_DIR/deploy/mcp_server/. $BASE/mcp_server/
+echo "==> Patching Grafana dashboard datasource reference..."
+sed -i 's/\${DS_GARMIN_STATS}/garmin_influxdb/g' \
+    "$REPO_DIR/Grafana_Dashboard/Garmin-Grafana-Dashboard.json"
 
-echo "==> Creating .env from template..."
-if [ ! -f $BASE/.env ]; then
-    cp $REPO_DIR/deploy/.env.example $BASE/.env
-    chmod 600 $BASE/.env
-    chown root:root $BASE/.env
-    echo "    .env created - fill in all values before starting stack"
-    echo "    nano $BASE/.env"
+echo "==> Creating deploy/.env from template..."
+if [ ! -f "$REPO_DIR/deploy/.env" ]; then
+    cp "$REPO_DIR/deploy/.env.example" "$REPO_DIR/deploy/.env"
+    chmod 600 "$REPO_DIR/deploy/.env"
+    chown root:root "$REPO_DIR/deploy/.env"
+    echo "    .env created at $REPO_DIR/deploy/.env"
+    echo "    Fill in all values before starting the stack:"
+    echo "    nano $REPO_DIR/deploy/.env"
 else
-    echo "    .env already exists - skipping (delete it to reset)"
+    echo "    deploy/.env already exists — skipping (delete to reset)"
 fi
 
 echo ""
-echo "==> Folder setup complete."
-echo "    Next: fill in $BASE/.env then run: docker compose up -d"
-echo "    Then run 03_influxdb_users.sh once InfluxDB is healthy"
+echo "==> Setup complete."
+echo "    Next: fill in deploy/.env then start the stack:"
+echo "    cd $REPO_DIR/deploy && docker compose up -d"
