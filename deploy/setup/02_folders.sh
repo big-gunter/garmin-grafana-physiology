@@ -2,18 +2,13 @@
 # =============================================================================
 # 02_folders.sh
 # Creates data directories and prepares deploy/.env for the physiology stack.
-# The repo must be cloned to /opt/physiology before running this.
+# The repo must be cloned to /opt/physiology-repo before running this.
 # Run as root: bash deploy/setup/02_folders.sh
 # =============================================================================
 set -euo pipefail
 
-BASE=/opt/physiology
-REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-
-if [ "$REPO_DIR" != "$BASE" ]; then
-    echo "WARNING: repo is at $REPO_DIR but compose volume paths expect /opt/physiology"
-    echo "         Continuing — update absolute paths in deploy/docker-compose.yml if needed"
-fi
+BASE=/opt/physiology          # data directory (influxdb, grafana, tokens, backups)
+REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"  # repo root (e.g. /opt/physiology-repo)
 
 echo "==> Creating data directories..."
 mkdir -p $BASE/data/influxdb

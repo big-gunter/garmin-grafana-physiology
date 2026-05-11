@@ -110,9 +110,9 @@ The cloud stack lives under **`deploy/`**:
 **Quick summary of deployment steps:**
 
 ```bash
-# 1. On the server — clone to /opt/physiology
-git clone https://github.com/big-gunter/garmin-grafana-physiology.git /opt/physiology
-cd /opt/physiology
+# 1. On the server — clone to /opt/physiology-repo
+git clone https://github.com/big-gunter/garmin-grafana-physiology.git /opt/physiology-repo
+cd /opt/physiology-repo
 
 # 2. Harden server (moves SSH to port 22444)
 bash deploy/setup/01_server_setup.sh
@@ -129,7 +129,7 @@ cd deploy && docker compose build garmin-fetch-data
 # 6. Start InfluxDB and create users
 docker compose up -d influxdb
 # wait for healthy, then:
-bash /opt/physiology/deploy/setup/03_influxdb_users.sh
+bash /opt/physiology-repo/deploy/setup/03_influxdb_users.sh
 
 # 7. Authenticate with Garmin (interactive, one-time)
 docker compose run --rm garmin-fetch-data

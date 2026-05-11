@@ -94,11 +94,11 @@ Copy Client ID and Client Secret → go in `deploy/.env`.
 
 ## Phase 2 — Server Setup
 
-SSH into a fresh Ubuntu 22.04 server as root, then clone the repo to `/opt/physiology` and run the server hardening script:
+SSH into a fresh Ubuntu 22.04 server as root, then clone the repo to `/opt/physiology-repo` and run the server hardening script:
 
 ```bash
-git clone https://github.com/big-gunter/garmin-grafana-physiology.git /opt/physiology
-cd /opt/physiology
+git clone https://github.com/big-gunter/garmin-grafana-physiology.git /opt/physiology-repo
+cd /opt/physiology-repo
 bash deploy/setup/01_server_setup.sh
 ```
 
@@ -112,7 +112,7 @@ bash deploy/setup/01_server_setup.sh
 ## Phase 3 — Create Data Directories
 
 ```bash
-cd /opt/physiology
+cd /opt/physiology-repo
 bash deploy/setup/02_folders.sh
 ```
 
@@ -123,7 +123,7 @@ This creates `/opt/physiology/data/{influxdb,grafana}`, `/opt/physiology/garminc
 ## Phase 4 — Configure Environment
 
 ```bash
-nano /opt/physiology/deploy/.env
+nano /opt/physiology-repo/deploy/.env
 ```
 
 Fill in every value:
@@ -147,7 +147,7 @@ Fill in every value:
 ## Phase 5 — Build the Image
 
 ```bash
-cd /opt/physiology/deploy
+cd /opt/physiology-repo/deploy
 docker compose build garmin-fetch-data
 ```
 
@@ -158,7 +158,7 @@ docker compose build garmin-fetch-data
 Start InfluxDB on its own first, then create the application users:
 
 ```bash
-cd /opt/physiology/deploy
+cd /opt/physiology-repo/deploy
 docker compose up -d influxdb
 docker compose ps   # wait until influxdb shows (healthy)
 ```
@@ -166,7 +166,7 @@ docker compose ps   # wait until influxdb shows (healthy)
 Once healthy:
 
 ```bash
-bash /opt/physiology/deploy/setup/03_influxdb_users.sh
+bash /opt/physiology-repo/deploy/setup/03_influxdb_users.sh
 ```
 
 This creates `mcp_reader` (read-only, used by Grafana and the MCP server) and `garmin_writer` (write access, used by the ingest container).
@@ -178,7 +178,7 @@ This creates `mcp_reader` (read-only, used by Grafana and the MCP server) and `g
 Run the ingest container interactively once to complete the Garmin OAuth/MFA flow:
 
 ```bash
-cd /opt/physiology/deploy
+cd /opt/physiology-repo/deploy
 docker compose run --rm garmin-fetch-data
 ```
 
@@ -189,7 +189,7 @@ You will be prompted for your Garmin Connect email, password, and 2FA code. Toke
 ## Phase 8 — Start the Full Stack
 
 ```bash
-cd /opt/physiology/deploy
+cd /opt/physiology-repo/deploy
 docker compose up -d
 docker compose ps
 ```
@@ -226,7 +226,7 @@ docker compose logs -f garmin-fetch-data
 ```bash
 crontab -e
 # Add:
-0 2 * * * bash /opt/physiology/deploy/setup/04_backup.sh >> /var/log/physiology-backup.log 2>&1
+0 2 * * * bash /opt/physiology-repo/deploy/setup/04_backup.sh >> /var/log/physiology-backup.log 2>&1
 ```
 
 Backs up InfluxDB (portable format) and Grafana data daily at 02:00, retaining 7 days.
@@ -236,7 +236,7 @@ Backs up InfluxDB (portable format) and Grafana data daily at 02:00, retaining 7
 ## Updating
 
 ```bash
-cd /opt/physiology
+cd /opt/physiology-repo
 git pull
 cd deploy
 docker compose down
@@ -249,7 +249,7 @@ docker compose up -d --build
 
 **Garmin tokens expired:**
 ```bash
-cd /opt/physiology/deploy
+cd /opt/physiology-repo/deploy
 docker compose stop garmin-fetch-data
 docker compose run --rm garmin-fetch-data   # re-authenticate interactively
 docker compose up -d garmin-fetch-data
