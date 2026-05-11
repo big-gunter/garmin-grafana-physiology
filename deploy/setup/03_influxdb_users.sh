@@ -10,8 +10,8 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-ENV_FILE="$REPO_DIR/deploy/.env"
-CONTAINER="influxdb"
+DEPLOY_DIR="$REPO_DIR/deploy"
+ENV_FILE="$DEPLOY_DIR/.env"
 
 if [ ! -f "$ENV_FILE" ]; then
     echo "ERROR: $ENV_FILE not found — run 02_folders.sh first"
@@ -38,12 +38,13 @@ if [ -z "$WRITER_PASSWORD" ]; then
     exit 1
 fi
 
+influx_exec() {
+    docker compose -f "$DEPLOY_DIR/docker-compose.yml" exec influxdb influx "$@"
+}
+
 echo "==> Waiting for InfluxDB to be healthy..."
 for i in {1..30}; do
-    if docker exec "$CONTAINER" influx \
-        -username admin \
-        -password "$ADMIN_PASSWORD" \
-        -execute "SHOW DATABASES" &>/dev/null; then
+    if influx_exec -username admin -password "$ADMIN_PASSWORD" -execute "SHOW DATABASES" &>/dev/null; then
         echo "    InfluxDB is ready"
         break
     fi
@@ -52,40 +53,28 @@ for i in {1..30}; do
 done
 
 echo "==> Creating mcp_reader user (READ-ONLY)..."
-docker exec "$CONTAINER" influx \
-    -username admin \
-    -password "$ADMIN_PASSWORD" \
+influx_exec -username admin -password "$ADMIN_PASSWORD" \
     -execute "CREATE USER mcp_reader WITH PASSWORD '$MCP_PASSWORD'" 2>/dev/null || \
     echo "    User may already exist, continuing..."
 
-docker exec "$CONTAINER" influx \
-    -username admin \
-    -password "$ADMIN_PASSWORD" \
+influx_exec -username admin -password "$ADMIN_PASSWORD" \
     -execute "GRANT READ ON \"$DB\" TO mcp_reader"
 
 echo "==> Creating garmin_writer user (WRITE)..."
-docker exec "$CONTAINER" influx \
-    -username admin \
-    -password "$ADMIN_PASSWORD" \
+influx_exec -username admin -password "$ADMIN_PASSWORD" \
     -execute "CREATE USER garmin_writer WITH PASSWORD '$WRITER_PASSWORD'" 2>/dev/null || \
     echo "    User may already exist, continuing..."
 
-docker exec "$CONTAINER" influx \
-    -username admin \
-    -password "$ADMIN_PASSWORD" \
+influx_exec -username admin -password "$ADMIN_PASSWORD" \
     -execute "GRANT ALL ON \"$DB\" TO garmin_writer"
 
 echo "==> Verifying grants..."
 echo "--- mcp_reader ---"
-docker exec "$CONTAINER" influx \
-    -username admin \
-    -password "$ADMIN_PASSWORD" \
+influx_exec -username admin -password "$ADMIN_PASSWORD" \
     -execute "SHOW GRANTS FOR mcp_reader"
 
 echo "--- garmin_writer ---"
-docker exec "$CONTAINER" influx \
-    -username admin \
-    -password "$ADMIN_PASSWORD" \
+influx_exec -username admin -password "$ADMIN_PASSWORD" \
     -execute "SHOW GRANTS FOR garmin_writer"
 
 echo ""

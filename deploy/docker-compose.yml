@@ -22,7 +22,6 @@ services:
 
   influxdb:
     image: influxdb:1.11
-    container_name: influxdb
     hostname: influxdb
     volumes:
       - /opt/physiology/data/influxdb:/var/lib/influxdb
