@@ -2018,10 +2018,30 @@ def compute_rollups_range(start_date: str, end_date: str) -> None:
 def fetch_write_bulk(start_date_str, end_date_str, *, local_timediff: timedelta):
     global garmin_obj
 
+    # Guard against repeated failed reauthentication attempts using stored session tokens.
+    # This prevents endless loops that can trigger rate limits or lockouts.
+    consecutive_token_reauth_failures = 0
+
     def _reauth():
         global garmin_obj
-        garmin_obj = garmin_login()
-        return garmin_obj
+        nonlocal consecutive_token_reauth_failures
+        try:
+            garmin_obj = garmin_login()
+            consecutive_token_reauth_failures = 0
+            return garmin_obj
+        except Exception as err:
+            consecutive_token_reauth_failures += 1
+            logging.error(
+                "Garmin reauthentication failed using stored auth (%s/2): %s",
+                consecutive_token_reauth_failures,
+                err,
+            )
+            if consecutive_token_reauth_failures >= 2:
+                raise RuntimeError(
+                    "Garmin reauthentication failed twice in a row using stored auth; aborting run to avoid lockouts."
+                ) from err
+            # First failure: keep the current session object and let the main loop retry once.
+            return garmin_obj
 
     ctx = _OrchestratorContext(
         garmin_obj=garmin_obj,
