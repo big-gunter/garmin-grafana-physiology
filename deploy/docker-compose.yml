@@ -119,12 +119,16 @@ services:
       - INFLUX_USER=mcp_reader
       - INFLUX_PASSWORD=${INFLUX_MCP_PASSWORD}
       - INFLUX_DATABASE=${INFLUX_DATABASE}
+      - INFLUX_WRITER_USER=garmin_writer
+      - INFLUX_WRITER_PASSWORD=${INFLUX_WRITER_PASSWORD}
       - GARMIN_DEVICENAME=${GARMIN_DEVICENAME}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
       - GITHUB_ALLOWED_USER=${GITHUB_ALLOWED_USER}
       - MCP_BASE_URL=https://mcp.big-gunter.com
       - TOKEN_SECRET=${TOKEN_SECRET}
+      - GRAFANA_URL=http://grafana:3000
+      - GRAFANA_TOKEN=${GRAFANA_TOKEN}
     restart: unless-stopped
     networks:
       - physiology-net

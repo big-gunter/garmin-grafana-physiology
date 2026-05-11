@@ -1,22 +1,23 @@
 import os
 import json
-import asyncio
+import requests
 from datetime import datetime, timedelta
 from typing import Optional
 from influxdb import InfluxDBClient
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 # --- Config from environment ---
-INFLUX_HOST     = os.environ.get("INFLUX_HOST", "influxdb")
-INFLUX_PORT     = int(os.environ.get("INFLUX_PORT", "8086"))
-INFLUX_USER     = os.environ.get("INFLUX_USER", "admin")
-INFLUX_PASSWORD = os.environ.get("INFLUX_PASSWORD", "")
-INFLUX_DATABASE = os.environ.get("INFLUX_DATABASE", "garmin")
-DEVICE_NAME     = os.environ.get("GARMIN_DEVICENAME", "")
-
-from mcp.server.transport_security import TransportSecuritySettings
-
-from mcp.server.transport_security import TransportSecuritySettings
+INFLUX_HOST          = os.environ.get("INFLUX_HOST", "influxdb")
+INFLUX_PORT          = int(os.environ.get("INFLUX_PORT", "8086"))
+INFLUX_USER          = os.environ.get("INFLUX_USER", "admin")
+INFLUX_PASSWORD      = os.environ.get("INFLUX_PASSWORD", "")
+INFLUX_DATABASE      = os.environ.get("INFLUX_DATABASE", "garmin")
+INFLUX_WRITER_USER   = os.environ.get("INFLUX_WRITER_USER", "garmin_writer")
+INFLUX_WRITER_PASSWORD = os.environ.get("INFLUX_WRITER_PASSWORD", "")
+DEVICE_NAME          = os.environ.get("GARMIN_DEVICENAME", "")
+GRAFANA_URL          = os.environ.get("GRAFANA_URL", "http://grafana:3000").rstrip("/")
+GRAFANA_TOKEN        = os.environ.get("GRAFANA_TOKEN", "")
 
 mcp = FastMCP(
     "Garmin Physiology MCP",
@@ -37,6 +38,15 @@ def get_client():
         database=INFLUX_DATABASE
     )
 
+def get_writer_client():
+    return InfluxDBClient(
+        host=INFLUX_HOST,
+        port=INFLUX_PORT,
+        username=INFLUX_WRITER_USER,
+        password=INFLUX_WRITER_PASSWORD,
+        database=INFLUX_DATABASE
+    )
+
 def query(q: str) -> list[dict]:
     client = get_client()
     result = client.query(q)
@@ -51,6 +61,9 @@ def device_filter() -> str:
     if DEVICE_NAME:
         return f" AND \"Device\"='{DEVICE_NAME}'"
     return ""
+
+def grafana_headers() -> dict:
+    return {"Authorization": f"Bearer {GRAFANA_TOKEN}", "Content-Type": "application/json"}
 
 # --- DAILY HEALTH TOOLS ---
 
@@ -212,7 +225,6 @@ def get_race_predictions(days_back: int = 90) -> str:
     )
     if not rows:
         return "No race predictions found."
-    # convert seconds to readable format
     def fmt(secs):
         if secs is None:
             return None
@@ -334,3 +346,123 @@ def get_breathing_rate(days_back: int = 14) -> str:
         return "No breathing rate data found."
     return json.dumps(rows, indent=2, default=str)
 
+# --- TRAINING PLAN TOOLS ---
+
+@mcp.tool()
+def write_training_plan_week(week_start_date: str, week_data: str) -> str:
+    """Write a weekly training plan to InfluxDB. week_start_date: ISO date string (YYYY-MM-DD). week_data: JSON string describing the week's plan."""
+    point = [{
+        "measurement": "TrainingPlan",
+        "tags": {"source": "coach", "week_start": week_start_date},
+        "fields": {"plan_json": week_data},
+        "time": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }]
+    client = get_writer_client()
+    client.write_points(point)
+    return f"Training plan for week starting {week_start_date} written successfully."
+
+@mcp.tool()
+def get_training_plan(weeks_back: int = 4) -> str:
+    """Get stored training plans for the last N weeks"""
+    start, end = date_range(weeks_back * 7)
+    rows = query(
+        f'SELECT "plan_json","week_start" FROM "TrainingPlan" '
+        f"WHERE time >= '{start}' AND time < '{end}' ORDER BY time DESC"
+    )
+    if not rows:
+        return "No training plans found for the requested period."
+    return json.dumps(rows, indent=2, default=str)
+
+@mcp.tool()
+def write_weekly_review(review_date: str, review_data: str) -> str:
+    """Write a weekly training review to InfluxDB. review_date: ISO date string (YYYY-MM-DD). review_data: JSON string with the review content."""
+    point = [{
+        "measurement": "WeeklyReview",
+        "tags": {"source": "coach"},
+        "fields": {"review_json": review_data},
+        "time": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }]
+    client = get_writer_client()
+    client.write_points(point)
+    return f"Weekly review for {review_date} written successfully."
+
+@mcp.tool()
+def get_weekly_reviews(weeks_back: int = 4) -> str:
+    """Get stored weekly training reviews for the last N weeks"""
+    start, end = date_range(weeks_back * 7)
+    rows = query(
+        f'SELECT "review_json" FROM "WeeklyReview" '
+        f"WHERE time >= '{start}' AND time < '{end}' ORDER BY time DESC"
+    )
+    if not rows:
+        return "No weekly reviews found for the requested period."
+    return json.dumps(rows, indent=2, default=str)
+
+@mcp.tool()
+def write_coach_note(note: str, category: str = "general") -> str:
+    """Write a coach note to InfluxDB. note: the note text. category: tag to categorise the note (default: general)."""
+    now = datetime.utcnow()
+    point = [{
+        "measurement": "CoachNotes",
+        "tags": {"category": category},
+        "fields": {"note": note},
+        "time": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }]
+    client = get_writer_client()
+    client.write_points(point)
+    return f"Coach note written at {now.strftime('%Y-%m-%d %H:%M:%S')} UTC (category: {category})."
+
+@mcp.tool()
+def get_coach_notes(days_back: int = 30) -> str:
+    """Get coach notes for the last N days"""
+    start, end = date_range(days_back)
+    rows = query(
+        f'SELECT "note","category" FROM "CoachNotes" '
+        f"WHERE time >= '{start}' AND time < '{end}' ORDER BY time DESC"
+    )
+    if not rows:
+        return "No coach notes found for the requested period."
+    return json.dumps(rows, indent=2, default=str)
+
+# --- GRAFANA TOOLS ---
+
+@mcp.tool()
+def get_grafana_dashboards() -> str:
+    """List all Grafana dashboards"""
+    if not GRAFANA_TOKEN:
+        return "GRAFANA_TOKEN is not configured."
+    resp = requests.get(f"{GRAFANA_URL}/api/search", headers=grafana_headers(), timeout=10)
+    if not resp.ok:
+        return f"Grafana error {resp.status_code}: {resp.text}"
+    return json.dumps(resp.json(), indent=2)
+
+@mcp.tool()
+def create_grafana_dashboard(dashboard_json: str) -> str:
+    """Create or update a Grafana dashboard. dashboard_json: full Grafana dashboard JSON object as a string."""
+    if not GRAFANA_TOKEN:
+        return "GRAFANA_TOKEN is not configured."
+    try:
+        dashboard = json.loads(dashboard_json)
+    except json.JSONDecodeError as e:
+        return f"Invalid JSON: {e}"
+    payload = {"dashboard": dashboard, "overwrite": True, "folderId": 0}
+    resp = requests.post(
+        f"{GRAFANA_URL}/api/dashboards/db",
+        headers=grafana_headers(),
+        json=payload,
+        timeout=10,
+    )
+    if not resp.ok:
+        return f"Grafana error {resp.status_code}: {resp.text}"
+    result = resp.json()
+    return f"Dashboard saved: {result.get('url', result)}"
+
+@mcp.tool()
+def get_grafana_datasources() -> str:
+    """List all configured Grafana datasources"""
+    if not GRAFANA_TOKEN:
+        return "GRAFANA_TOKEN is not configured."
+    resp = requests.get(f"{GRAFANA_URL}/api/datasources", headers=grafana_headers(), timeout=10)
+    if not resp.ok:
+        return f"Grafana error {resp.status_code}: {resp.text}"
+    return json.dumps(resp.json(), indent=2)
