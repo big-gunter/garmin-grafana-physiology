@@ -1,3 +1,12 @@
+# Cloud deployment stack
+# Run from deploy/: docker compose up -d
+# Or from repo root: docker compose -f deploy/docker-compose.yml up -d
+# Env file: /opt/physiology/.env  (see .env.example)
+
+networks:
+  physiology-net:
+    driver: bridge
+
 services:
 
   cloudflared:
@@ -13,12 +22,15 @@ services:
 
   influxdb:
     image: influxdb:1.11
+    container_name: influxdb
+    hostname: influxdb
     volumes:
       - /opt/physiology/data/influxdb:/var/lib/influxdb
     environment:
       - INFLUXDB_DB=${INFLUX_DATABASE}
       - INFLUXDB_ADMIN_USER=admin
       - INFLUXDB_ADMIN_PASSWORD=${INFLUX_PASSWORD}
+      - INFLUXDB_DATA_INDEX_VERSION=tsi1
     restart: unless-stopped
     networks:
       - physiology-net
@@ -32,8 +44,12 @@ services:
 
   grafana:
     image: grafana/grafana:latest
+    container_name: grafana
+    hostname: grafana
     volumes:
       - /opt/physiology/data/grafana:/var/lib/grafana
+      - ./grafana:/etc/grafana/provisioning/datasources:ro
+      - ../Grafana_Dashboard:/etc/grafana/provisioning/dashboards:ro
     environment:
       - GF_SERVER_ROOT_URL=https://grafana.big-gunter.com
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
@@ -42,6 +58,17 @@ services:
       - GF_ANALYTICS_REPORTING_ENABLED=false
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_PLUGINS_PREINSTALL=marcusolsson-hourly-heatmap-panel
+      - GF_DATE_FORMATS_FULL_DATE=MMM Do, YYYY - hh:mm:ss a
+      - GF_DATE_FORMATS_INTERVAL_SECOND=hh:mm:ss a
+      - GF_DATE_FORMATS_INTERVAL_MINUTE=hh:mm a
+      - GF_DATE_FORMATS_INTERVAL_HOUR=MMM DD hh:mm a
+      - GF_DATE_FORMATS_INTERVAL_DAY=MMM DD
+      - GF_DATE_FORMATS_INTERVAL_MONTH=YYYY-MM
+      - GF_DATE_FORMATS_INTERVAL_YEAR=YYYY
+      # Forwarded into grafana/datasource.yaml via Grafana env-var substitution
+      - INFLUX_DATABASE=${INFLUX_DATABASE}
+      - INFLUX_MCP_PASSWORD=${INFLUX_MCP_PASSWORD}
     restart: unless-stopped
     networks:
       - physiology-net
@@ -53,8 +80,40 @@ services:
       timeout: 10s
       retries: 3
 
+  garmin-fetch-data:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: garmin-fetch-data:physiology
+    container_name: garmin-fetch-data
+    restart: unless-stopped
+    networks:
+      - physiology-net
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    volumes:
+      - /opt/physiology/garminconnect-tokens:/home/appuser/.garminconnect
+    environment:
+      - INFLUXDB_HOST=influxdb
+      - INFLUXDB_PORT=8086
+      - INFLUXDB_VERSION=1
+      - INFLUXDB_ENDPOINT_IS_HTTP=true
+      - INFLUXDB_USERNAME=garmin_writer
+      - INFLUXDB_PASSWORD=${INFLUX_WRITER_PASSWORD}
+      - INFLUXDB_DATABASE=${INFLUX_DATABASE}
+      - GARMINCONNECT_IS_CN=False
+      - TAG_MEASUREMENTS_WITH_USER_EMAIL=True
+      # - LOG_LEVEL=INFO
+      # - UPDATE_INTERVAL_SECONDS=300
+      # - GARMINCONNECT_EMAIL=
+      # - GARMINCONNECT_BASE64_PASSWORD=
+
   mcp-server:
-    build: ./mcp_server
+    build:
+      context: ./mcp_server
     environment:
       - INFLUX_HOST=influxdb
       - INFLUX_PORT=8086
@@ -77,7 +136,3 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
-networks:
-  physiology-net:
-    driver: bridge
