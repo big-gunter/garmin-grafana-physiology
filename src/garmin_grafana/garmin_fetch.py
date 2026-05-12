@@ -78,7 +78,7 @@ def _is_run(activity_type: str) -> bool:
     t = _norm_tag_value(activity_type or "")
     return t in {
         "running", "trail_running", "treadmill_running", "track_running",
-        "ultra_run", "virtual_run",
+        "ultra_run", "ultra_running", "virtual_run",
     }
 
 def _is_ride(activity_type: str) -> bool:
