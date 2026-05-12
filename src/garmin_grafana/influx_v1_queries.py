@@ -274,6 +274,65 @@ def userprofile_known_for_day(date_str: str, ctx: InfluxV1QueryContext) -> bool:
         return False
 
 
+def dailystats_exists_for_day(date_str: str, ctx: InfluxV1QueryContext) -> bool:
+    try:
+        start_z, end_z = ctx.day_bounds_z(date_str)
+        q = (
+            'SELECT count("totalSteps") AS c '
+            'FROM "DailyStats" '
+            f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+            f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+        )
+        res = ctx.influxdbclient.query(q)
+        pts = list(res.get_points())
+        if not pts:
+            return False
+        c = pts[0].get("c")
+        return (c is not None) and (float(c) > 0)
+    except Exception:
+        logging.exception("DailyStats existence query failed")
+        return False
+
+
+def intraday_exists_for_day(measurement: str, field: str, date_str: str, ctx: InfluxV1QueryContext) -> bool:
+    try:
+        start_z, end_z = ctx.day_bounds_z(date_str)
+        q = (
+            f'SELECT count("{field}") AS c '
+            f'FROM "{measurement}" '
+            f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+            f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+        )
+        res = ctx.influxdbclient.query(q)
+        pts = list(res.get_points())
+        if not pts:
+            return False
+        c = pts[0].get("c")
+        return (c is not None) and (float(c) > 0)
+    except Exception:
+        logging.exception(f"{measurement} existence query failed")
+        return False
+
+
+def activitysummary_exists(activity_id: int | str, ctx: InfluxV1QueryContext) -> bool:
+    try:
+        q = (
+            'SELECT count("Activity_ID") AS c '
+            'FROM "ActivitySummary" '
+            f"WHERE \"ActivityID\"='{activity_id}' "
+            f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+        )
+        res = ctx.influxdbclient.query(q)
+        pts = list(res.get_points())
+        if not pts:
+            return False
+        c = pts[0].get("c")
+        return (c is not None) and (float(c) > 0)
+    except Exception:
+        logging.exception("ActivitySummary existence query failed")
+        return False
+
+
 def get_birth_year_for_day(date_str: str, ctx: InfluxV1QueryContext) -> int | None:
     start_z, end_z = ctx.day_bounds_z(date_str)
     q = (

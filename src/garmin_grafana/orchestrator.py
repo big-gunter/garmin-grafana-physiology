@@ -49,9 +49,14 @@ class DailyFetchWriteContext:
     ignore_intraday_data_refresh_days: int
     fetch_selection: list[str]
     userprofile_write_once_per_day: bool
+    skip_existing_daily: bool
+    force_reprocess_activities: bool
 
     # user profile helpers
     userprofile_exists_for_day_v1: Callable[[str], bool]
+    dailystats_exists_for_day_v1: Callable[[str], bool]
+    intraday_exists_for_day_v1: Callable[[str, str, str], bool]
+    activitysummary_exists_v1: Callable[[int | str], bool]
     get_user_gender_from_garmin: Callable[[], str]
     stored_birth_year_v1: Callable[[], int | None]
     get_birth_year_from_garmin_profile: Callable[[], int | None]
@@ -188,19 +193,37 @@ def daily_fetch_write(date_str: str, *, run_rollups_inline: bool = True, ctx: Da
 
     sel = set(ctx.fetch_selection)
     if "daily_avg" in sel:
-        ctx.write_points_to_influxdb(ctx.get_daily_stats(date_str))
+        if ctx.skip_existing_daily and ctx.dailystats_exists_for_day_v1(date_str):
+            logging.info(f"DailyStats already exists for {date_str}; skipping")
+        else:
+            ctx.write_points_to_influxdb(ctx.get_daily_stats(date_str))
     if "sleep" in sel:
         ctx.write_points_to_influxdb(ctx.get_sleep_data(date_str))
     if "steps" in sel:
-        ctx.write_points_to_influxdb(ctx.get_intraday_steps(date_str))
+        if ctx.skip_existing_daily and ctx.intraday_exists_for_day_v1("StepsIntraday", "StepsCount", date_str):
+            logging.info(f"StepsIntraday already exists for {date_str}; skipping")
+        else:
+            ctx.write_points_to_influxdb(ctx.get_intraday_steps(date_str))
     if "heartrate" in sel:
-        ctx.write_points_to_influxdb(ctx.get_intraday_hr(date_str))
+        if ctx.skip_existing_daily and ctx.intraday_exists_for_day_v1("HeartRateIntraday", "HeartRate", date_str):
+            logging.info(f"HeartRateIntraday already exists for {date_str}; skipping")
+        else:
+            ctx.write_points_to_influxdb(ctx.get_intraday_hr(date_str))
     if "stress" in sel:
-        ctx.write_points_to_influxdb(ctx.get_intraday_stress(date_str))
+        if ctx.skip_existing_daily and ctx.intraday_exists_for_day_v1("StressIntraday", "stressLevel", date_str):
+            logging.info(f"StressIntraday already exists for {date_str}; skipping")
+        else:
+            ctx.write_points_to_influxdb(ctx.get_intraday_stress(date_str))
     if "breathing" in sel:
-        ctx.write_points_to_influxdb(ctx.get_intraday_br(date_str))
+        if ctx.skip_existing_daily and ctx.intraday_exists_for_day_v1("BreathingRateIntraday", "BreathingRate", date_str):
+            logging.info(f"BreathingRateIntraday already exists for {date_str}; skipping")
+        else:
+            ctx.write_points_to_influxdb(ctx.get_intraday_br(date_str))
     if "hrv" in sel:
-        ctx.write_points_to_influxdb(ctx.get_intraday_hrv(date_str))
+        if ctx.skip_existing_daily and ctx.intraday_exists_for_day_v1("HRV_Intraday", "hrvValue", date_str):
+            logging.info(f"HRV_Intraday already exists for {date_str}; skipping")
+        else:
+            ctx.write_points_to_influxdb(ctx.get_intraday_hrv(date_str))
     if "fitness_age" in sel:
         ctx.write_points_to_influxdb(ctx.get_fitness_age(date_str))
     if "vo2" in sel:
@@ -225,6 +248,19 @@ def daily_fetch_write(date_str: str, *, run_rollups_inline: bool = True, ctx: Da
         ctx.write_points_to_influxdb(ctx.get_hydration(date_str))
     if "activity" in sel:
         activity_summary_points_list, activity_with_gps_id_dict = ctx.get_activity_summary(date_str)
+        if not ctx.force_reprocess_activities:
+            all_ids = {p["tags"]["ActivityID"] for p in activity_summary_points_list} | set(activity_with_gps_id_dict.keys())
+            already_ingested = {aid for aid in all_ids if ctx.activitysummary_exists_v1(aid)}
+            if already_ingested:
+                logging.info(f"{date_str}: skipping {len(already_ingested)} already-ingested activities: {already_ingested}")
+                activity_summary_points_list = [
+                    p for p in activity_summary_points_list
+                    if p["tags"]["ActivityID"] not in already_ingested
+                ]
+                activity_with_gps_id_dict = {
+                    aid: atype for aid, atype in activity_with_gps_id_dict.items()
+                    if aid not in already_ingested
+                }
         ctx.write_points_to_influxdb(activity_summary_points_list)
         ctx.write_points_to_influxdb(ctx.fetch_activity_GPS(activity_with_gps_id_dict))
     if "solar_intensity" in sel:

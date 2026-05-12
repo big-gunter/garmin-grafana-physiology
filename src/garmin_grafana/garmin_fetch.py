@@ -128,6 +128,7 @@ IGNORE_INTRADAY_DATA_REFRESH_DAYS = cfg.IGNORE_INTRADAY_DATA_REFRESH_DAYS
 TAG_MEASUREMENTS_WITH_USER_EMAIL = cfg.TAG_MEASUREMENTS_WITH_USER_EMAIL
 
 FORCE_REPROCESS_ACTIVITIES = cfg.FORCE_REPROCESS_ACTIVITIES
+SKIP_EXISTING_DAILY = cfg.SKIP_EXISTING_DAILY
 ROLLUPS_AFTER_INGEST = cfg.ROLLUPS_AFTER_INGEST
 
 USER_TIMEZONE = cfg.USER_TIMEZONE
@@ -1489,7 +1490,50 @@ def _userprofile_known_for_day_v1(date_str: str) -> bool:
         query_last_row=_query_last_row_influx_v1,
     )
     return _influxv1.userprofile_known_for_day(date_str, ctx)
-    
+
+
+def _dailystats_exists_for_day_v1(date_str: str) -> bool:
+    if INFLUXDB_VERSION != "1":
+        return False
+    ctx = _InfluxV1QueryContext(
+        influxdbclient=influxdbclient,
+        influxdb_database=INFLUXDB_DATABASE,
+        garmin_devicename=GARMIN_DEVICENAME,
+        day_bounds_z=_day_bounds_z,
+        dt_utc=_dt_utc,
+        query_last_row=_query_last_row_influx_v1,
+    )
+    return _influxv1.dailystats_exists_for_day(date_str, ctx)
+
+
+def _intraday_exists_for_day_v1(measurement: str, field: str, date_str: str) -> bool:
+    if INFLUXDB_VERSION != "1":
+        return False
+    ctx = _InfluxV1QueryContext(
+        influxdbclient=influxdbclient,
+        influxdb_database=INFLUXDB_DATABASE,
+        garmin_devicename=GARMIN_DEVICENAME,
+        day_bounds_z=_day_bounds_z,
+        dt_utc=_dt_utc,
+        query_last_row=_query_last_row_influx_v1,
+    )
+    return _influxv1.intraday_exists_for_day(measurement, field, date_str, ctx)
+
+
+def _activitysummary_exists_v1(activity_id: int | str) -> bool:
+    if INFLUXDB_VERSION != "1":
+        return False
+    ctx = _InfluxV1QueryContext(
+        influxdbclient=influxdbclient,
+        influxdb_database=INFLUXDB_DATABASE,
+        garmin_devicename=GARMIN_DEVICENAME,
+        day_bounds_z=_day_bounds_z,
+        dt_utc=_dt_utc,
+        query_last_row=_query_last_row_influx_v1,
+    )
+    return _influxv1.activitysummary_exists(activity_id, ctx)
+
+
 def _percentile_activity_maxhr_42d(asof_date: str) -> float | None:
     start = (_dt_utc(asof_date) - timedelta(days=41)).strftime("%Y-%m-%d")
     start_dt = _dt_utc(start)
@@ -1970,6 +2014,11 @@ def daily_fetch_write(date_str, *, run_rollups_inline: bool = True):
         fetch_selection=FETCH_SELECTION,
         userprofile_write_once_per_day=USERPROFILE_WRITE_ONCE_PER_DAY,
         userprofile_exists_for_day_v1=_userprofile_exists_for_day_v1,
+        skip_existing_daily=SKIP_EXISTING_DAILY,
+        force_reprocess_activities=FORCE_REPROCESS_ACTIVITIES,
+        dailystats_exists_for_day_v1=_dailystats_exists_for_day_v1,
+        intraday_exists_for_day_v1=_intraday_exists_for_day_v1,
+        activitysummary_exists_v1=_activitysummary_exists_v1,
         get_user_gender_from_garmin=_get_user_gender_from_garmin,
         stored_birth_year_v1=_stored_birth_year_v1,
         get_birth_year_from_garmin_profile=_get_birth_year_from_garmin_profile,
