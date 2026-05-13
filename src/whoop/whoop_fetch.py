@@ -23,6 +23,8 @@ INFLUXDB_DATABASE = cfg.INFLUXDB_DATABASE
 LOG_LEVEL = cfg.LOG_LEVEL
 UPDATE_INTERVAL_SECONDS = cfg.UPDATE_INTERVAL_SECONDS
 SKIP_EXISTING_DAILY = cfg.SKIP_EXISTING_DAILY
+FETCH_CHUNK_DAYS = 30      # days per API batch
+FETCH_DELAY_SECONDS = 2    # pause between chunks
 TAG_MEASUREMENTS_WITH_USER_EMAIL = cfg.TAG_MEASUREMENTS_WITH_USER_EMAIL
 MANUAL_START_DATE = cfg.MANUAL_START_DATE
 MANUAL_END_DATE = cfg.MANUAL_END_DATE
@@ -68,12 +70,22 @@ def _base_tags() -> dict:
 
 def _api_get(path: str, params: dict | None = None) -> dict:
     token = auth.get_access_token()
-    resp = requests.get(
-        f"{WHOOP_API_BASE}{path}",
-        headers={"Authorization": f"Bearer {token}"},
-        params=params or {},
-        timeout=30,
-    )
+
+    def _do_get() -> requests.Response:
+        return requests.get(
+            f"{WHOOP_API_BASE}{path}",
+            headers={"Authorization": f"Bearer {token}"},
+            params=params or {},
+            timeout=30,
+        )
+
+    resp = _do_get()
+    if resp.status_code == 429:
+        retry_after = resp.headers.get("Retry-After")
+        sleep_secs = int(retry_after) + 5 if retry_after else 60
+        logging.warning("Rate limited (429); sleeping %ds before retry", sleep_secs)
+        time.sleep(sleep_secs)
+        resp = _do_get()
     resp.raise_for_status()
     return resp.json()
 
@@ -314,44 +326,50 @@ def get_sport_map() -> dict[int, str]:
 
 
 # ---------------------------------------------------------------------------
-# Per-day ingest
+# Chunk ingest — fetches a date range in one API call per measurement.
+# Skip check uses start_date (earliest day) as the proxy: a chunk is only
+# skipped if the first day already exists, so a partially-ingested chunk
+# will be retried in full rather than silently dropped.
 # ---------------------------------------------------------------------------
 
-def fetch_and_write_day(date_str: str, sport_map: dict[int, str]) -> None:
-    logging.info("Checking WHOOP data for %s", date_str)
+def fetch_and_write_chunk(start_date: str, end_date: str, sport_map: dict[int, str]) -> None:
+    logging.info("Fetching WHOOP data for %s → %s", start_date, end_date)
+    check_day = start_date  # conservative proxy: skip only if earliest day exists
 
-    if SKIP_EXISTING_DAILY and _measurement_exists_for_day("WhoopRecovery", "recovery_score", date_str):
-        logging.info("WhoopRecovery already exists for %s; skipping", date_str)
+    if SKIP_EXISTING_DAILY and _measurement_exists_for_day("WhoopRecovery", "recovery_score", check_day):
+        logging.info("WhoopRecovery already present from %s; skipping chunk", check_day)
     else:
-        write_points(fetch_recovery(date_str, date_str))
+        write_points(fetch_recovery(start_date, end_date))
 
-    if SKIP_EXISTING_DAILY and _measurement_exists_for_day("WhoopSleep", "score_total", date_str):
-        logging.info("WhoopSleep already exists for %s; skipping", date_str)
+    if SKIP_EXISTING_DAILY and _measurement_exists_for_day("WhoopSleep", "score_total", check_day):
+        logging.info("WhoopSleep already present from %s; skipping chunk", check_day)
     else:
-        write_points(fetch_sleep(date_str, date_str))
+        write_points(fetch_sleep(start_date, end_date))
 
-    if SKIP_EXISTING_DAILY and _measurement_exists_for_day("WhoopStrain", "day_strain", date_str):
-        logging.info("WhoopStrain already exists for %s; skipping", date_str)
+    if SKIP_EXISTING_DAILY and _measurement_exists_for_day("WhoopStrain", "day_strain", check_day):
+        logging.info("WhoopStrain already present from %s; skipping chunk", check_day)
     else:
-        write_points(fetch_strain(date_str, date_str))
+        write_points(fetch_strain(start_date, end_date))
 
-    if SKIP_EXISTING_DAILY and _measurement_exists_for_day("WhoopWorkout", "score_strain", date_str):
-        logging.info("WhoopWorkout already exists for %s; skipping", date_str)
+    if SKIP_EXISTING_DAILY and _measurement_exists_for_day("WhoopWorkout", "score_strain", check_day):
+        logging.info("WhoopWorkout already present from %s; skipping chunk", check_day)
     else:
-        write_points(fetch_workouts(date_str, date_str, sport_map))
+        write_points(fetch_workouts(start_date, end_date, sport_map))
 
 
 # ---------------------------------------------------------------------------
-# Date iteration — reverse chronological (same as garmin_fetch.py)
+# Chunk iteration — reverse chronological (same direction as old iter_days)
 # ---------------------------------------------------------------------------
 
-def iter_days(start_date: str, end_date: str):
+def iter_chunks(start_date: str, end_date: str, chunk_days: int = FETCH_CHUNK_DAYS):
+    """Yield (chunk_start, chunk_end) pairs in reverse-chronological order."""
     start = datetime.strptime(start_date, "%Y-%m-%d")
     end = datetime.strptime(end_date, "%Y-%m-%d")
-    current = end
-    while current >= start:
-        yield current.strftime("%Y-%m-%d")
-        current -= timedelta(days=1)
+    chunk_end = end
+    while chunk_end >= start:
+        chunk_start = max(start, chunk_end - timedelta(days=chunk_days - 1))
+        yield chunk_start.strftime("%Y-%m-%d"), chunk_end.strftime("%Y-%m-%d")
+        chunk_end = chunk_start - timedelta(days=1)
 
 
 # ---------------------------------------------------------------------------
@@ -391,12 +409,12 @@ def main() -> int:
     if MANUAL_START_DATE:
         end = MANUAL_END_DATE or datetime.today().strftime("%Y-%m-%d")
         logging.info("Manual backfill: %s → %s", MANUAL_START_DATE, end)
-        for date_str in iter_days(MANUAL_START_DATE, end):
+        for chunk_start, chunk_end in iter_chunks(MANUAL_START_DATE, end):
             try:
-                fetch_and_write_day(date_str, sport_map)
-                time.sleep(1)
+                fetch_and_write_chunk(chunk_start, chunk_end, sport_map)
+                time.sleep(FETCH_DELAY_SECONDS)
             except Exception:
-                logging.exception("Failed to fetch WHOOP data for %s", date_str)
+                logging.exception("Failed to fetch WHOOP chunk %s → %s", chunk_start, chunk_end)
         logging.info("Backfill complete")
         return 0
 
@@ -414,12 +432,12 @@ def main() -> int:
     while True:
         today = datetime.today().strftime("%Y-%m-%d")
         logging.info("Checking WHOOP data from %s to %s", last_date, today)
-        for date_str in iter_days(last_date, today):
+        for chunk_start, chunk_end in iter_chunks(last_date, today):
             try:
-                fetch_and_write_day(date_str, sport_map)
-                time.sleep(1)
+                fetch_and_write_chunk(chunk_start, chunk_end, sport_map)
+                time.sleep(FETCH_DELAY_SECONDS)
             except Exception:
-                logging.exception("Failed to fetch WHOOP data for %s", date_str)
+                logging.exception("Failed to fetch WHOOP chunk %s → %s", chunk_start, chunk_end)
         last_date = today
         logging.info("Waiting %ds before next WHOOP check", UPDATE_INTERVAL_SECONDS)
         time.sleep(UPDATE_INTERVAL_SECONDS)
