@@ -15,7 +15,7 @@ import requests
 
 AUTH_BASE = "https://api.prod.whoop.com/oauth/oauth2"
 REDIRECT_URI = "http://localhost:8080/callback"
-SCOPES = "read:recovery read:sleep read:profile read:workout read:body_measurement offline"
+SCOPES = "read:recovery read:cycles read:sleep read:profile read:workout read:body_measurement offline"
 TOKEN_FILE = "whoop_tokens.json"
 
 
