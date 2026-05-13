@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
 import threading
 import time
 import webbrowser
@@ -95,12 +96,19 @@ class WhoopAuth:
         """Start a local HTTP server on :8080, open browser, capture OAuth callback."""
         code_holder: list[str] = []
         done = threading.Event()
+        state = secrets.token_urlsafe(16)  # 22-char URL-safe string — above WHOOP's 8-char minimum
 
         class _Handler(BaseHTTPRequestHandler):
             def do_GET(self):
                 parsed = urlparse(self.path)
                 if parsed.path == "/callback":
                     params = parse_qs(parsed.query)
+                    returned_state = (params.get("state") or [None])[0]
+                    if returned_state != state:
+                        self.send_response(400)
+                        self.end_headers()
+                        self.wfile.write(b"State mismatch - possible CSRF attempt.")
+                        return
                     code = (params.get("code") or [None])[0]
                     if code:
                         code_holder.append(code)
@@ -128,6 +136,7 @@ class WhoopAuth:
             "client_id": self.client_id,
             "redirect_uri": REDIRECT_URI,
             "scope": SCOPES,
+            "state": state,
         })
         auth_url = f"{AUTH_BASE}/auth?{params}"
 
