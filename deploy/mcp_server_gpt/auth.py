@@ -82,9 +82,16 @@ def openid_configuration() -> dict:
 # --- Dynamic Client Registration ---
 
 def register_client(request_data: dict) -> dict:
-    """Register a new OAuth client (Dynamic Client Registration - RFC 7591)."""
+    """Register a new OAuth client (Dynamic Client Registration - RFC 7591).
+    When token_endpoint_auth_method=none (public client), no client_secret
+    is issued — required for ChatGPT which registers as a public client.
+    """
     client_id = f"client_{secrets.token_hex(16)}"
-    client_secret = secrets.token_hex(32)
+    now = int(time.time())
+    auth_method = request_data.get("token_endpoint_auth_method", "client_secret_basic")
+
+    # Public clients (auth_method=none) receive no secret
+    client_secret = None if auth_method == "none" else secrets.token_hex(32)
 
     client = {
         "client_id": client_id,
@@ -93,21 +100,25 @@ def register_client(request_data: dict) -> dict:
         "redirect_uris": request_data.get("redirect_uris", []),
         "grant_types": request_data.get("grant_types", ["authorization_code"]),
         "response_types": request_data.get("response_types", ["code"]),
-        "created_at": int(time.time()),
+        "token_endpoint_auth_method": auth_method,
+        "created_at": now,
     }
 
     clients = _load(CLIENTS_FILE)
     clients[client_id] = client
     _save(CLIENTS_FILE, clients)
 
-    return {
+    response = {
         "client_id": client_id,
-        "client_secret": client_secret,
-        "client_name": client["client_name"],
+        "client_id_issued_at": now,
         "redirect_uris": client["redirect_uris"],
         "grant_types": client["grant_types"],
         "response_types": client["response_types"],
+        "token_endpoint_auth_method": auth_method,
     }
+    if client_secret is not None:
+        response["client_secret"] = client_secret
+    return response
 
 def get_client(client_id: str) -> Optional[dict]:
     clients = _load(CLIENTS_FILE)
@@ -117,7 +128,7 @@ def get_client(client_id: str) -> Optional[dict]:
 # --- Authorization flow ---
 
 def build_github_auth_url(state: str, client_id: str, redirect_uri: str,
-                           code_challenge: str) -> str:
+                           code_challenge: str, resource: str = "") -> str:
     """Build the GitHub OAuth authorization URL."""
     # Store state -> request mapping for validation on callback
     codes = _load(AUTH_CODES_FILE)
@@ -125,6 +136,7 @@ def build_github_auth_url(state: str, client_id: str, redirect_uri: str,
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "code_challenge": code_challenge,
+        "resource": resource,
         "created_at": int(time.time()),
     }
     _save(AUTH_CODES_FILE, codes)
@@ -205,7 +217,7 @@ def _verify_pkce(code_verifier: str, code_challenge: str) -> bool:
 
 
 def issue_tokens(auth_code: str, code_verifier: str,
-                  client_id: str) -> Optional[dict]:
+                  client_id: str, resource: str = "") -> Optional[dict]:
     """Exchange auth code for access + refresh tokens."""
     codes = _load(AUTH_CODES_FILE)
     code_data = codes.get(auth_code)
@@ -231,19 +243,23 @@ def issue_tokens(auth_code: str, code_verifier: str,
 
     username = code_data["github_username"]
 
+    # Resolve resource: prefer explicitly passed value, fall back to what was
+    # stored during the authorize request (RFC 8707)
+    effective_resource = resource or state_data.get("resource", "")
+
     # Issue access token (JWT)
     now = int(time.time())
-    access_token = jwt.encode(
-        {
-            "sub": username,
-            "iss": MCP_BASE_URL,
-            "iat": now,
-            "exp": now + TOKEN_EXPIRY_SECONDS,
-            "client_id": client_id,
-        },
-        TOKEN_SECRET,
-        algorithm="HS256",
-    )
+    payload: dict = {
+        "sub": username,
+        "iss": MCP_BASE_URL,
+        "iat": now,
+        "exp": now + TOKEN_EXPIRY_SECONDS,
+        "client_id": client_id,
+    }
+    if effective_resource:
+        payload["aud"] = effective_resource
+
+    access_token = jwt.encode(payload, TOKEN_SECRET, algorithm="HS256")
 
     # Issue refresh token
     refresh_token = secrets.token_urlsafe(48)
@@ -251,6 +267,7 @@ def issue_tokens(auth_code: str, code_verifier: str,
     refresh_tokens[refresh_token] = {
         "username": username,
         "client_id": client_id,
+        "resource": effective_resource,
         "created_at": now,
         "expires_at": now + REFRESH_TOKEN_EXPIRY_SECONDS,
     }
@@ -276,18 +293,19 @@ def refresh_access_token(refresh_token: str, client_id: str) -> Optional[dict]:
 
     username = rt_data["username"]
     now = int(time.time())
+    resource = rt_data.get("resource", "")
 
-    access_token = jwt.encode(
-        {
-            "sub": username,
-            "iss": MCP_BASE_URL,
-            "iat": now,
-            "exp": now + TOKEN_EXPIRY_SECONDS,
-            "client_id": client_id,
-        },
-        TOKEN_SECRET,
-        algorithm="HS256",
-    )
+    payload: dict = {
+        "sub": username,
+        "iss": MCP_BASE_URL,
+        "iat": now,
+        "exp": now + TOKEN_EXPIRY_SECONDS,
+        "client_id": client_id,
+    }
+    if resource:
+        payload["aud"] = resource
+
+    access_token = jwt.encode(payload, TOKEN_SECRET, algorithm="HS256")
 
     return {
         "access_token": access_token,
@@ -300,7 +318,21 @@ def refresh_access_token(refresh_token: str, client_id: str) -> Optional[dict]:
 def verify_access_token(token: str) -> Optional[str]:
     """Verify a Bearer token and return the username, or None if invalid."""
     try:
-        payload = jwt.decode(token, TOKEN_SECRET, algorithms=["HS256"])
+        # Decode without aud verification so we can do it manually below
+        payload = jwt.decode(
+            token, TOKEN_SECRET, algorithms=["HS256"],
+            options={"verify_aud": False},
+        )
+        # Issuer must match this server
+        if payload.get("iss") != MCP_BASE_URL:
+            return None
+        # If aud is present it must include this server's base URL
+        aud = payload.get("aud")
+        if aud is not None:
+            targets = aud if isinstance(aud, list) else [aud]
+            if MCP_BASE_URL not in targets:
+                return None
+        # User must be the allowed GitHub account
         username = payload.get("sub", "")
         if username.lower() != GITHUB_ALLOWED_USER.lower():
             return None

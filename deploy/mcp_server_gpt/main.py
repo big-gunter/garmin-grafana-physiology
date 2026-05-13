@@ -98,6 +98,7 @@ async def oauth_authorize(request: Request):
     state          = params.get("state", "")
     code_challenge = params.get("code_challenge", "")
     code_challenge_method = params.get("code_challenge_method", "S256")
+    resource       = params.get("resource", "")  # RFC 8707
 
     if not all([client_id, redirect_uri, state]):
         return JSONResponse({"error": "invalid_request"}, status_code=400)
@@ -112,8 +113,8 @@ async def oauth_authorize(request: Request):
     if not client:
         return JSONResponse({"error": "invalid_client"}, status_code=400)
 
-    # Redirect to GitHub
-    github_url = auth.build_github_auth_url(state, client_id, redirect_uri, code_challenge)
+    # Redirect to GitHub; resource is stored in state for later aud claim
+    github_url = auth.build_github_auth_url(state, client_id, redirect_uri, code_challenge, resource)
     log.info("Redirecting to GitHub OAuth for client %s", client_id)
     return RedirectResponse(github_url, status_code=302)
 
@@ -142,10 +143,9 @@ async def oauth_callback(request: Request):
             status_code=403
         )
 
-    # Redirect back to Open.AI with the auth code
+    # Redirect back to ChatGPT with the auth code
     redirect_uri = state_data["redirect_uri"]
-    qs = qs = urlencode({"code": auth_code, "state": state_data["client_state"]}) 
-    #urlencode({"code": auth_code, "state": state})
+    qs = urlencode({"code": auth_code, "state": state})
     log.info("Auth successful, redirecting to %s", redirect_uri)
     return RedirectResponse(f"{redirect_uri}?{qs}", status_code=302)
 
@@ -165,11 +165,12 @@ async def oauth_token(request: Request):
         auth_code      = data.get("code", "")
         code_verifier  = data.get("code_verifier", "")
         client_id      = data.get("client_id", "")
+        resource       = data.get("resource", "")  # RFC 8707
 
         if not all([auth_code, client_id]):
             return JSONResponse({"error": "invalid_request"}, status_code=400)
 
-        tokens = auth.issue_tokens(auth_code, code_verifier, client_id)
+        tokens = auth.issue_tokens(auth_code, code_verifier, client_id, resource)
         if not tokens:
             log.warning("Token exchange failed for client %s", client_id)
             return JSONResponse({"error": "invalid_grant"}, status_code=400)
