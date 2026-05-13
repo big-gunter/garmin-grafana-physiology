@@ -37,7 +37,8 @@ Self-host a **Garmin Connect → InfluxDB → Grafana** pipeline on your own mac
   - **`garmin-mcp-grafana`** — Grafana HTTP API helpers (list/search dashboards, render panels).
   - **`garmin-mcp-http`** — same tools as `garmin-mcp` over **streamable HTTP** (for remote clients behind TLS + `MCP_AUTH_TOKEN`).
   - **`garmin-export-schema`** — exports live InfluxDB schema hints to `docs/data-dictionary.md`.
-- **MCP gateway** (`deploy/mcp_server/`) — a separate OAuth-protected HTTP gateway for the cloud stack (GitHub OAuth, bearer token).
+- **MCP gateway — Claude** (`deploy/mcp_server/`) — GitHub OAuth + bearer token gateway for Claude.ai and Claude Desktop, running on internal port 8000.
+- **MCP gateway — ChatGPT** (`deploy/mcp_server_gpt/`) — a second, independently deployed gateway on port 8001 tuned for ChatGPT's OAuth 2.1 requirements: OIDC discovery, public-client DCR (`token_endpoint_auth_method=none`), RFC 8707 `resource` parameter → `aud` claim, resource-scoped well-known aliases, and per-request logging with `X-Request-Id` headers.
 - **Documentation** under `docs/`: `agent-domain.md`, `claude-mcp-integration.md`, `manual-import-instructions.md`, `data-dictionary.md`, `schema.influxql.md`.
 
 There is no in-stack AI container; you attach your own client (e.g. Claude Desktop) via MCP.
@@ -76,7 +77,8 @@ All services share bridge network **`garmin-grafana-internal`** and address each
 | **`influxdb`** | Same 1.11 image; data in `/opt/physiology/influxdb`. |
 | **`grafana`** | Provisioned from `deploy/grafana/datasource.yaml`. |
 | **`garmin-fetch-data`** | Same fetcher image built from repo root `Dockerfile`. |
-| **`mcp-server`** | `deploy/mcp_server/` — GitHub OAuth + bearer token gateway. |
+| **`mcp-server`** | `deploy/mcp_server/` — GitHub OAuth + bearer token gateway for Claude. Internal port 8000. |
+| **`mcp-server-gpt`** | `deploy/mcp_server_gpt/` — ChatGPT-compatible MCP gateway. Internal port 8001. Separate GitHub OAuth app + env vars. |
 | **`whoop-fetch-data`** *(profile `whoop`)* | WHOOP sync; shares the same `GarminStats` database. |
 
 ---
@@ -365,9 +367,90 @@ docker compose --profile mcp-public up -d mcp-gateway
 
 Configure a remote MCP client with `http://your-host:8000/mcp` and `Authorization: Bearer <token>`.
 
-### Cloud MCP server (`deploy/mcp_server/`)
+### Cloud MCP gateway — Claude (`deploy/mcp_server/`)
 
-The cloud stack includes a separate GitHub OAuth gateway in `deploy/mcp_server/` (`main.py`, `server.py`, `auth.py`). It exposes the same InfluxQL tools behind GitHub OAuth + a `TOKEN_SECRET` bearer token. Set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_ALLOWED_USER`, and `TOKEN_SECRET` in `deploy/.env`.
+The cloud stack includes a GitHub OAuth gateway in `deploy/mcp_server/` for **Claude.ai and Claude Desktop**. It exposes the full InfluxQL + WHOOP + Grafana tool set behind GitHub OAuth 2.1 + PKCE + a `TOKEN_SECRET` bearer token on internal port **8000**.
+
+Set in `deploy/.env`: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_ALLOWED_USER`, `TOKEN_SECRET`.
+
+The GitHub OAuth app's **Authorization callback URL** must be `https://mcp.your-domain.com/oauth/callback`.
+
+### Cloud MCP gateway — ChatGPT (`deploy/mcp_server_gpt/`)
+
+A fully isolated fork of the Claude gateway, tuned for ChatGPT's stricter OAuth 2.1 requirements. Runs on internal port **8001** with its own subdomain and GitHub OAuth app.
+
+**What it adds over the Claude gateway:**
+
+| Feature | Detail |
+|---|---|
+| OIDC discovery | `/.well-known/openid-configuration` returns 200 (superset of AS metadata); ChatGPT probes this and returns 401 breaks its flow |
+| Public-client DCR | When ChatGPT registers with `token_endpoint_auth_method=none`, no `client_secret` is returned; response includes `client_id_issued_at` |
+| RFC 8707 `resource` param | `resource=https://mcp-gpt.your-domain.com` captured at `/oauth/authorize` and `/oauth/token`, stored as `aud` claim in the JWT |
+| `aud` + `iss` validation | `verify_access_token` explicitly validates both `iss` and `aud` (when present) |
+| Resource-scoped well-known aliases | `/.well-known/oauth-authorization-server/mcp` and `/.well-known/oauth-protected-resource/mcp` served as public aliases |
+| Improved `WWW-Authenticate` | `/mcp` 401 includes `resource_metadata=` per RFC 9728 |
+| Per-request logging | Every request logs method, path, query, headers, CF-Ray, client IP, status, duration, and `X-Request-Id` response header |
+| Debug endpoints | `GET /debug/oauth-metadata`, `/debug/protected-resource`, `/debug/routes` — public, no data access |
+
+**Setup:**
+
+1. Register a **new GitHub OAuth app** (separate from the Claude one):
+   - **Authorization callback URL:** `https://mcp-gpt.your-domain.com/oauth/callback`
+
+2. Add to `deploy/.env`:
+
+   ```
+   GITHUB_GPT_CLIENT_ID=your_new_app_client_id
+   GITHUB_GPT_CLIENT_SECRET=your_new_app_client_secret
+   TOKEN_SECRET_GPT=<openssl rand -hex 32>
+   ```
+
+3. Add a **Cloudflare tunnel public hostname** pointing `mcp-gpt.your-domain.com` → `http://mcp-server-gpt:8001`.
+
+4. Add a **Cloudflare WAF bypass rule** for machine clients — skip JS challenge for paths matching `/.well-known/*`, `/oauth/*`, `/mcp*`, `/health` on the `mcp-gpt` subdomain. Machine clients cannot complete browser challenges.
+
+5. Deploy:
+
+   ```bash
+   cd /opt/physiology-repo && git pull
+   cd deploy && docker compose up -d --build mcp-server-gpt
+   ```
+
+6. Verify discovery endpoints (all must return 200 JSON without authentication):
+
+   ```bash
+   curl https://mcp-gpt.your-domain.com/.well-known/oauth-authorization-server
+   curl https://mcp-gpt.your-domain.com/.well-known/oauth-protected-resource
+   curl https://mcp-gpt.your-domain.com/.well-known/openid-configuration
+   curl https://mcp-gpt.your-domain.com/debug/routes
+   ```
+
+7. In ChatGPT (developer mode → **Add MCP server**):
+   - **MCP server URL:** `https://mcp-gpt.your-domain.com/mcp`
+   - Authentication: **OAuth** — ChatGPT will auto-discover all endpoints via the well-known metadata and complete Dynamic Client Registration automatically.
+
+**Connecting via ChatGPT:**
+
+ChatGPT probes `/.well-known/openid-configuration` first, then auto-registers itself as a public client via `POST /oauth/register` (Dynamic Client Registration). No manual client registration is required. After you approve the GitHub OAuth prompt in your browser, ChatGPT exchanges the code at `/oauth/token` and uses the resulting bearer token for all `/mcp` calls.
+
+**Monitoring the OAuth flow:**
+
+```bash
+docker compose logs -f mcp-server-gpt
+```
+
+Each OAuth step produces a named log line. The diagnostic table:
+
+| Log pattern | Meaning |
+|---|---|
+| No log lines at all | ChatGPT never reached the server — Cloudflare or DNS issue |
+| `DCR request` then `DCR issued` | Registration succeeded |
+| `authorize:` logged | OAuth flow started |
+| `github_exchange: no access_token` | GitHub rejected the code exchange — check `redirect_uri` matches the registered GitHub OAuth callback |
+| `github_exchange: user X not in allowlist` | Wrong GitHub account authenticated |
+| `callback: auth_code issued` | OAuth flow completed; token exchange should follow |
+| `token: issued access+refresh` | Bearer token issued; ChatGPT should now reach `/mcp` |
+| `verify_token: iss/aud/sub mismatch` | Token validation failing — mismatched `MCP_BASE_URL` or `resource` param |
 
 ### Export schema
 
@@ -478,7 +561,10 @@ These are written to measurements such as `DerivedActivityMetrics`, `TrainingLoa
 | `GITHUB_CLIENT_ID` | GitHub OAuth app client ID |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth app client secret |
 | `GITHUB_ALLOWED_USER` | GitHub username allowed to authenticate |
-| `TOKEN_SECRET` | Bearer token for MCP gateway (`openssl rand -hex 32`) |
+| `TOKEN_SECRET` | Bearer token for Claude MCP gateway (`openssl rand -hex 32`) |
+| `GITHUB_GPT_CLIENT_ID` | ChatGPT MCP gateway — separate GitHub OAuth app client ID |
+| `GITHUB_GPT_CLIENT_SECRET` | ChatGPT MCP gateway — separate GitHub OAuth app client secret |
+| `TOKEN_SECRET_GPT` | Bearer token for ChatGPT MCP gateway (`openssl rand -hex 32`) |
 | `WHOOP_CLIENT_ID` | WHOOP developer app client ID |
 | `WHOOP_CLIENT_SECRET` | WHOOP developer app client secret |
 
@@ -649,13 +735,28 @@ uv run garmin-mcp-http       # HTTP variant
 | **429 rate limit errors** | Fetcher retries once after `Retry-After` seconds (+ 5s buffer) or 60s fallback; if persistent, reduce `FETCH_CHUNK_DAYS` in `whoop_fetch.py` |
 | **No data after backfill** | Check that `SKIP_EXISTING_DAILY=False` if you want to force a re-fetch, or verify `start_date` is earlier than the first WHOOP sync date |
 
-### MCP
+### MCP (Claude Desktop / local)
 
 | Symptom | Fix |
 |---|---|
 | **InfluxDB unreachable from host MCP** | Ensure `compose.yml` publishes `127.0.0.1:8086:8086` and `INFLUXDB_HOST=127.0.0.1` in the MCP env |
 | **`garmin-mcp` not found** | Run `uv sync` from repo root; ensure `.venv/bin` is on PATH or use `uv run garmin-mcp` |
 | **Empty query results** | Run `uv run garmin-export-schema` to verify measurements exist; check `INFLUXDB_DATABASE` matches |
+
+### MCP (ChatGPT / `mcp-server-gpt`)
+
+| Symptom | Fix |
+|---|---|
+| **No log lines after clicking Connect** | Cloudflare is blocking requests before they reach the server — add WAF bypass rule for `/.well-known/*`, `/oauth/*`, `/mcp*`, `/health` on the `mcp-gpt` subdomain |
+| **Discovery endpoints return Cloudflare HTML or 403** | Same WAF bypass rule needed; machine clients cannot complete JS browser challenges |
+| **`DCR request` logged but no `DCR issued`** | ChatGPT's DCR payload is malformed — check container logs for the full exception |
+| **`github_exchange: no access_token`** | GitHub rejected the code exchange; the `redirect_uri` in the token request doesn't match what was registered in the GitHub OAuth app — ensure callback URL is exactly `https://mcp-gpt.your-domain.com/oauth/callback` |
+| **`github_exchange: user X not in allowlist`** | Authenticated GitHub account doesn't match `GITHUB_ALLOWED_USER` in `deploy/.env` |
+| **`token: issue_tokens failed`** | Auth code expired (>5 min), already used, or PKCE verification failed |
+| **`verify_token: iss mismatch`** | `MCP_BASE_URL` env var doesn't match the URL ChatGPT connected to; must be `https://mcp-gpt.your-domain.com` (no trailing slash) |
+| **`verify_token: aud mismatch`** | Token was issued with a `resource` value that doesn't match `MCP_BASE_URL` — usually means the first connection used a different base URL |
+| **Tools missing / `{"finite": true}`** | ChatGPT connected but FastMCP returned an empty tool list — check `docker compose logs mcp-server-gpt` for startup errors or Python import failures |
+| **Tokens working but no `/mcp` log lines** | Container was rebuilt without pulling latest code — confirm `git pull` before `docker compose up --build` |
 
 ---
 
