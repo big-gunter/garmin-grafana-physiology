@@ -34,6 +34,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
     UNPROTECTED = {
         "/.well-known/oauth-authorization-server",
         "/.well-known/oauth-protected-resource",
+        "/.well-known/openid-configuration",
         "/oauth/register",
         "/oauth/authorize",
         "/oauth/callback",
@@ -51,7 +52,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 {"error": "unauthorized", "error_description": "Bearer token required"},
                 status_code=401,
-                headers={"WWW-Authenticate": "Bearer"},
+                headers={"WWW-Authenticate": f'Bearer resource_metadata="{MCP_BASE_URL}/.well-known/oauth-protected-resource"'},
             )
 
         token = auth_header[7:]
@@ -61,7 +62,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 {"error": "invalid_token", "error_description": "Token is invalid or expired"},
                 status_code=401,
-                headers={"WWW-Authenticate": "Bearer error=\"invalid_token\""},
+                headers={"WWW-Authenticate": f'Bearer error="invalid_token", resource_metadata="{MCP_BASE_URL}/.well-known/oauth-protected-resource"'},
             )
 
         log.info("Authenticated request from %s to %s", username, request.url.path)
@@ -77,6 +78,9 @@ async def oauth_metadata(request: Request):
 
 async def protected_resource_metadata(request: Request):
     return JSONResponse(auth.protected_resource_metadata())
+
+async def openid_config(request: Request):
+    return JSONResponse(auth.openid_configuration())
 
 async def oauth_register(request: Request):
     try:
@@ -205,6 +209,7 @@ mcp_app = mcp.streamable_http_app()
 routes = [
     Route("/.well-known/oauth-authorization-server", oauth_metadata),
     Route("/.well-known/oauth-protected-resource",   protected_resource_metadata),
+    Route("/.well-known/openid-configuration",       openid_config),
     Route("/oauth/register",  oauth_register,  methods=["POST"]),
     Route("/oauth/authorize", oauth_authorize, methods=["GET"]),
     Route("/oauth/callback",  oauth_callback,  methods=["GET"]),

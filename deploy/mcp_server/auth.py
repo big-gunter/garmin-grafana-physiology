@@ -67,6 +67,19 @@ def protected_resource_metadata() -> dict:
         "mcp_endpoint": f"{MCP_BASE_URL}/mcp",
     }
 
+def openid_configuration() -> dict:
+    """OIDC discovery document — superset of OAuth AS metadata.
+    Many OAuth clients (including ChatGPT) probe this endpoint; returning
+    401 here breaks or confuses their discovery even when
+    /.well-known/oauth-authorization-server is valid.
+    """
+    return {
+        **authorization_server_metadata(),
+        # Required OIDC fields that OAuth-only AS metadata omits
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["HS256"],
+    }
+
 
 # --- Dynamic Client Registration ---
 
