@@ -140,6 +140,36 @@ services:
       timeout: 10s
       retries: 3
 
+  mcp-server-gpt:
+    build:
+      context: ./mcp_server_gpt
+    environment:
+      - INFLUX_HOST=influxdb
+      - INFLUX_PORT=8086
+      - INFLUX_USER=mcp_reader
+      - INFLUX_PASSWORD=${INFLUX_MCP_PASSWORD}
+      - INFLUX_DATABASE=${INFLUX_DATABASE}
+      - INFLUX_WRITER_USER=garmin_writer
+      - INFLUX_WRITER_PASSWORD=${INFLUX_WRITER_PASSWORD}
+      - GARMIN_DEVICENAME=${GARMIN_DEVICENAME}
+      - GITHUB_CLIENT_ID=${GITHUB_GPT_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_GPT_CLIENT_SECRET}
+      - GITHUB_ALLOWED_USER=${GITHUB_ALLOWED_USER}
+      - MCP_BASE_URL=https://mcp-gpt.big-gunter.com
+      - TOKEN_SECRET=${TOKEN_SECRET_GPT}
+      - GRAFANA_URL=http://grafana:3000
+      - GRAFANA_TOKEN=${GRAFANA_TOKEN}
+    restart: unless-stopped
+    networks:
+      - physiology-net
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # --- WHOOP integration (opt-in) ---
   # Start with: docker compose --profile whoop up -d
   # Initial auth: docker compose --profile whoop run --rm -p 8080:8080 whoop-fetch-data python -m whoop.whoop_auth
