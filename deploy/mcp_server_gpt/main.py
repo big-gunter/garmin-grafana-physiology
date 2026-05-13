@@ -142,9 +142,10 @@ async def oauth_callback(request: Request):
             status_code=403
         )
 
-    # Redirect back to Claude.ai with the auth code
+    # Redirect back to Open.AI with the auth code
     redirect_uri = state_data["redirect_uri"]
-    qs = urlencode({"code": auth_code, "state": state})
+    qs = qs = urlencode({"code": auth_code, "state": state_data["client_state"]}) 
+    #urlencode({"code": auth_code, "state": state})
     log.info("Auth successful, redirecting to %s", redirect_uri)
     return RedirectResponse(f"{redirect_uri}?{qs}", status_code=302)
 
@@ -215,7 +216,7 @@ routes = [
     Route("/oauth/callback",  oauth_callback,  methods=["GET"]),
     Route("/oauth/token",     oauth_token,     methods=["POST"]),
     Route("/health",          health,          methods=["GET"]),
-    Mount("/",             app=mcp_app),
+    Mount("/mcp",             app=mcp_app),
 ]
 
 from contextlib import asynccontextmanager
