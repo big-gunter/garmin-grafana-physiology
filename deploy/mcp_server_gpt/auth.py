@@ -11,8 +11,11 @@ import base64
 from typing import Optional
 from pathlib import Path
 
+import logging
 import httpx
 import jwt
+
+log = logging.getLogger(__name__)
 
 # --- Config ---
 GITHUB_CLIENT_ID     = os.environ["GITHUB_CLIENT_ID"]
@@ -160,6 +163,7 @@ async def exchange_github_code(github_code: str, state: str) -> Optional[str]:
     auth code to hand back to Claude.ai.
     """
     # Exchange with GitHub
+    log.info("github_exchange: sending code to GitHub token endpoint")
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://github.com/login/oauth/access_token",
@@ -176,9 +180,15 @@ async def exchange_github_code(github_code: str, state: str) -> Optional[str]:
 
     github_token = token_data.get("access_token")
     if not github_token:
+        log.warning(
+            "github_exchange: no access_token in response — error=%s description=%s",
+            token_data.get("error"),
+            token_data.get("error_description"),
+        )
         return None
 
     # Verify it's the allowed GitHub user
+    log.info("github_exchange: token received, fetching GitHub user")
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             "https://api.github.com/user",
@@ -191,7 +201,9 @@ async def exchange_github_code(github_code: str, state: str) -> Optional[str]:
         user_data = resp.json()
 
     github_username = user_data.get("login", "")
+    log.info("github_exchange: GitHub user=%s allowed=%s", github_username, GITHUB_ALLOWED_USER)
     if github_username.lower() != GITHUB_ALLOWED_USER.lower():
+        log.warning("github_exchange: user %s not in allowlist", github_username)
         return None
 
     # Issue our own auth code
@@ -204,6 +216,7 @@ async def exchange_github_code(github_code: str, state: str) -> Optional[str]:
         "used": False,
     }
     _save(AUTH_CODES_FILE, codes)
+    log.info("github_exchange: issued app auth_code for user=%s", github_username)
 
     return auth_code
 
@@ -319,26 +332,28 @@ def refresh_access_token(refresh_token: str, client_id: str) -> Optional[dict]:
 def verify_access_token(token: str) -> Optional[str]:
     """Verify a Bearer token and return the username, or None if invalid."""
     try:
-        # Decode without aud verification so we can do it manually below
         payload = jwt.decode(
             token, TOKEN_SECRET, algorithms=["HS256"],
             options={"verify_aud": False},
         )
-        # Issuer must match this server
-        if payload.get("iss") != MCP_BASE_URL:
+        iss = payload.get("iss")
+        if iss != MCP_BASE_URL:
+            log.warning("verify_token: iss mismatch got=%s expected=%s", iss, MCP_BASE_URL)
             return None
-        # If aud is present it must include this server's base URL
         aud = payload.get("aud")
         if aud is not None:
             targets = aud if isinstance(aud, list) else [aud]
             if MCP_BASE_URL not in targets:
+                log.warning("verify_token: aud mismatch got=%s expected=%s", targets, MCP_BASE_URL)
                 return None
-        # User must be the allowed GitHub account
         username = payload.get("sub", "")
         if username.lower() != GITHUB_ALLOWED_USER.lower():
+            log.warning("verify_token: sub mismatch got=%s", username)
             return None
         return username
     except jwt.ExpiredSignatureError:
+        log.warning("verify_token: token expired")
         return None
-    except jwt.InvalidTokenError:
+    except jwt.InvalidTokenError as e:
+        log.warning("verify_token: invalid token — %s", e)
         return None
