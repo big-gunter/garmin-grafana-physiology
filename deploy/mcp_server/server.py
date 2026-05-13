@@ -424,6 +424,66 @@ def get_coach_notes(days_back: int = 30) -> str:
         return "No coach notes found for the requested period."
     return json.dumps(rows, indent=2, default=str)
 
+# --- WHOOP TOOLS ---
+
+@mcp.tool()
+def get_whoop_recovery(days_back: int = 30) -> str:
+    """Get WHOOP recovery scores including HRV, resting heart rate, SpO2 and skin temperature for the last N days"""
+    start, end = date_range(days_back)
+    rows = query(
+        f'SELECT "recovery_score","hrv_rmssd_milli","resting_heart_rate",'
+        f'"spo2_percentage","skin_temp_celsius" '
+        f'FROM "WhoopRecovery" '
+        f"WHERE time >= '{start}' AND time < '{end}' ORDER BY time DESC"
+    )
+    if not rows:
+        return "No WHOOP recovery data found for the requested period."
+    return json.dumps(rows, indent=2, default=str)
+
+@mcp.tool()
+def get_whoop_sleep(days_back: int = 30) -> str:
+    """Get WHOOP sleep data including sleep performance score, time in each sleep stage, respiratory rate, disturbance count and sleep efficiency for the last N days"""
+    start, end = date_range(days_back)
+    rows = query(
+        f'SELECT "score_total","total_slow_wave_sleep_milli","total_light_sleep_milli",'
+        f'"total_rem_sleep_milli","total_awake_milli","time_in_bed_millis",'
+        f'"respiratory_rate","disturbance_count","sleep_efficiency_percentage" '
+        f'FROM "WhoopSleep" '
+        f"WHERE time >= '{start}' AND time < '{end}' ORDER BY time DESC"
+    )
+    if not rows:
+        return "No WHOOP sleep data found for the requested period."
+    return json.dumps(rows, indent=2, default=str)
+
+@mcp.tool()
+def get_whoop_strain(days_back: int = 30) -> str:
+    """Get WHOOP daily strain scores including average and max heart rate and kilojoules for the last N days"""
+    start, end = date_range(days_back)
+    rows = query(
+        f'SELECT "day_strain","average_heart_rate","max_heart_rate","kilojoule" '
+        f'FROM "WhoopStrain" '
+        f"WHERE time >= '{start}' AND time < '{end}' ORDER BY time DESC"
+    )
+    if not rows:
+        return "No WHOOP strain data found for the requested period."
+    return json.dumps(rows, indent=2, default=str)
+
+@mcp.tool()
+def get_whoop_workouts(days_back: int = 30) -> str:
+    """Get WHOOP workout data including sport type, strain score, heart rate, HR zone durations, distance and altitude gain for the last N days"""
+    start, end = date_range(days_back)
+    rows = query(
+        f'SELECT "score_strain","average_heart_rate","max_heart_rate","kilojoule",'
+        f'"distance_meter","altitude_gain_meter",'
+        f'"zone_zero_milli","zone_one_milli","zone_two_milli",'
+        f'"zone_three_milli","zone_four_milli","zone_five_milli" '
+        f'FROM "WhoopWorkout" '
+        f"WHERE time >= '{start}' AND time < '{end}' ORDER BY time DESC"
+    )
+    if not rows:
+        return "No WHOOP workout data found for the requested period."
+    return json.dumps(rows, indent=2, default=str)
+
 # --- GRAFANA TOOLS ---
 
 @mcp.tool()
