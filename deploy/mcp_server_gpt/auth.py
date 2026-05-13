@@ -163,10 +163,11 @@ async def exchange_github_code(github_code: str, state: str) -> Optional[str]:
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://github.com/login/oauth/access_token",
-            json={
+            data={
                 "client_id": GITHUB_CLIENT_ID,
                 "client_secret": GITHUB_CLIENT_SECRET,
                 "code": github_code,
+                "redirect_uri": f"{MCP_BASE_URL}/oauth/callback",
             },
             headers={"Accept": "application/json"},
             timeout=10,

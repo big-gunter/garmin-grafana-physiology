@@ -33,6 +33,7 @@ HOSTNAME = MCP_BASE_URL.replace("https://", "").replace("http://", "")
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     UNPROTECTED = {
+        "/",
         "/.well-known/oauth-authorization-server",
         "/.well-known/oauth-authorization-server/mcp",
         "/.well-known/oauth-protected-resource",
@@ -238,6 +239,14 @@ async def oauth_token(request: Request):
 async def health(request: Request):
     return JSONResponse({"status": "ok"})
 
+async def root(request: Request):
+    return JSONResponse({
+        "status": "ok",
+        "mcp_endpoint": f"{MCP_BASE_URL}/mcp",
+        "authorization_endpoint": f"{MCP_BASE_URL}/oauth/authorize",
+        "token_endpoint": f"{MCP_BASE_URL}/oauth/token",
+    })
+
 
 # ---------------------------------------------------------------------------
 # Build the MCP streamable-http app
@@ -251,6 +260,7 @@ mcp_app = mcp.streamable_http_app()
 # ---------------------------------------------------------------------------
 
 routes = [
+    Route("/",                                            root,                      methods=["GET"]),
     Route("/.well-known/oauth-authorization-server",      oauth_metadata),
     Route("/.well-known/oauth-authorization-server/mcp",  oauth_metadata),
     Route("/.well-known/oauth-protected-resource",        protected_resource_metadata),
