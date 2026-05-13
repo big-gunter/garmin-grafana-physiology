@@ -16,6 +16,7 @@ interactively and then refreshed automatically (access tokens expire after
    - **Redirect URI:** `http://localhost:8080/callback`
    - **Scopes:** select all of:
      - `read:recovery`
+     - `read:cycles` (required for strain/daily cycle data)
      - `read:sleep`
      - `read:profile`
      - `read:workout`
