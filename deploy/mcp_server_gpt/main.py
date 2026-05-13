@@ -4,6 +4,7 @@ Combines OAuth 2.1 endpoints with MCP streamable-http transport.
 All MCP requests require a valid Bearer token.
 """
 import os
+import time
 import logging
 from urllib.parse import urlencode
 
@@ -33,7 +34,9 @@ HOSTNAME = MCP_BASE_URL.replace("https://", "").replace("http://", "")
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     UNPROTECTED = {
         "/.well-known/oauth-authorization-server",
+        "/.well-known/oauth-authorization-server/mcp",
         "/.well-known/oauth-protected-resource",
+        "/.well-known/oauth-protected-resource/mcp",
         "/.well-known/openid-configuration",
         "/oauth/register",
         "/oauth/authorize",
@@ -43,30 +46,69 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
     }
 
     async def dispatch(self, request: Request, call_next):
-        if request.url.path in self.UNPROTECTED:
-            return await call_next(request)
+        started = time.time()
+        path = request.url.path
+        is_mcp = path.startswith("/mcp")
 
-        # All other paths (including /mcp) require Bearer token
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
-            return JSONResponse(
-                {"error": "unauthorized", "error_description": "Bearer token required"},
-                status_code=401,
-                headers={"WWW-Authenticate": f'Bearer resource_metadata="{MCP_BASE_URL}/.well-known/oauth-protected-resource"'},
+        if is_mcp:
+            log.info(
+                "MCP inbound method=%s path=%s accept=%s content_type=%s origin=%s has_auth=%s",
+                request.method,
+                path,
+                request.headers.get("accept", ""),
+                request.headers.get("content-type", ""),
+                request.headers.get("origin", ""),
+                request.headers.get("authorization", "").startswith("Bearer "),
             )
 
-        token = auth_header[7:]
-        username = auth.verify_access_token(token)
-        if not username:
-            log.warning("Invalid or expired token from %s", request.client.host)
-            return JSONResponse(
-                {"error": "invalid_token", "error_description": "Token is invalid or expired"},
-                status_code=401,
-                headers={"WWW-Authenticate": f'Bearer error="invalid_token", resource_metadata="{MCP_BASE_URL}/.well-known/oauth-protected-resource"'},
-            )
+        try:
+            if path in self.UNPROTECTED:
+                response = await call_next(request)
+            else:
+                # All other paths (including /mcp) require Bearer token
+                auth_header = request.headers.get("Authorization", "")
+                if not auth_header.startswith("Bearer "):
+                    response = JSONResponse(
+                        {"error": "unauthorized", "error_description": "Bearer token required"},
+                        status_code=401,
+                        headers={
+                            "WWW-Authenticate": (
+                                f'Bearer resource_metadata="{MCP_BASE_URL}/.well-known/oauth-protected-resource"'
+                            )
+                        },
+                    )
+                else:
+                    token = auth_header[7:]
+                    username = auth.verify_access_token(token)
+                    if not username:
+                        client_host = request.client.host if request.client else "unknown"
+                        log.warning("Invalid or expired token from %s", client_host)
+                        response = JSONResponse(
+                            {"error": "invalid_token", "error_description": "Token is invalid or expired"},
+                            status_code=401,
+                            headers={
+                                "WWW-Authenticate": (
+                                    f'Bearer error="invalid_token", '
+                                    f'resource_metadata="{MCP_BASE_URL}/.well-known/oauth-protected-resource"'
+                                )
+                            },
+                        )
+                    else:
+                        log.info("Authenticated request from %s to %s", username, path)
+                        response = await call_next(request)
 
-        log.info("Authenticated request from %s to %s", username, request.url.path)
-        return await call_next(request)
+            return response
+
+        finally:
+            if is_mcp:
+                status_code = getattr(locals().get("response", None), "status_code", "exception")
+                log.info(
+                    "MCP outbound method=%s path=%s status=%s duration_ms=%d",
+                    request.method,
+                    path,
+                    status_code,
+                    int((time.time() - started) * 1000),
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -209,15 +251,17 @@ mcp_app = mcp.streamable_http_app()
 # ---------------------------------------------------------------------------
 
 routes = [
-    Route("/.well-known/oauth-authorization-server", oauth_metadata),
-    Route("/.well-known/oauth-protected-resource",   protected_resource_metadata),
-    Route("/.well-known/openid-configuration",       openid_config),
+    Route("/.well-known/oauth-authorization-server",      oauth_metadata),
+    Route("/.well-known/oauth-authorization-server/mcp",  oauth_metadata),
+    Route("/.well-known/oauth-protected-resource",        protected_resource_metadata),
+    Route("/.well-known/oauth-protected-resource/mcp",    protected_resource_metadata),
+    Route("/.well-known/openid-configuration",            openid_config),
     Route("/oauth/register",  oauth_register,  methods=["POST"]),
     Route("/oauth/authorize", oauth_authorize, methods=["GET"]),
     Route("/oauth/callback",  oauth_callback,  methods=["GET"]),
     Route("/oauth/token",     oauth_token,     methods=["POST"]),
     Route("/health",          health,          methods=["GET"]),
-    Mount("/mcp",             app=mcp_app),
+    Mount("/",                app=mcp_app),
 ]
 
 from contextlib import asynccontextmanager

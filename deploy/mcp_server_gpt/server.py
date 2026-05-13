@@ -21,11 +21,18 @@ GRAFANA_TOKEN        = os.environ.get("GRAFANA_TOKEN", "")
 
 mcp = FastMCP(
     "Garmin Physiology MCP",
-    streamable_http_path="/",
+    streamable_http_path="/mcp",
     transport_security=TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
-        allowed_hosts=["mcp-gpt.big-gunter.com", "mcp-gpt.big-gunter.com:443"],
-        allowed_origins=["https://mcp-gpt.big-gunter.com"],
+        allowed_hosts=[
+            "mcp-gpt.big-gunter.com",
+            "mcp-gpt.big-gunter.com:443",
+        ],
+        allowed_origins=[
+            "https://mcp-gpt.big-gunter.com",
+            "https://chatgpt.com",
+            "https://chat.openai.com",
+        ],
     )
 )
 
