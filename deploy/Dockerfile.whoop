@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1
+# Build context: repo root (deploy/Dockerfile.whoop with context: ../)
+
+FROM python:3.12-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN groupadd --gid 1000 appuser \
+ && useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
+
+RUN pip install --no-cache-dir \
+    requests==2.32.3 \
+    influxdb==5.3.2
+
+COPY --chown=appuser:appuser src/whoop ./whoop
+
+USER appuser
+
+CMD ["python", "-m", "whoop.whoop_fetch"]

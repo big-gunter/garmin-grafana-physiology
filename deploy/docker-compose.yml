@@ -139,3 +139,36 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # --- WHOOP integration (opt-in) ---
+  # Start with: docker compose --profile whoop up -d
+  # Initial auth: docker compose --profile whoop run --rm -p 8080:8080 whoop-fetch-data python -m whoop.whoop_auth
+  whoop-fetch-data:
+    profiles:
+      - whoop
+    build:
+      context: ../
+      dockerfile: deploy/Dockerfile.whoop
+    container_name: whoop-fetch-data
+    restart: unless-stopped
+    networks:
+      - physiology-net
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - influxdb
+    volumes:
+      - /opt/physiology/whoop-tokens:/home/appuser/.whoop
+    environment:
+      - INFLUXDB_HOST=influxdb
+      - INFLUXDB_PORT=8086
+      - INFLUXDB_USERNAME=garmin_writer
+      - INFLUXDB_PASSWORD=${INFLUX_WRITER_PASSWORD}
+      - INFLUXDB_DATABASE=${INFLUX_DATABASE}
+      - WHOOP_CLIENT_ID=${WHOOP_CLIENT_ID}
+      - WHOOP_CLIENT_SECRET=${WHOOP_CLIENT_SECRET}
+      - WHOOP_TOKEN_DIR=/home/appuser/.whoop
+      - UPDATE_INTERVAL_SECONDS=${UPDATE_INTERVAL_SECONDS:-300}
+      # - LOG_LEVEL=INFO
+      # - SKIP_EXISTING_DAILY=True
+      # - TAG_MEASUREMENTS_WITH_USER_EMAIL=False
