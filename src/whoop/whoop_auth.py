@@ -7,6 +7,7 @@ import secrets
 import threading
 import time
 import webbrowser
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlencode, urlparse
 
@@ -32,7 +33,27 @@ class WhoopAuth:
         try:
             with open(self._token_file) as f:
                 self._tokens = json.load(f)
-            return bool(self._tokens.get("access_token"))
+            has_access = bool(self._tokens.get("access_token"))
+            has_refresh = bool(self._tokens.get("refresh_token"))
+            expires_at = self._tokens.get("expires_at")
+            expires_str = (
+                datetime.fromtimestamp(expires_at).isoformat()
+                if expires_at is not None
+                else "MISSING"
+            )
+            logging.info(
+                "Loaded tokens from %s — access_token: %s, refresh_token: %s, expires_at: %s",
+                self._token_file,
+                "present" if has_access else "MISSING",
+                "present" if has_refresh else "MISSING",
+                expires_str,
+            )
+            if not has_refresh:
+                logging.warning(
+                    "refresh_token is absent from %s — re-run the auth flow to generate new tokens",
+                    self._token_file,
+                )
+            return has_access
         except Exception:
             logging.exception("Failed to load WHOOP tokens from %s", self._token_file)
             return False
@@ -61,24 +82,35 @@ class WhoopAuth:
         return data
 
     def refresh(self) -> None:
-        if not self._tokens.get("refresh_token"):
+        refresh_token = self._tokens.get("refresh_token")
+        if not refresh_token:
             raise RuntimeError("No refresh token — run initial auth flow")
+        logging.debug("Refreshing token (refresh_token prefix: %s...)", refresh_token[:8])
         resp = requests.post(
             f"{AUTH_BASE}/token",
             data={
                 "grant_type": "refresh_token",
-                "refresh_token": self._tokens["refresh_token"],
+                "refresh_token": refresh_token,
                 "client_id": self.client_id,
                 "client_secret": self.client_secret,
             },
             timeout=30,
         )
-        resp.raise_for_status()
+        if not resp.ok:
+            logging.error(
+                "Token refresh failed: HTTP %d — %s",
+                resp.status_code,
+                resp.text[:500],
+            )
+            resp.raise_for_status()
         data = resp.json()
         data["expires_at"] = time.time() + data.get("expires_in", 3600) - 60
         self._tokens.update(data)
         self.save_tokens()
-        logging.info("WHOOP access token refreshed")
+        logging.info(
+            "WHOOP access token refreshed; new expiry: %s",
+            datetime.fromtimestamp(data["expires_at"]).isoformat(),
+        )
 
     def get_access_token(self) -> str:
         if not self._tokens:
@@ -88,7 +120,20 @@ class WhoopAuth:
                     "  docker compose --profile whoop run --rm -p 8080:8080 whoop-fetch-data "
                     "python -m whoop.whoop_auth"
                 )
-        if time.time() >= self._tokens.get("expires_at", 0):
+        now = time.time()
+        expires_at = self._tokens.get("expires_at")
+        if expires_at is None:
+            logging.warning(
+                "Token file has no expires_at field — forcing refresh to be safe"
+            )
+        else:
+            logging.debug(
+                "Token expiry: %s (in %.0fs)",
+                datetime.fromtimestamp(expires_at).isoformat(),
+                expires_at - now,
+            )
+        if expires_at is None or now >= expires_at:
+            logging.info("Access token expired or expiry unknown; refreshing...")
             self.refresh()
         return self._tokens["access_token"]
 
