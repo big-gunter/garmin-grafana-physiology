@@ -204,6 +204,27 @@ def get_derived_activity_metrics(days_back: int = 30) -> str:
         return "No derived activity metrics found."
     return json.dumps(rows, indent=2, default=str)
 
+@mcp.tool()
+def get_activity_gps(activity_id: int) -> str:
+    """Get GPS track (lat, lon, altitude) for a specific activity by ID"""
+    rows = query(
+        f'SELECT "Latitude","Longitude","Altitude" '
+        f'FROM "ActivityGPS" '
+        f"WHERE \"ActivityID\"='{activity_id}' "
+        f"ORDER BY time ASC LIMIT 20000"
+    )
+    if not rows:
+        return json.dumps([])
+    if len(rows) > 2000:
+        stride = (len(rows) + 1999) // 2000
+        rows = rows[::stride]
+    return json.dumps(
+        [{"time": r["time"], "lat": r.get("Latitude"), "lon": r.get("Longitude"), "altitude": r.get("Altitude")}
+         for r in rows],
+        indent=2,
+        default=str,
+    )
+
 # --- FITNESS & PERFORMANCE TOOLS ---
 
 @mcp.tool()
