@@ -132,6 +132,11 @@ SKIP_EXISTING_DAILY = cfg.SKIP_EXISTING_DAILY
 ROLLUPS_AFTER_INGEST = cfg.ROLLUPS_AFTER_INGEST
 
 USER_TIMEZONE = cfg.USER_TIMEZONE
+
+ATHLETE_HRMAX = cfg.ATHLETE_HRMAX
+ATHLETE_RHR = cfg.ATHLETE_RHR
+ATHLETE_LTHR = cfg.ATHLETE_LTHR
+
 PARSED_ACTIVITY_ID_LIST = []
 # --- gender write guard ---
 # ensures UserProfile is written only once per day
@@ -1597,6 +1602,12 @@ def _estimate_hrmax_activity_backoff(asof_date: str, windows: list[int] = [42, 8
 
     return None, "no_hrmax_available"
 
+def _p95_hrmax_ref(asof_date: str) -> float | None:
+    """Returns the p95 activity-based HRmax estimate for reference tracking.
+    Used to populate HRmax_p95_est even when athlete_hrmax config overrides the primary value."""
+    val, _ = _estimate_hrmax_activity_backoff(asof_date, windows=[42, 84], min_points=5)
+    return val
+
 def _median_rhr_7d(asof_date: str) -> float | None:
     start = (_dt_utc(asof_date) - timedelta(days=6)).strftime("%Y-%m-%d")
     start_iso, end_iso = _range_utc(start, 7)
@@ -1703,6 +1714,10 @@ def compute_and_write_physiology(asof_date: str) -> None:
         iso_z=_iso_z,
         query_scalar_influx_v1=_query_scalar_influx_v1,
         query_last_row_influx_v1=_query_last_row_influx_v1,
+        # athlete-validated constants (None when env vars are not set)
+        athlete_hrmax=float(ATHLETE_HRMAX) if ATHLETE_HRMAX is not None else None,
+        athlete_rhr_floor=float(ATHLETE_RHR) if ATHLETE_RHR is not None else None,
+        p95_hrmax_ref=_p95_hrmax_ref,
     )
     return _rollups.compute_and_write_physiology(asof_date, ctx)
 

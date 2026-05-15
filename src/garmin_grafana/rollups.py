@@ -44,6 +44,14 @@ class RollupContext:
     query_scalar_influx_v1: Callable[[str], float | None]
     query_last_row_influx_v1: Callable[[str], dict | None]
 
+    # athlete-validated physiology constants (optional; override estimated values when set)
+    # athlete_hrmax: replaces p95 activity estimate; p95 is preserved as HRmax_p95_est reference
+    # athlete_rhr_floor: RHR floor applied before Karvonen zone calc (handles beta-blocker suppression)
+    # p95_hrmax_ref: callable returning the p95 estimate for reference even when athlete_hrmax is set
+    athlete_hrmax: float | None = None
+    athlete_rhr_floor: float | None = None
+    p95_hrmax_ref: Callable[[str], float | None] | None = None
+
 
 def _bannister_trimp(dur_seconds: float, hr_avg: float, rhr: float, hrmax: float, gender: str, norm_gender: Callable[[object], str]) -> float:
     if dur_seconds <= 0 or hr_avg <= 0 or hrmax <= rhr:
@@ -516,19 +524,39 @@ def compute_and_write_physiology(asof_date: str, ctx: RollupContext) -> None:
         logging.info(f"PhysiologyDaily: insufficient RHR data for {asof_date}")
         return
 
-    hrmax_est, hrmax_src = ctx.estimate_hrmax_activity_backoff(asof_date, windows=[42, 84], min_points=5)
-    if hrmax_est is None:
-        logging.info(f"PhysiologyDaily: no HRmax estimate available for {asof_date} (source={hrmax_src})")
-        return
+    # Apply RHR floor: beta-blockers (atenolol) can suppress RHR below the true aerobic
+    # baseline, which would narrow Karvonen zones and skew zone-based analysis.
+    rhr_floor = ctx.athlete_rhr_floor
+    rhr_used = max(float(rhr7), float(rhr_floor)) if rhr_floor is not None else float(rhr7)
 
-    zones = ctx.hrr_zones(rhr7, float(hrmax_est))
+    # HRmax: use validated athlete config when available; fall back to p95 activity estimate.
+    if ctx.athlete_hrmax is not None:
+        hrmax_est: float = float(ctx.athlete_hrmax)
+        hrmax_src = "config_validated"
+    else:
+        _est, hrmax_src = ctx.estimate_hrmax_activity_backoff(asof_date, windows=[42, 84], min_points=5)
+        if _est is None:
+            logging.info(f"PhysiologyDaily: no HRmax estimate available for {asof_date} (source={hrmax_src})")
+            return
+        hrmax_est = float(_est)
 
-    fields = {
-        "HRmax_est": float(hrmax_est),
+    # Always compute the p95 activity estimate as a reference field so it is not lost
+    # even when athlete_hrmax overrides it as the primary value.
+    p95_ref: float | None = None
+    if ctx.p95_hrmax_ref is not None:
+        p95_ref = ctx.p95_hrmax_ref(asof_date)
+
+    zones = ctx.hrr_zones(rhr_used, hrmax_est)
+
+    fields: dict = {
+        "HRmax_est": hrmax_est,
         "HRmax_est_source": str(hrmax_src),
         "RHR_7d_median": float(rhr7),
+        "RHR_used": rhr_used,
         **{k: float(v) for k, v in zones.items()},
     }
+    if p95_ref is not None:
+        fields["HRmax_p95_est"] = float(p95_ref)
 
     point = {
         "measurement": "PhysiologyDaily",
@@ -538,7 +566,9 @@ def compute_and_write_physiology(asof_date: str, ctx: RollupContext) -> None:
     }
     ctx.write_points_to_influxdb([point])
     logging.info(
-        f"PhysiologyDaily written for {asof_date}: HRmax_est={float(hrmax_est):.1f} ({hrmax_src}), RHR_7d_median={float(rhr7):.1f}"
+        f"PhysiologyDaily written for {asof_date}: HRmax_est={hrmax_est:.1f} ({hrmax_src}), "
+        f"RHR_7d_median={float(rhr7):.1f}, RHR_used={rhr_used:.1f}"
+        + (f", HRmax_p95_est={p95_ref:.1f}" if p95_ref is not None else "")
     )
 
 
