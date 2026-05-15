@@ -758,6 +758,20 @@ uv run garmin-mcp-http       # HTTP variant
 | **Tools missing / `{"finite": true}`** | ChatGPT connected but FastMCP returned an empty tool list — check `docker compose logs mcp-server-gpt` for startup errors or Python import failures |
 | **Tokens working but no `/mcp` log lines** | Container was rebuilt without pulling latest code — confirm `git pull` before `docker compose up --build` |
 
+### InfluxDB backfill scripts — tag-key principle
+
+In InfluxDB 1.x, **tags are part of the series primary key**. Writing a point with a different tag value always creates a new series — it never overwrites an existing point at the same timestamp. This is a common source of silent duplication when running backfill scripts.
+
+**Rule**: any backfill script must read the existing tags from InfluxDB first, then echo those same tag values back on the write. Only then will the new point land on the same series and silently replace the old one.
+
+`compute_physiology_backfill.py` implements this pattern for `PhysiologyDaily`:
+
+1. Queries `SELECT "HRmax_est_source" FROM PhysiologyDaily … GROUP BY "Device"` per date.
+2. Copies the `Device` tag from the existing record.
+3. Passes it to `compute_and_write_physiology(ds, device_name=device)` so the new write matches the existing series.
+4. Falls back to `Device="backfill"` (never `"Unknown"`) for dates with no existing record.
+5. `--clean` flag deletes any orphaned `Device='Unknown'` or `Device='backfill'` records once the run is complete.
+
 ---
 
 ## Acknowledgments and limitations

@@ -1691,10 +1691,10 @@ def fitness_age_from_vo2(vo2: float, gender: str) -> float | None:
         return 65.0
     return None
 
-def compute_and_write_physiology(asof_date: str) -> None:
+def compute_and_write_physiology(asof_date: str, device_name: str | None = None) -> None:
     ctx = _RollupContext(
         influxdb_version=INFLUXDB_VERSION,
-        garmin_devicename=GARMIN_DEVICENAME,
+        garmin_devicename=device_name if device_name is not None else GARMIN_DEVICENAME,
         influxdb_database=INFLUXDB_DATABASE,
         write_points_to_influxdb=write_points_to_influxdb,
         dt_utc=_dt_utc,
