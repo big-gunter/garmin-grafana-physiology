@@ -512,6 +512,29 @@ def get_whoop_workouts(days_back: int = 30) -> str:
         return "No WHOOP workout data found for the requested period."
     return json.dumps(rows, indent=2, default=str)
 
+# --- RAW QUERY TOOL ---
+
+@mcp.tool()
+def execute_influxdb_query(query: str, database: str = "GarminStats") -> str:
+    """Execute a raw InfluxQL query against GarminStats. Supports SELECT, SHOW, DELETE and DROP SERIES. Use with care."""
+    try:
+        client = InfluxDBClient(
+            host=INFLUX_HOST,
+            port=INFLUX_PORT,
+            username=INFLUX_USER,
+            password=INFLUX_PASSWORD,
+            database=database,
+        )
+        verb = query.strip().split()[0].upper() if query.strip() else ""
+        if verb in ("DELETE", "DROP"):
+            client.query(query)
+            return json.dumps({"status": "ok", "query": query})
+        result = client.query(query)
+        rows = list(result.get_points())
+        return json.dumps(rows, indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e), "query": query})
+
 # --- GRAFANA TOOLS ---
 
 @mcp.tool()
