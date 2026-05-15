@@ -554,3 +554,15 @@ def get_grafana_datasources() -> str:
     if not resp.ok:
         return f"Grafana error {resp.status_code}: {resp.text}"
     return json.dumps(resp.json(), indent=2)
+
+@mcp.tool()
+def get_grafana_dashboard(uid: str) -> str:
+    """Fetch a Grafana dashboard JSON by UID"""
+    if not GRAFANA_TOKEN:
+        return "GRAFANA_TOKEN is not configured."
+    resp = requests.get(f"{GRAFANA_URL}/api/dashboards/uid/{uid}", headers=grafana_headers(), timeout=10)
+    if resp.status_code == 404:
+        return json.dumps({"error": "Dashboard not found", "uid": uid})
+    if not resp.ok:
+        return f"Grafana error {resp.status_code}: {resp.text}"
+    return json.dumps(resp.json(), indent=2)
