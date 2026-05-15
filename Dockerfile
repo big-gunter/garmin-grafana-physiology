@@ -42,7 +42,7 @@ COPY --chown=appuser:appuser docs /app/docs
 # ── readiness cron ──────────────────────────────────────────────────────────
 COPY --from=build /supercronic /usr/local/bin/supercronic
 
-COPY --chown=appuser:appuser deploy/scripts/compute_readiness.py /app/scripts/compute_readiness.py
+COPY --chown=appuser:appuser deploy/scripts/ /app/scripts/
 
 # 22:00 UTC = 08:00 AEST (Melbourne, non-DST) / 09:00 AEDT (DST).
 # No args → computes yesterday + today only (idempotent, cheap).
