@@ -11,6 +11,7 @@ propagate corrected zone values across historic dates.
 
 Modes:
   --backfill            Last 90 days (tag-matched overwrite; skips already-updated)
+  --days N              Last N days (same behaviour as --backfill with custom window)
   --date YYYY-MM-DD     Single date (overwrites)
   (no args)             Yesterday and today (overwrites)
 
@@ -178,6 +179,9 @@ def main() -> int:
         "--backfill", action="store_true", help="Recompute last 90 days"
     )
     group.add_argument(
+        "--days", metavar="N", type=int, help="Recompute the last N days"
+    )
+    group.add_argument(
         "--date", metavar="YYYY-MM-DD", help="Recompute a single date"
     )
     parser.add_argument(
@@ -196,6 +200,10 @@ def main() -> int:
         start = today - timedelta(days=89)
         end = today
         logging.info(f"Backfill mode: {start} → {end} (90 days)")
+    elif args.days:
+        start = today - timedelta(days=args.days - 1)
+        end = today
+        logging.info(f"Days mode: {start} → {end} ({args.days} days)")
     elif args.date:
         start = end = date.fromisoformat(args.date)
         logging.info(f"Single-date mode: {start}")
