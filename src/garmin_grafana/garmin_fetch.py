@@ -1691,12 +1691,33 @@ def fitness_age_from_vo2(vo2: float, gender: str) -> float | None:
         return 65.0
     return None
 
-def compute_and_write_physiology(asof_date: str, device_name: str | None = None) -> None:
+def compute_and_write_physiology(
+    asof_date: str,
+    device_name: str | None = None,
+    user_id: str | None = None,
+) -> None:
+    # When a user_id override is provided (e.g. from a backfill script reading
+    # the existing series tags), wrap write_points_to_influxdb so the injected
+    # User_ID tag matches the existing series rather than defaulting to "Unknown".
+    if user_id is not None:
+        _fixed_uid = user_id
+        def _write_with_uid(points):
+            _write_points_to_influx(
+                client=influxdbclient,
+                influx_version=INFLUXDB_VERSION,
+                points=points,
+                tag_measurements_with_user_email=TAG_MEASUREMENTS_WITH_USER_EMAIL,
+                get_user_id=lambda: _fixed_uid,
+            )
+        _writer = _write_with_uid
+    else:
+        _writer = write_points_to_influxdb
+
     ctx = _RollupContext(
         influxdb_version=INFLUXDB_VERSION,
         garmin_devicename=device_name if device_name is not None else GARMIN_DEVICENAME,
         influxdb_database=INFLUXDB_DATABASE,
-        write_points_to_influxdb=write_points_to_influxdb,
+        write_points_to_influxdb=_writer,
         dt_utc=_dt_utc,
         norm_gender=_norm_gender,
         gender_code=_gender_code,

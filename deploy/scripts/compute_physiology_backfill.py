@@ -43,10 +43,12 @@ first and echo them back on the write; otherwise you end up with silent
 duplicates at the same timestamp under different tag sets.
 
 This script implements that pattern:
-  1. Query the existing PhysiologyDaily record for each date (GROUP BY "Device").
-  2. Copy the Device tag value from the existing record.
-  3. Pass that device name into compute_and_write_physiology() so the new
-     write lands on the same series and silently overwrites the old point.
+  1. Query the existing PhysiologyDaily record for each date (GROUP BY *).
+  2. Copy ALL tag values (Device, User_ID, Database_Name) from the existing
+     record — every tag must match for InfluxDB to treat the write as an
+     overwrite rather than a new series.
+  3. Pass device_name and user_id overrides into compute_and_write_physiology()
+     so the new write lands on the same series.
   4. If no existing record exists, write with Device="backfill" so it is
      clearly labelled and removable via --clean.
 """
@@ -72,12 +74,18 @@ from garmin_grafana import garmin_fetch  # noqa: E402
 # InfluxDB helpers
 # ---------------------------------------------------------------------------
 
-def _query_existing(influx_db: str, asof_date: str) -> tuple[str | None, str | None]:
-    """Return (device_tag, HRmax_est_source) for the existing PhysiologyDaily
-    record on *asof_date*, or (None, None) if no record exists.
+_ExistingRecord = tuple[str | None, str | None, str | None, str | None]
+# (device, user_id, database_name, hrmax_est_source)
 
-    Uses GROUP BY "Device" so that the tag value surfaces in the series key
-    rather than being lost in the field projection.
+
+def _query_existing(influx_db: str, asof_date: str) -> _ExistingRecord:
+    """Return (device, user_id, database_name, HRmax_est_source) for the
+    existing PhysiologyDaily record on *asof_date*, or (None, None, None, None)
+    if no record exists.
+
+    Uses GROUP BY * so that ALL tag values surface in the series key rather
+    than being lost in the field projection.  In InfluxDB 1.x a write must
+    match every tag to be treated as an overwrite rather than a new series.
     """
     d = date.fromisoformat(asof_date)
     start_z = f"{asof_date}T00:00:00Z"
@@ -85,39 +93,64 @@ def _query_existing(influx_db: str, asof_date: str) -> tuple[str | None, str | N
     q = (
         f'SELECT "HRmax_est_source" FROM "PhysiologyDaily" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
-        f'GROUP BY "Device" LIMIT 1'
+        f"GROUP BY * LIMIT 1"
     )
     client = garmin_fetch.influxdbclient
     result = client.query(q, database=influx_db)
     for (_, tags), points in result.items():
-        device = (tags or {}).get("Device") or None
+        t = tags or {}
+        device    = t.get("Device")    or None
+        user_id   = t.get("User_ID")   or None
+        db_name   = t.get("Database_Name") or None
         for row in points:
-            return device, row.get("HRmax_est_source") or ""
-    return None, None
+            return device, user_id, db_name, row.get("HRmax_est_source") or ""
+    return None, None, None, None
 
 
-def _delete_orphaned(influx_db: str, sentinels: list[str]) -> int:
-    """Delete PhysiologyDaily records whose Device tag matches any sentinel.
+def _count_series(influx_db: str, where: str) -> int:
+    """Return the point count for a WHERE clause (used before DELETE)."""
+    client = garmin_fetch.influxdbclient
+    q = f'SELECT COUNT("HRmax_est") FROM "PhysiologyDaily" WHERE {where}'
+    rows = list(client.query(q, database=influx_db).get_points())
+    return int(rows[0]["count"]) if rows else 0
 
-    Returns total rows affected (InfluxDB 1.x DELETE does not report row
-    counts, so we count the rows that existed *before* deleting them).
+
+def _delete_orphaned(influx_db: str) -> int:
+    """Delete PhysiologyDaily records that are clearly backfill artefacts.
+
+    Removes records where:
+      - Device = 'Unknown'   (written before the tag-matching fix)
+      - Device = 'backfill'  (written as new-record sentinel)
+      - User_ID = 'Unknown'  (written before the User_ID override fix)
+
+    Returns total point count removed.  InfluxDB 1.x DELETE does not report
+    row counts, so we query counts before issuing each DELETE.
     """
     client = garmin_fetch.influxdbclient
     deleted = 0
-    for sentinel in sentinels:
-        count_q = (
-            f'SELECT COUNT("HRmax_est") FROM "PhysiologyDaily" '
-            f"WHERE \"Device\" = '{sentinel}'"
-        )
-        rows = list(client.query(count_q, database=influx_db).get_points())
-        n = int(rows[0]["count"]) if rows else 0
+
+    device_sentinels = ["Unknown", "backfill"]
+    for sentinel in device_sentinels:
+        where = f'"Device" = \'{sentinel}\''
+        n = _count_series(influx_db, where)
         if n > 0:
-            del_q = f'DELETE FROM "PhysiologyDaily" WHERE "Device" = \'{sentinel}\''
-            client.query(del_q, database=influx_db)
+            client.query(f'DELETE FROM "PhysiologyDaily" WHERE {where}', database=influx_db)
             logging.info(f"--clean: deleted {n} record(s) with Device='{sentinel}'")
             deleted += n
         else:
-            logging.info(f"--clean: no records with Device='{sentinel}' — nothing to remove")
+            logging.info(f"--clean: no records with Device='{sentinel}'")
+
+    # Remove records injected by earlier backfill runs before User_ID fix,
+    # but only where User_ID is 'Unknown' (the garmin_obj=None fallback).
+    uid_where = '"User_ID" = \'Unknown\''
+    n = _count_series(influx_db, uid_where)
+    if n > 0:
+        client.query(f'DELETE FROM "PhysiologyDaily" WHERE {uid_where}', database=influx_db)
+        logging.info(f"--clean: deleted {n} record(s) with User_ID='Unknown'")
+        deleted += n
+    else:
+        logging.info("--clean: no records with User_ID='Unknown'")
+
     return deleted
 
 
@@ -181,31 +214,35 @@ def main() -> int:
     ok = skipped = err = 0
     for ds in _date_range(start, end):
         try:
-            existing_device, existing_src = _query_existing(influx_db, ds)
+            existing_device, existing_user_id, _existing_db, existing_src = _query_existing(
+                influx_db, ds
+            )
 
-            # Idempotency: record already reflects the current AthleteProfile.
+            # Idempotency: record already reflects the current AthleteProfile
+            # AND all tags match what we would write — nothing to do.
             if existing_device is not None and "athlete_profile" in (existing_src or ""):
                 logging.debug(
-                    f"{ds}: already up-to-date (Device='{existing_device}', "
+                    f"{ds}: already up-to-date "
+                    f"(Device='{existing_device}', User_ID='{existing_user_id}', "
                     f"HRmax_est_source='{existing_src}') — skipping"
                 )
                 skipped += 1
                 continue
 
-            # Use the existing Device tag so the write lands on the same series
-            # and silently overwrites rather than creating a duplicate series.
-            # Fall back to "backfill" (not "Unknown") if no record exists yet.
-            device = existing_device if existing_device is not None else "backfill"
+            # Match ALL existing tag values so InfluxDB treats the write as an
+            # overwrite of the same series rather than inserting a new one.
+            device  = existing_device  if existing_device  is not None else "backfill"
+            user_id = existing_user_id if existing_user_id is not None else None
 
             if existing_device is None:
                 logging.info(f"{ds}: no existing record — writing with Device='backfill'")
             else:
                 logging.info(
-                    f"{ds}: overwriting Device='{device}' "
+                    f"{ds}: overwriting Device='{device}', User_ID='{user_id}' "
                     f"(was HRmax_est_source='{existing_src}')"
                 )
 
-            garmin_fetch.compute_and_write_physiology(ds, device_name=device)
+            garmin_fetch.compute_and_write_physiology(ds, device_name=device, user_id=user_id)
             ok += 1
         except Exception:
             logging.exception(f"Failed for {ds}")
@@ -214,8 +251,11 @@ def main() -> int:
     logging.info(f"Done — {ok} written, {skipped} skipped (already up-to-date), {err} errors")
 
     if args.clean:
-        logging.info("Running --clean: removing orphaned Device='Unknown' and Device='backfill' records")
-        n_deleted = _delete_orphaned(influx_db, ["Unknown", "backfill"])
+        logging.info(
+            "--clean: removing orphaned records "
+            "(Device='Unknown', Device='backfill', User_ID='Unknown')"
+        )
+        n_deleted = _delete_orphaned(influx_db)
         logging.info(f"--clean complete: {n_deleted} total orphaned record(s) removed")
 
     return 0 if err == 0 else 1
