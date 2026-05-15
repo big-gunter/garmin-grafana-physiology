@@ -8,18 +8,6 @@ from datetime import datetime
 import dotenv
 
 
-def _int_env_optional(name: str) -> int | None:
-    """Returns an int from an env var, or None if unset/empty. Logs a warning on invalid input."""
-    v = os.getenv(name)
-    if not v or not v.strip():
-        return None
-    try:
-        return int(v.strip())
-    except ValueError:
-        logging.warning(f"Invalid integer for env var {name}={v!r}; ignoring")
-        return None
-
-
 def _bool_env(name: str, default: bool = False) -> bool:
     v = os.getenv(name)
     if v is None:
@@ -103,17 +91,4 @@ ROLLUPS_AFTER_INGEST = _bool_env("ROLLUPS_AFTER_INGEST", default=True)
 USER_TIMEZONE = os.getenv("USER_TIMEZONE", "")  # optional
 IGNORE_ERRORS = _bool_env("IGNORE_ERRORS", default=False)
 
-# ── Athlete physiology constants ──────────────────────────────────────────────
-# When set, these override statistically-estimated values in PhysiologyDaily.
-# ATHLETE_HRMAX: validated observed maximum HR (bpm). Replaces the p95 activity
-#   estimate, which is unreliable during low-training periods or on beta-blockers.
-# ATHLETE_RHR: well-rested resting HR floor (bpm). Beta-blockers (atenolol) can
-#   suppress RHR below the true aerobic baseline; this floor prevents artificially
-#   narrow Karvonen zones on suppressed-RHR days. The 7d median is used when it
-#   is >= this floor; otherwise this value is used.
-# ATHLETE_LTHR: lactate threshold HR (bpm). Stored as a reference field in
-#   PhysiologyDaily (not yet used in zone boundary calculation).
-ATHLETE_HRMAX = _int_env_optional("ATHLETE_HRMAX")
-ATHLETE_RHR = _int_env_optional("ATHLETE_RHR")
-ATHLETE_LTHR = _int_env_optional("ATHLETE_LTHR")
 

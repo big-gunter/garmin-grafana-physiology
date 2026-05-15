@@ -44,12 +44,14 @@ class RollupContext:
     query_scalar_influx_v1: Callable[[str], float | None]
     query_last_row_influx_v1: Callable[[str], dict | None]
 
-    # athlete-validated physiology constants (optional; override estimated values when set)
-    # athlete_hrmax: replaces p95 activity estimate; p95 is preserved as HRmax_p95_est reference
-    # athlete_rhr_floor: RHR floor applied before Karvonen zone calc (handles beta-blocker suppression)
+    # athlete-validated physiology constants (loaded from AthleteProfile measurement in InfluxDB)
+    # athlete_hrmax: replaces the p95 activity estimate; p95 is preserved as HRmax_p95_est reference
+    # athlete_rhr_floor: RHR floor before Karvonen calc (handles beta-blocker HR suppression)
+    # athlete_hrmax_source: descriptive label written to PhysiologyDaily.HRmax_est_source
     # p95_hrmax_ref: callable returning the p95 estimate for reference even when athlete_hrmax is set
     athlete_hrmax: float | None = None
     athlete_rhr_floor: float | None = None
+    athlete_hrmax_source: str | None = None
     p95_hrmax_ref: Callable[[str], float | None] | None = None
 
 
@@ -532,7 +534,7 @@ def compute_and_write_physiology(asof_date: str, ctx: RollupContext) -> None:
     # HRmax: use validated athlete config when available; fall back to p95 activity estimate.
     if ctx.athlete_hrmax is not None:
         hrmax_est: float = float(ctx.athlete_hrmax)
-        hrmax_src = "config_validated"
+        hrmax_src = ctx.athlete_hrmax_source or "athlete_profile"
     else:
         _est, hrmax_src = ctx.estimate_hrmax_activity_backoff(asof_date, windows=[42, 84], min_points=5)
         if _est is None:

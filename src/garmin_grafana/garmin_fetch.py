@@ -43,6 +43,7 @@ from garmin_grafana.influx_queries import InfluxQueryContext as _InfluxQueryCont
 from garmin_grafana import influx_queries as _influxq
 from garmin_grafana.influx_v1_queries import InfluxV1QueryContext as _InfluxV1QueryContext
 from garmin_grafana import influx_v1_queries as _influxv1
+from garmin_grafana.athlete_profile import load_athlete_profile as _load_athlete_profile
 
 garmin_obj = None
 banner_text = """
@@ -133,10 +134,6 @@ ROLLUPS_AFTER_INGEST = cfg.ROLLUPS_AFTER_INGEST
 
 USER_TIMEZONE = cfg.USER_TIMEZONE
 
-ATHLETE_HRMAX = cfg.ATHLETE_HRMAX
-ATHLETE_RHR = cfg.ATHLETE_RHR
-ATHLETE_LTHR = cfg.ATHLETE_LTHR
-
 PARSED_ACTIVITY_ID_LIST = []
 # --- gender write guard ---
 # ensures UserProfile is written only once per day
@@ -168,6 +165,11 @@ influxdbclient = create_influx_client(
         endpoint_is_http=INFLUXDB_ENDPOINT_IS_HTTP,
     )
 )
+
+# Load athlete physiological profile from InfluxDB once at startup.
+# Falls back to hardcoded defaults if no AthleteProfile record exists yet.
+# To update constants: run write_athlete_profile.py then restart the container.
+_athlete_profile = _load_athlete_profile(influxdbclient, INFLUXDB_DATABASE)
 
 # %%
 def iter_days(start_date: str, end_date: str):
@@ -1714,9 +1716,10 @@ def compute_and_write_physiology(asof_date: str) -> None:
         iso_z=_iso_z,
         query_scalar_influx_v1=_query_scalar_influx_v1,
         query_last_row_influx_v1=_query_last_row_influx_v1,
-        # athlete-validated constants (None when env vars are not set)
-        athlete_hrmax=float(ATHLETE_HRMAX) if ATHLETE_HRMAX is not None else None,
-        athlete_rhr_floor=float(ATHLETE_RHR) if ATHLETE_RHR is not None else None,
+        # athlete-validated constants loaded from InfluxDB AthleteProfile measurement
+        athlete_hrmax=float(_athlete_profile.hrmax_bpm),
+        athlete_rhr_floor=float(_athlete_profile.rhr_floor_bpm),
+        athlete_hrmax_source=_athlete_profile.hrmax_est_source_label,
         p95_hrmax_ref=_p95_hrmax_ref,
     )
     return _rollups.compute_and_write_physiology(asof_date, ctx)

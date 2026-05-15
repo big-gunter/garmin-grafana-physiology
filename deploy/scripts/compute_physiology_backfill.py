@@ -4,8 +4,10 @@ compute_physiology_backfill.py — Recompute PhysiologyDaily records
 
 Rewrites PhysiologyDaily (HRmax_est, HRR, Karvonen zones, RHR_used) for a
 date range using the same compute_and_write_physiology() function as the
-live garmin-fetch-data container.  This is the correct tool to run after
-changing ATHLETE_HRMAX / ATHLETE_RHR to propagate corrected values.
+live garmin-fetch-data container.
+
+Run this after writing or updating the AthleteProfile record in InfluxDB to
+propagate corrected zone values across historic dates.
 
 Modes:
   --backfill            Last 90 days (always overwrites existing records)
@@ -15,9 +17,10 @@ Modes:
 Env vars (same as the garmin-fetch-data container):
   INFLUXDB_HOST, INFLUXDB_PORT, INFLUXDB_USERNAME, INFLUXDB_PASSWORD
   INFLUXDB_DATABASE       (default: GarminStats)
-  ATHLETE_HRMAX           validated HRmax override (bpm)
-  ATHLETE_RHR             RHR floor override (bpm)
-  ATHLETE_LTHR            LTHR reference (bpm)
+
+Athlete constants are read from the AthleteProfile measurement in InfluxDB
+(most recent record at startup).  See write_athlete_profile.py to seed or
+update the profile.
 
 Run inside the garmin-fetch-data container:
   docker compose exec garmin-fetch-data \\
@@ -28,7 +31,7 @@ Or directly (with env loaded):
     && python deploy/scripts/compute_physiology_backfill.py --backfill
 
 Note: importing garmin_grafana.garmin_fetch initialises the InfluxDB client
-from env vars (lazy TCP connection — no Garmin auth is triggered).
+and loads AthleteProfile from env vars (lazy TCP connection; no Garmin auth).
 """
 from __future__ import annotations
 
@@ -43,8 +46,8 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 
-# garmin_grafana.garmin_fetch initialises the InfluxDB client from env vars.
-# compute_and_write_physiology() only queries InfluxDB; no Garmin API calls.
+# garmin_grafana.garmin_fetch initialises the InfluxDB client and loads
+# AthleteProfile from InfluxDB at import time.  No Garmin API calls.
 from garmin_grafana import garmin_fetch  # noqa: E402
 
 
@@ -82,10 +85,10 @@ def main() -> int:
         end = today
         logging.info(f"Default mode: {start} → {end} (yesterday + today)")
 
-    athlete_hrmax = garmin_fetch.ATHLETE_HRMAX
-    athlete_rhr = garmin_fetch.ATHLETE_RHR
+    profile = garmin_fetch._athlete_profile
     logging.info(
-        f"Athlete config — ATHLETE_HRMAX={athlete_hrmax}, ATHLETE_RHR={athlete_rhr}"
+        f"Athlete profile: hrmax={profile.hrmax_bpm}, rhr_floor={profile.rhr_floor_bpm}, "
+        f"lthr={profile.lthr_bpm}, version={profile.version}, source={profile.hrmax_source}"
     )
 
     ok = err = 0
