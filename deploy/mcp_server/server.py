@@ -19,13 +19,16 @@ DEVICE_NAME          = os.environ.get("GARMIN_DEVICENAME", "")
 GRAFANA_URL          = os.environ.get("GRAFANA_URL", "http://grafana:3000").rstrip("/")
 GRAFANA_TOKEN        = os.environ.get("GRAFANA_TOKEN", "")
 
+_MCP_BASE_URL = os.environ.get("MCP_BASE_URL", "").rstrip("/")
+_HOSTNAME     = _MCP_BASE_URL.replace("https://", "").replace("http://", "")
+
 mcp = FastMCP(
     "Garmin Physiology MCP",
     streamable_http_path="/",
     transport_security=TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
-        allowed_hosts=["mcp.big-gunter.com", "mcp.big-gunter.com:443"],
-        allowed_origins=["https://mcp.big-gunter.com"],
+        allowed_hosts=[_HOSTNAME, f"{_HOSTNAME}:443"],
+        allowed_origins=[_MCP_BASE_URL],
     )
 )
 
