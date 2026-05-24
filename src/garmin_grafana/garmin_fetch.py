@@ -1541,6 +1541,20 @@ def _activitysummary_exists_v1(activity_id: int | str) -> bool:
     return _influxv1.activitysummary_exists(activity_id, ctx)
 
 
+def _sleep_exists_for_day_v1(date_str: str) -> bool:
+    if INFLUXDB_VERSION != "1":
+        return False
+    ctx = _InfluxV1QueryContext(
+        influxdbclient=influxdbclient,
+        influxdb_database=INFLUXDB_DATABASE,
+        garmin_devicename=GARMIN_DEVICENAME,
+        day_bounds_z=_day_bounds_z,
+        dt_utc=_dt_utc,
+        query_last_row=_query_last_row_influx_v1,
+    )
+    return _influxv1.sleep_exists_for_day(date_str, ctx)
+
+
 def _percentile_activity_maxhr_42d(asof_date: str) -> float | None:
     start = (_dt_utc(asof_date) - timedelta(days=41)).strftime("%Y-%m-%d")
     start_dt = _dt_utc(start)
@@ -1553,7 +1567,7 @@ def _percentile_activity_maxhr_42d(asof_date: str) -> float | None:
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         'AND "maxHR" > 0 '
         "AND activityName != 'END' "
-        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}'"
     )
     return _query_scalar_influx_v1(q)
 
@@ -1565,7 +1579,7 @@ def _count_activity_maxhr_window(asof_date: str, window_days: int) -> int:
         'FROM "ActivitySummary" '
         f"WHERE time >= '{start_iso}' AND time < '{end_iso}' "
         'AND "maxHR" > 0 AND activityName != \'END\' '
-        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}'"
     )
     v = _query_scalar_influx_v1(q)
     return int(v) if v is not None else 0
@@ -1578,7 +1592,7 @@ def _p95_activity_maxhr_window(asof_date: str, window_days: int) -> float | None
         'FROM "ActivitySummary" '
         f"WHERE time >= '{start_iso}' AND time < '{end_iso}' "
         'AND "maxHR" > 0 AND activityName != \'END\' '
-        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}' AND \"Device\"='{GARMIN_DEVICENAME}'"
+        f"AND \"Database_Name\"='{INFLUXDB_DATABASE}'"
     )
     return _query_scalar_influx_v1(q)
 
@@ -2058,6 +2072,7 @@ def daily_fetch_write(date_str, *, run_rollups_inline: bool = True):
         dailystats_exists_for_day_v1=_dailystats_exists_for_day_v1,
         intraday_exists_for_day_v1=_intraday_exists_for_day_v1,
         activitysummary_exists_v1=_activitysummary_exists_v1,
+        sleep_exists_for_day_v1=_sleep_exists_for_day_v1,
         get_user_gender_from_garmin=_get_user_gender_from_garmin,
         stored_birth_year_v1=_stored_birth_year_v1,
         get_birth_year_from_garmin_profile=_get_birth_year_from_garmin_profile,

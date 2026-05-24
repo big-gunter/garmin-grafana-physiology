@@ -185,6 +185,8 @@ def get_physiology_for_day(date_str: str, ctx: InfluxV1QueryContext) -> tuple[fl
 
 def get_activities_for_day(date_str: str, ctx: InfluxV1QueryContext) -> list[dict]:
     start_z, end_z = ctx.day_bounds_z(date_str)
+    # GROUP BY the ActivityID tag (string, not the Activity_ID integer field) so we get
+    # one row per unique activity regardless of which Device tag it was written under.
     q = (
         'SELECT last("elapsedDuration") AS elapsedDuration, '
         '       last("movingDuration")  AS movingDuration, '
@@ -196,8 +198,8 @@ def get_activities_for_day(date_str: str, ctx: InfluxV1QueryContext) -> list[dic
         "AND activityName != 'END' "
         "AND elapsedDuration > 0 "
         "AND averageHR > 0 "
-        f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}' "
-        'GROUP BY "Activity_ID"'
+        f"AND \"Database_Name\"='{ctx.influxdb_database}' "
+        'GROUP BY "ActivityID"'
     )
     try:
         res = ctx.influxdbclient.query(q)
@@ -210,12 +212,13 @@ def get_activities_for_day(date_str: str, ctx: InfluxV1QueryContext) -> list[dic
 def get_trainingload_prev_day(date_str: str, ctx: InfluxV1QueryContext) -> dict:
     yday = (ctx.dt_utc(date_str) - timedelta(days=1)).strftime("%Y-%m-%d")
     start_z, end_z = ctx.day_bounds_z(yday)
+    # No Device filter: ATL/CTL chain must survive device name changes between runs.
     q = (
         'SELECT last("ATL_7_TRIMP") AS atl_trimp, last("CTL_42_TRIMP") AS ctl_trimp, '
         '       last("ATL_7_TSS")   AS atl_tss,   last("CTL_42_TSS")   AS ctl_tss '
         'FROM "TrainingLoadDaily" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
-        f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+        f"AND \"Database_Name\"='{ctx.influxdb_database}'"
     )
     row = ctx.query_last_row(q) or {}
 
@@ -277,11 +280,12 @@ def userprofile_known_for_day(date_str: str, ctx: InfluxV1QueryContext) -> bool:
 def dailystats_exists_for_day(date_str: str, ctx: InfluxV1QueryContext) -> bool:
     try:
         start_z, end_z = ctx.day_bounds_z(date_str)
+        # No Device filter: same day written under a different device tag must still be treated as existing.
         q = (
             'SELECT count("totalSteps") AS c '
             'FROM "DailyStats" '
             f"WHERE time >= '{start_z}' AND time < '{end_z}' "
-            f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+            f"AND \"Database_Name\"='{ctx.influxdb_database}'"
         )
         res = ctx.influxdbclient.query(q)
         pts = list(res.get_points())
@@ -294,14 +298,35 @@ def dailystats_exists_for_day(date_str: str, ctx: InfluxV1QueryContext) -> bool:
         return False
 
 
+def sleep_exists_for_day(date_str: str, ctx: InfluxV1QueryContext) -> bool:
+    try:
+        start_z, end_z = ctx.day_bounds_z(date_str)
+        q = (
+            'SELECT count("sleepTimeSeconds") AS c '
+            'FROM "SleepSummary" '
+            f"WHERE time >= '{start_z}' AND time < '{end_z}' "
+            f"AND \"Database_Name\"='{ctx.influxdb_database}'"
+        )
+        res = ctx.influxdbclient.query(q)
+        pts = list(res.get_points())
+        if not pts:
+            return False
+        c = pts[0].get("c")
+        return (c is not None) and (float(c) > 0)
+    except Exception:
+        logging.exception("SleepSummary existence query failed")
+        return False
+
+
 def intraday_exists_for_day(measurement: str, field: str, date_str: str, ctx: InfluxV1QueryContext) -> bool:
     try:
         start_z, end_z = ctx.day_bounds_z(date_str)
+        # No Device filter: any device's write for this day counts as existing.
         q = (
             f'SELECT count("{field}") AS c '
             f'FROM "{measurement}" '
             f"WHERE time >= '{start_z}' AND time < '{end_z}' "
-            f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+            f"AND \"Database_Name\"='{ctx.influxdb_database}'"
         )
         res = ctx.influxdbclient.query(q)
         pts = list(res.get_points())
@@ -316,11 +341,12 @@ def intraday_exists_for_day(measurement: str, field: str, date_str: str, ctx: In
 
 def activitysummary_exists(activity_id: int | str, ctx: InfluxV1QueryContext) -> bool:
     try:
+        # No Device filter: an activity written under any device tag must not be re-ingested.
         q = (
             'SELECT count("Activity_ID") AS c '
             'FROM "ActivitySummary" '
             f"WHERE \"ActivityID\"='{activity_id}' "
-            f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+            f"AND \"Database_Name\"='{ctx.influxdb_database}'"
         )
         res = ctx.influxdbclient.query(q)
         pts = list(res.get_points())

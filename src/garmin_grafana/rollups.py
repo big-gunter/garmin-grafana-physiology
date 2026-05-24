@@ -618,7 +618,7 @@ def compute_and_write_performance_daily(asof_date: str, ctx: RollupContext) -> N
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND sport_tag =~ /running/ "
-        f'AND "Database_Name"=\'{ctx.influxdb_database}\' AND "Device"=\'{ctx.garmin_devicename}\''
+        f'AND "Database_Name"=\'{ctx.influxdb_database}\''
     )
     vam20 = ctx.query_scalar_influx_v1(q_vam20)
 
@@ -627,7 +627,7 @@ def compute_and_write_performance_daily(asof_date: str, ctx: RollupContext) -> N
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND sport_tag =~ /running/ "
-        f'AND "Database_Name"=\'{ctx.influxdb_database}\' AND "Device"=\'{ctx.garmin_devicename}\''
+        f'AND "Database_Name"=\'{ctx.influxdb_database}\''
     )
     vam30 = ctx.query_scalar_influx_v1(q_vam30)
 
@@ -636,7 +636,7 @@ def compute_and_write_performance_daily(asof_date: str, ctx: RollupContext) -> N
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND sport_tag =~ /running/ "
-        f'AND "Database_Name"=\'{ctx.influxdb_database}\' AND "Device"=\'{ctx.garmin_devicename}\''
+        f'AND "Database_Name"=\'{ctx.influxdb_database}\''
     )
     vo2 = ctx.query_scalar_influx_v1(q_run_vo2)
 
@@ -653,7 +653,7 @@ def compute_and_write_performance_daily(asof_date: str, ctx: RollupContext) -> N
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND sport_tag =~ /running/ "
-        f'AND "Database_Name"=\'{ctx.influxdb_database}\' AND "Device"=\'{ctx.garmin_devicename}\''
+        f'AND "Database_Name"=\'{ctx.influxdb_database}\''
     )
     run_last = ctx.query_last_row_influx_v1(q_run_last) or {}
 
@@ -665,7 +665,7 @@ def compute_and_write_performance_daily(asof_date: str, ctx: RollupContext) -> N
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND sport_tag =~ /cycl|bike|ride/ "
-        f'AND "Database_Name"=\'{ctx.influxdb_database}\' AND "Device"=\'{ctx.garmin_devicename}\''
+        f'AND "Database_Name"=\'{ctx.influxdb_database}\''
     )
     bike_last = ctx.query_last_row_influx_v1(q_bike_last) or {}
 

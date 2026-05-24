@@ -57,6 +57,7 @@ class DailyFetchWriteContext:
     dailystats_exists_for_day_v1: Callable[[str], bool]
     intraday_exists_for_day_v1: Callable[[str, str, str], bool]
     activitysummary_exists_v1: Callable[[int | str], bool]
+    sleep_exists_for_day_v1: Callable[[str], bool]
     get_user_gender_from_garmin: Callable[[], str]
     stored_birth_year_v1: Callable[[], int | None]
     get_birth_year_from_garmin_profile: Callable[[], int | None]
@@ -198,7 +199,10 @@ def daily_fetch_write(date_str: str, *, run_rollups_inline: bool = True, ctx: Da
         else:
             ctx.write_points_to_influxdb(ctx.get_daily_stats(date_str))
     if "sleep" in sel:
-        ctx.write_points_to_influxdb(ctx.get_sleep_data(date_str))
+        if ctx.skip_existing_daily and ctx.sleep_exists_for_day_v1(date_str):
+            logging.info(f"SleepSummary already exists for {date_str}; skipping")
+        else:
+            ctx.write_points_to_influxdb(ctx.get_sleep_data(date_str))
     if "steps" in sel:
         if ctx.skip_existing_daily and ctx.intraday_exists_for_day_v1("StepsIntraday", "StepsCount", date_str):
             logging.info(f"StepsIntraday already exists for {date_str}; skipping")
