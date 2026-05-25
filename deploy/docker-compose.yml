@@ -170,12 +170,9 @@ services:
       timeout: 10s
       retries: 3
 
-  # --- WHOOP integration (opt-in) ---
-  # Start with: docker compose --profile whoop up -d
-  # Initial auth: docker compose --profile whoop run --rm -p 8080:8080 whoop-fetch-data python -m whoop.whoop_auth
+  # --- WHOOP integration ---
+  # Initial auth (first deploy only): docker compose run --rm -p 8080:8080 whoop-fetch-data python -m whoop.whoop_auth
   whoop-fetch-data:
-    profiles:
-      - whoop
     build:
       context: ../
       dockerfile: deploy/Dockerfile.whoop
@@ -186,7 +183,8 @@ services:
     security_opt:
       - no-new-privileges:true
     depends_on:
-      - influxdb
+      influxdb:
+        condition: service_healthy
     volumes:
       - /opt/physiology/whoop-tokens:/home/appuser/.whoop
     environment:
