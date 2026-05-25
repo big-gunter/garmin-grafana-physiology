@@ -1,7 +1,9 @@
 # %%
 import traceback
+import json
 import requests, time, pytz, logging, os, sys, io, zipfile
 from datetime import datetime, timedelta
+from dataclasses import dataclass, field as _dc_field
 from influxdb import InfluxDBClient
 from influxdb.exceptions import InfluxDBClientError
 from influxdb_client_3 import InfluxDBClient3, InfluxDBError
@@ -151,6 +153,84 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
+
+# ── Pipeline observability ────────────────────────────────────────────────────
+_LOG_DIR = os.getenv("LOG_DIR", "/app/logs")
+
+
+@dataclass
+class _RunStats:
+    start_wall: float = _dc_field(default_factory=time.time)
+    date_range: str = ""
+    activities_fetched: int = 0
+    activities_written: list = _dc_field(default_factory=list)   # ActivityID strings
+    activities_skipped_dedup: list = _dc_field(default_factory=list)
+    devices_seen: set = _dc_field(default_factory=set)
+    daily_stats_writes: int = 0
+    daily_stats_skips: int = 0
+    sleep_writes: int = 0
+    sleep_skips: int = 0
+    api_errors: int = 0
+
+
+_current_run: _RunStats | None = None
+
+
+def _write_pipeline_summary_jsonl(stats: _RunStats) -> None:
+    try:
+        os.makedirs(_LOG_DIR, exist_ok=True)
+        tz_mel = pytz.timezone("Australia/Melbourne")
+        now_utc = datetime.utcnow()
+        now_local = datetime.now(tz_mel)
+        record = {
+            "timestamp_utc": now_utc.isoformat(),
+            "timestamp_local": now_local.isoformat(),
+            "date_range": stats.date_range,
+            "activities_fetched": stats.activities_fetched,
+            "activities_written": stats.activities_written,
+            "activities_skipped_dedup": stats.activities_skipped_dedup,
+            "devices_seen": sorted(stats.devices_seen),
+            "daily_stats_writes": stats.daily_stats_writes,
+            "daily_stats_skips": stats.daily_stats_skips,
+            "sleep_writes": stats.sleep_writes,
+            "sleep_skips": stats.sleep_skips,
+            "api_errors": stats.api_errors,
+            "duration_seconds": round(time.time() - stats.start_wall, 1),
+        }
+        date_label = now_utc.strftime("%Y-%m-%d")
+        path = os.path.join(_LOG_DIR, f"pipeline-{date_label}.jsonl")
+        with open(path, "a") as fh:
+            fh.write(json.dumps(record) + "\n")
+    except Exception:
+        logging.exception("Failed to write pipeline JSONL summary")
+
+
+def _write_coach_notes_summary(stats: _RunStats) -> None:
+    duration = round(time.time() - stats.start_wall, 0)
+    devices = sorted(stats.devices_seen) or ["none"]
+    note = (
+        f"Run complete. "
+        f"Fetched: {stats.activities_fetched} activities. "
+        f"Written: {len(stats.activities_written)}. "
+        f"Skipped (dedup): {len(stats.activities_skipped_dedup)}. "
+        f"Devices seen: {devices}. "
+        f"Daily stats writes: {stats.daily_stats_writes}, skips: {stats.daily_stats_skips}. "
+        f"Sleep writes: {stats.sleep_writes}, skips: {stats.sleep_skips}. "
+        f"Duration: {int(duration)}s."
+    )
+    point = {
+        "measurement": "CoachNotes",
+        "time": datetime.utcnow().isoformat() + "Z",
+        "tags": {"category": "pipeline"},
+        "fields": {"note": note},
+    }
+    try:
+        write_points_to_influxdb([point])
+        logging.info("Pipeline summary → CoachNotes: %s", note)
+    except Exception:
+        logging.exception("Failed to write pipeline CoachNotes summary")
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 # %%
 influxdbclient = create_influx_client(
@@ -1555,6 +1635,66 @@ def _sleep_exists_for_day_v1(date_str: str) -> bool:
     return _influxv1.sleep_exists_for_day(date_str, ctx)
 
 
+# ── Instrumented wrappers for pipeline run stats ──────────────────────────────
+
+def _tracked_write(points):
+    if _current_run is not None and points:
+        for p in points:
+            m = p.get("measurement", "")
+            tags = p.get("tags", {})
+            fields = p.get("fields", {})
+            if m == "ActivitySummary":
+                if str(fields.get("activityName", "")).upper() != "END":
+                    aid = str(tags.get("ActivityID", ""))
+                    if aid and aid not in _current_run.activities_written:
+                        _current_run.activities_written.append(aid)
+                dev = tags.get("Device", "")
+                if dev:
+                    _current_run.devices_seen.add(dev)
+            elif m == "DailyStats":
+                _current_run.daily_stats_writes += 1
+            elif m == "SleepSummary":
+                _current_run.sleep_writes += 1
+    write_points_to_influxdb(points)
+
+
+def _tracked_activitysummary_exists(activity_id) -> bool:
+    result = _activitysummary_exists_v1(activity_id)
+    if result and _current_run is not None:
+        _current_run.activities_skipped_dedup.append(str(activity_id))
+    return result
+
+
+def _tracked_dailystats_exists(date_str: str) -> bool:
+    result = _dailystats_exists_for_day_v1(date_str)
+    if _current_run is not None:
+        if result:
+            _current_run.daily_stats_skips += 1
+    return result
+
+
+def _tracked_sleep_exists(date_str: str) -> bool:
+    result = _sleep_exists_for_day_v1(date_str)
+    if _current_run is not None:
+        if result:
+            _current_run.sleep_skips += 1
+    return result
+
+
+def _tracked_get_activity_summary(date_str: str):
+    points, gps_dict = get_activity_summary(date_str)
+    if _current_run is not None and points:
+        fetched_ids = {
+            p["tags"]["ActivityID"] for p in points
+            if str(p.get("fields", {}).get("activityName", "")).upper() != "END"
+            and p.get("tags", {}).get("ActivityID")
+        }
+        _current_run.activities_fetched += len(fetched_ids)
+    return points, gps_dict
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 def _percentile_activity_maxhr_42d(asof_date: str) -> float | None:
     start = (_dt_utc(asof_date) - timedelta(days=41)).strftime("%Y-%m-%d")
     start_dt = _dt_utc(start)
@@ -2069,16 +2209,16 @@ def daily_fetch_write(date_str, *, run_rollups_inline: bool = True):
         userprofile_exists_for_day_v1=_userprofile_exists_for_day_v1,
         skip_existing_daily=SKIP_EXISTING_DAILY,
         force_reprocess_activities=FORCE_REPROCESS_ACTIVITIES,
-        dailystats_exists_for_day_v1=_dailystats_exists_for_day_v1,
+        dailystats_exists_for_day_v1=_tracked_dailystats_exists,
         intraday_exists_for_day_v1=_intraday_exists_for_day_v1,
-        activitysummary_exists_v1=_activitysummary_exists_v1,
-        sleep_exists_for_day_v1=_sleep_exists_for_day_v1,
+        activitysummary_exists_v1=_tracked_activitysummary_exists,
+        sleep_exists_for_day_v1=_tracked_sleep_exists,
         get_user_gender_from_garmin=_get_user_gender_from_garmin,
         stored_birth_year_v1=_stored_birth_year_v1,
         get_birth_year_from_garmin_profile=_get_birth_year_from_garmin_profile,
         write_user_profile_point=write_user_profile_point,
         fit_gender_cache=FIT_GENDER_CACHE,
-        write_points_to_influxdb=write_points_to_influxdb,
+        write_points_to_influxdb=_tracked_write,
         get_daily_stats=get_daily_stats,
         get_sleep_data=get_sleep_data,
         get_intraday_steps=get_intraday_steps,
@@ -2097,7 +2237,7 @@ def daily_fetch_write(date_str, *, run_rollups_inline: bool = True):
         get_endurance_score=get_endurance_score,
         get_blood_pressure=get_blood_pressure,
         get_hydration=get_hydration,
-        get_activity_summary=get_activity_summary,
+        get_activity_summary=_tracked_get_activity_summary,
         fetch_activity_GPS=fetch_activity_GPS,
         get_solar_intensity=get_solar_intensity,
         get_lifestyle_data=get_lifestyle_data,
@@ -2119,7 +2259,8 @@ def compute_rollups_range(start_date: str, end_date: str) -> None:
                 
 # %%
 def fetch_write_bulk(start_date_str, end_date_str, *, local_timediff: timedelta):
-    global garmin_obj
+    global garmin_obj, _current_run
+    _current_run = _RunStats(date_range=f"{start_date_str} → {end_date_str}")
 
     # Guard against repeated failed reauthentication attempts using stored session tokens.
     # This prevents endless loops that can trigger rate limits or lockouts.
@@ -2161,12 +2302,18 @@ def fetch_write_bulk(start_date_str, end_date_str, *, local_timediff: timedelta)
         reauth=_reauth,
     )
 
-    return _fetch_write_bulk(
-        start_date_str=start_date_str,
-        end_date_str=end_date_str,
-        local_timediff=local_timediff,
-        ctx=ctx,
-    )
+    try:
+        return _fetch_write_bulk(
+            start_date_str=start_date_str,
+            end_date_str=end_date_str,
+            local_timediff=local_timediff,
+            ctx=ctx,
+        )
+    finally:
+        if _current_run is not None:
+            _write_pipeline_summary_jsonl(_current_run)
+            _write_coach_notes_summary(_current_run)
+        _current_run = None
 
 # %%
 def main() -> int:

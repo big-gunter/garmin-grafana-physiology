@@ -54,6 +54,9 @@ RUN printf '0 22 * * * python /app/scripts/compute_readiness.py >> /var/log/read
 # Pre-create log so appuser can write to it without root.
 RUN touch /var/log/readiness.log && chown appuser:appuser /var/log/readiness.log
 
+# Pipeline observability: daily-rotating JSONL run summaries
+RUN mkdir -p /app/logs && chown appuser:appuser /app/logs
+
 COPY deploy/scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
