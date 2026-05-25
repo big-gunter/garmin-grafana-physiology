@@ -15,6 +15,7 @@ class ActivityFetchContext:
     influxdb_database: str
     always_process_fit_files: bool
     norm_tag_value: Callable[[object], str | None]
+    resolve_device: Callable[[object], str] | None = None
 
 
 def get_activity_summary(date_str: str, ctx: ActivityFetchContext) -> tuple[list[dict], dict]:
@@ -35,13 +36,18 @@ def get_activity_summary(date_str: str, ctx: ActivityFetchContext) -> tuple[list
         if "startTimeGMT" in activity:
             start_dt = datetime.strptime(activity["startTimeGMT"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.UTC)
             selector = start_dt.strftime("%Y%m%dT%H%M%SUTC-") + act_type
+            resolved_device = (
+                ctx.resolve_device(activity.get("deviceId"))
+                if ctx.resolve_device is not None
+                else ctx.garmin_devicename
+            )
 
             points_list.append(
                 {
                     "measurement": "ActivitySummary",
                     "time": start_dt.isoformat(),
                     "tags": {
-                        "Device": ctx.garmin_devicename,
+                        "Device": resolved_device,
                         "Database_Name": ctx.influxdb_database,
                         "ActivityID": act_id,
                         "ActivitySelector": selector,
@@ -79,7 +85,7 @@ def get_activity_summary(date_str: str, ctx: ActivityFetchContext) -> tuple[list
                     "measurement": "ActivitySummary",
                     "time": end_dt.isoformat(),
                     "tags": {
-                        "Device": ctx.garmin_devicename,
+                        "Device": resolved_device,
                         "Database_Name": ctx.influxdb_database,
                         "ActivityID": act_id,
                         "ActivitySelector": selector,

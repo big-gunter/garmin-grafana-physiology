@@ -106,6 +106,7 @@ GARMINCONNECT_PASSWORD = cfg.GARMINCONNECT_PASSWORD
 GARMINCONNECT_IS_CN = cfg.GARMINCONNECT_IS_CN
 GARMIN_DEVICENAME = cfg.GARMIN_DEVICENAME
 GARMIN_DEVICEID = cfg.GARMIN_DEVICEID
+DEVICE_REGISTRY: dict[str, str] = {}
 
 AUTO_DATE_RANGE = cfg.AUTO_DATE_RANGE
 MANUAL_START_DATE = cfg.MANUAL_START_DATE
@@ -1918,7 +1919,40 @@ def get_last_sync():
     if GARMIN_DEVICENAME_AUTOMATIC:
         GARMIN_DEVICENAME = dev_name
         GARMIN_DEVICEID = dev_id
+    _build_device_registry()
     return points_list
+
+
+def _build_device_registry() -> None:
+    global DEVICE_REGISTRY
+    try:
+        devices = garmin_obj.get_devices() or []
+        reg: dict[str, str] = {}
+        for d in devices:
+            dev_id = d.get("deviceId")
+            if dev_id is None:
+                continue
+            name = d.get("productDisplayName") or d.get("displayName")
+            if name:
+                reg[str(dev_id)] = name
+        if not reg:
+            logging.warning("Device registry empty — available keys: %s", [list(d.keys()) for d in devices[:3]])
+        else:
+            logging.info("Device registry built: %s", reg)
+        DEVICE_REGISTRY = reg
+    except Exception:
+        logging.exception("Failed to build device registry; device names will fall back to GARMIN_DEVICENAME")
+
+
+def resolve_device_name(device_id) -> str:
+    if device_id is None:
+        return GARMIN_DEVICENAME
+    name = DEVICE_REGISTRY.get(str(device_id))
+    if name:
+        return name
+    logging.debug("Device ID %s not in registry; falling back to %s", device_id, GARMIN_DEVICENAME)
+    return GARMIN_DEVICENAME
+
 
 # %%
 def get_sleep_data(date_str):
@@ -1967,6 +2001,7 @@ def get_activity_summary(date_str):
         influxdb_database=INFLUXDB_DATABASE,
         always_process_fit_files=ALWAYS_PROCESS_FIT_FILES,
         norm_tag_value=_norm_tag_value,
+        resolve_device=resolve_device_name,
     )
     return _activity_fetchers.get_activity_summary(date_str, ctx)
 
