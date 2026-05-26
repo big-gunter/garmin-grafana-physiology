@@ -271,7 +271,8 @@ def compute_and_write_training_load(date_str: str, ctx: RollupContext) -> None:
         except Exception:
             continue
 
-        # Prefer DerivedActivity per-activity computed loads (computed at FIT parse time)
+        # Prefer DerivedActivity per-activity computed loads (computed at FIT parse time).
+        # Uses max() across all Device series so device-name drift never causes a miss.
         da_loads = ctx.get_derived_activity_loads_for_day_v1(date_str, act_id_i) or {}
         def _ff(k: str) -> float | None:
             v = da_loads.get(k)
@@ -287,6 +288,10 @@ def compute_and_write_training_load(date_str: str, ctx: RollupContext) -> None:
         bike_da = _ff("bikeTSS_ts")
 
         if b_da is not None or e_da is not None or hr_da is not None or r_da is not None or bike_da is not None:
+            logging.debug(
+                f"TrainingLoadDaily: DerivedActivity used for act_id={act_id_i} on {date_str}: "
+                f"bTRIMP={b_da}, eTRIMP={e_da}, hrTSS={hr_da}, rTSS={r_da}, bikeTSS={bike_da}"
+            )
             if b_da is not None and b_da > 0:
                 trimp_banister_total += float(b_da)
             if e_da is not None and e_da > 0:
@@ -300,6 +305,12 @@ def compute_and_write_training_load(date_str: str, ctx: RollupContext) -> None:
             act_count += 1
             act_used_ts += 1
             continue
+
+        # No DerivedActivity found — fall through to GPS time-series or summary fallback.
+        logging.info(
+            f"TrainingLoadDaily: no DerivedActivity for act_id={act_id_i} on {date_str}; "
+            f"falling back to GPS/summary path"
+        )
 
         # Prefer time-series computations when ActivityGPS is available.
         points = ctx.get_activity_gps_points_for_day_v1(date_str, act_id_i)

@@ -53,6 +53,10 @@ def get_activity_gps_points_for_day(date_str: str, activity_id: int, ctx: Influx
     """
     Returns raw ActivityGPS points for a given day + Activity_ID.
     Expected fields: HeartRate, Power, Speed, GradeAdjustedSpeed, time.
+
+    No Device filter: the same FIT file can be ingested under different device tags
+    (due to device-name drift). Duplicate timestamps across series are deduplicated
+    by the caller via np.diff(ts) > 0 before computations.
     """
     start_z, end_z = ctx.day_bounds_z(date_str)
     q = (
@@ -64,7 +68,7 @@ def get_activity_gps_points_for_day(date_str: str, activity_id: int, ctx: Influx
         'FROM "ActivityGPS" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         f"AND \"Activity_ID\" = {int(activity_id)} "
-        f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+        f"AND \"Database_Name\"='{ctx.influxdb_database}'"
     )
     try:
         res = ctx.influxdbclient.query(q)
@@ -79,16 +83,20 @@ def get_derived_activity_thresholds_for_day(date_str: str, activity_id: int, ctx
     Returns thresholds derived during FIT parsing for the activity (if present):
       - cs_mps (running critical speed from GAP)
       - cp_watts (cycling critical power)
+
+    No Device filter: uses max() to pick the best non-null value across all device
+    series for the same activity (device-name drift can create multiple series for
+    the same FIT parse).
     """
     start_z, end_z = ctx.day_bounds_z(date_str)
     q = (
         "SELECT "
-        '  last("cs_mps") AS cs_mps, '
-        '  last("cp_watts") AS cp_watts '
+        '  max("cs_mps") AS cs_mps, '
+        '  max("cp_watts") AS cp_watts '
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         f"AND \"ActivityID\"='{int(activity_id)}' "
-        f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+        f"AND \"Database_Name\"='{ctx.influxdb_database}'"
     )
     return ctx.query_last_row(q) or {}
 
@@ -96,19 +104,25 @@ def get_derived_activity_thresholds_for_day(date_str: str, activity_id: int, ctx
 def get_derived_activity_loads_for_day(date_str: str, activity_id: int, ctx: InfluxV1QueryContext) -> dict:
     """
     Returns per-activity training load fields computed during FIT parsing (if present).
+
+    No Device filter: uses max() to pick the best non-null value across all device
+    series for the same activity. This handles the device-name drift case where
+    DerivedActivity was written under a different Device tag than the current
+    GARMIN_DEVICENAME — without this, the fallback would silently compute wrong values
+    from raw ActivitySummary averages instead of the pre-computed FIT-derived loads.
     """
     start_z, end_z = ctx.day_bounds_z(date_str)
     q = (
         "SELECT "
-        '  last("TRIMP_Banister_ts") AS TRIMP_Banister_ts, '
-        '  last("TRIMP_Edwards_ts")  AS TRIMP_Edwards_ts, '
-        '  last("hrTSS_ts")          AS hrTSS_ts, '
-        '  last("rTSS_ts")           AS rTSS_ts, '
-        '  last("bikeTSS_ts")        AS bikeTSS_ts '
+        '  max("TRIMP_Banister_ts") AS TRIMP_Banister_ts, '
+        '  max("TRIMP_Edwards_ts")  AS TRIMP_Edwards_ts, '
+        '  max("hrTSS_ts")          AS hrTSS_ts, '
+        '  max("rTSS_ts")           AS rTSS_ts, '
+        '  max("bikeTSS_ts")        AS bikeTSS_ts '
         'FROM "DerivedActivity" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         f"AND \"ActivityID\"='{int(activity_id)}' "
-        f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+        f"AND \"Database_Name\"='{ctx.influxdb_database}'"
     )
     return ctx.query_last_row(q) or {}
 
