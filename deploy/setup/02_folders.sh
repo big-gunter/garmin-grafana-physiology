@@ -13,6 +13,8 @@ REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"  # repo root (e.g. /opt/physiolo
 echo "==> Creating data directories..."
 mkdir -p $BASE/data/influxdb
 mkdir -p $BASE/data/grafana
+mkdir -p $BASE/data/mcp-server
+mkdir -p $BASE/data/mcp-server-gpt
 mkdir -p $BASE/garminconnect-tokens
 mkdir -p $BASE/backups
 
@@ -23,6 +25,9 @@ chown -R 472:472 $BASE/data/grafana
 chown -R 1500:1500 $BASE/data/influxdb
 # garmin-fetch-data runs as appuser (uid 1000)
 chown -R 1000:1000 $BASE/garminconnect-tokens
+# MCP servers run as appuser (uid 1000); restrict to owner — stores OAuth tokens
+chown -R 1000:1000 $BASE/data/mcp-server $BASE/data/mcp-server-gpt
+chmod 700 $BASE/data/mcp-server $BASE/data/mcp-server-gpt
 
 echo "==> Patching Grafana dashboard datasource reference..."
 sed -i 's/\${DS_GARMIN_STATS}/garmin_influxdb/g' \
