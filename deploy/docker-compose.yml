@@ -3,6 +3,8 @@
 # Or from repo root: docker compose -f deploy/docker-compose.yml up -d
 # Env file: /opt/physiology/.env  (see .env.example)
 
+name: physiology
+
 networks:
   physiology-net:
     driver: bridge

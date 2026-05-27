@@ -5,6 +5,8 @@
 # NOTE: requires its own repo clone so ./grafana and ../Grafana_Dashboard
 #       resolve to garton-specific paths (see README for setup steps)
 
+name: garton
+
 networks:
   garton-network:
     driver: bridge
