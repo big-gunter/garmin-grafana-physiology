@@ -13,6 +13,7 @@ services:
 
   cloudflared:
     image: cloudflare/cloudflared:latest
+    container_name: physiology-cloudflared
     command: tunnel --no-autoupdate run
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
@@ -24,6 +25,7 @@ services:
 
   influxdb:
     image: influxdb:1.11
+    container_name: physiology-influxdb
     hostname: influxdb
     volumes:
       - /opt/physiology/data/influxdb:/var/lib/influxdb
@@ -115,6 +117,7 @@ services:
   mcp-server:
     build:
       context: ./mcp_server
+    container_name: physiology-mcp-server
     volumes:
       - /opt/physiology/data/mcp-server:/data
     environment:
@@ -147,6 +150,7 @@ services:
   mcp-server-gpt:
     build:
       context: ./mcp_server_gpt
+    container_name: physiology-mcp-server-gpt
     volumes:
       - /opt/physiology/data/mcp-server-gpt:/data
     environment:

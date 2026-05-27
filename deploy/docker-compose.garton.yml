@@ -15,6 +15,7 @@ services:
 
   cloudflared:
     image: cloudflare/cloudflared:latest
+    container_name: garton-cloudflared
     command: tunnel --no-autoupdate run
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
@@ -26,6 +27,7 @@ services:
 
   influxdb:
     image: influxdb:1.11
+    container_name: garton-influxdb
     hostname: influxdb
     volumes:
       - /opt/garton/data/influxdb:/var/lib/influxdb
@@ -117,6 +119,7 @@ services:
   mcp-server:
     build:
       context: ./mcp_server
+    container_name: garton-mcp-server
     volumes:
       - /opt/garton/data/mcp-server:/data
     environment:
@@ -149,6 +152,7 @@ services:
   mcp-server-gpt:
     build:
       context: ./mcp_server_gpt
+    container_name: garton-mcp-server-gpt
     volumes:
       - /opt/garton/data/mcp-server-gpt:/data
     environment:
