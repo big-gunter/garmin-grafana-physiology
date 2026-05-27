@@ -116,7 +116,7 @@ cd /opt/physiology-repo
 bash deploy/setup/02_folders.sh
 ```
 
-This creates `/opt/physiology/data/{influxdb,grafana,mcp-server,mcp-server-gpt}`, `/opt/physiology/garminconnect-tokens/`, and `/opt/physiology/backups/` with correct ownership, patches the Grafana dashboard JSON, and creates `deploy/.env` from the template.
+This creates `/opt/physiology/data/{influxdb,grafana,mcp-server,mcp-server-gpt}`, `/opt/physiology/{garminconnect-tokens,whoop-tokens}/`, and `/opt/physiology/backups/` with correct ownership, patches the Grafana dashboard JSON, and creates `deploy/.env` from the template.
 
 > **MCP token persistence** — `mcp-server` and `mcp-server-gpt` are mounted as host volumes so OAuth state (registered clients, issued tokens) survives container restarts. The script creates these directories with `chmod 700` so only the container's `appuser` (uid 1000) can read them.
 

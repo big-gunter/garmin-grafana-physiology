@@ -33,6 +33,10 @@ interactively and then refreshed automatically (access tokens expire after
 
 ## Step 2 — Create the token directory on the server
 
+`deploy/setup/02_folders.sh` (and `02_folders_garton.sh` for the garton instance) creates
+`/opt/physiology/whoop-tokens` (or `/opt/garton/whoop-tokens`) with correct ownership as
+part of the normal setup. If you skipped that script or are setting up manually:
+
 ```bash
 mkdir -p /opt/physiology/whoop-tokens
 chown -R 1000:1000 /opt/physiology/whoop-tokens
@@ -74,10 +78,12 @@ scp ./whoop-tokens-local/whoop_tokens.json \
 
 ## Step 5 — Start the WHOOP service
 
+`whoop-fetch-data` is a default service (no profile needed):
+
 ```bash
 cd /opt/physiology-repo/deploy
-docker compose --profile whoop build whoop-fetch-data
-docker compose --profile whoop up -d whoop-fetch-data
+docker compose build whoop-fetch-data
+docker compose up -d whoop-fetch-data
 docker compose logs -f whoop-fetch-data
 ```
 
@@ -92,7 +98,7 @@ To ingest historical data (e.g. since account creation):
 
 ```bash
 cd /opt/physiology-repo/deploy
-docker compose --profile whoop run --rm \
+docker compose run --rm \
   -e MANUAL_START_DATE=2020-01-01 \
   -e MANUAL_END_DATE=2026-05-13 \
   whoop-fetch-data

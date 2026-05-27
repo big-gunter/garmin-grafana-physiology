@@ -155,7 +155,8 @@ The cloud stack lives entirely under `deploy/`. Run all commands from that direc
 | Script / file | What it does |
 |---|---|
 | `deploy/setup/01_server_setup.sh` | Install Docker, UFW firewall, fail2ban, move SSH to port 22444 |
-| `deploy/setup/02_folders.sh` | Create `/opt/physiology` data dirs (including MCP token dirs with `chmod 700`), patch dashboard JSON, copy `.env.example` |
+| `deploy/setup/02_folders.sh` | Create `/opt/physiology` data dirs (influxdb, grafana, MCP, garmin/whoop tokens), patch dashboard JSON, copy `.env.example` |
+| `deploy/setup/02_folders_garton.sh` | Same as above for the garton instance (`/opt/garton`) |
 | `deploy/setup/03_influxdb_users.sh` | Create `garmin_writer` and `mcp_reader` InfluxDB users with correct grants |
 | `deploy/setup/04_backup.sh` | Example nightly cron: InfluxDB portable backup + Grafana volume backup |
 | `deploy/setup/05_grafana_token.md` | Instructions for creating a Grafana service account token for MCP |

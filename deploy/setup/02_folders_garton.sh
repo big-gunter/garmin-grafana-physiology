@@ -1,14 +1,14 @@
 #!/bin/bash
 # =============================================================================
-# 02_folders.sh
-# Creates data directories and prepares deploy/.env for the physiology stack.
-# The repo must be cloned to /opt/physiology-repo before running this.
-# Run as root: bash deploy/setup/02_folders.sh
+# 02_folders_garton.sh
+# Creates data directories and prepares deploy/.env for the garton stack.
+# The repo must be cloned to /opt/garton-repo before running this.
+# Run as root: bash deploy/setup/02_folders_garton.sh
 # =============================================================================
 set -euo pipefail
 
-BASE=/opt/physiology          # data directory (influxdb, grafana, tokens, backups)
-REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"  # repo root (e.g. /opt/physiology-repo)
+BASE=/opt/garton               # data directory (influxdb, grafana, tokens, backups)
+REPO_DIR=/opt/garton-repo      # garton-specific repo clone
 
 echo "==> Creating data directories..."
 mkdir -p $BASE/data/influxdb
@@ -49,4 +49,4 @@ fi
 echo ""
 echo "==> Setup complete."
 echo "    Next: fill in deploy/.env then start the stack:"
-echo "    cd $REPO_DIR/deploy && docker compose up -d"
+echo "    cd $REPO_DIR/deploy && docker compose -f docker-compose.garton.yml up -d"
