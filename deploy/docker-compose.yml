@@ -3,7 +3,7 @@
 # Or from repo root: docker compose -f deploy/docker-compose.yml up -d
 # Env file: /opt/physiology/.env  (see .env.example)
 
-name: physiology
+name: deploy
 
 networks:
   physiology-net:
@@ -45,7 +45,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    container_name: grafana
+    container_name: deploy-grafana
     hostname: grafana
     volumes:
       - /opt/physiology/data/grafana:/var/lib/grafana
@@ -86,7 +86,7 @@ services:
       context: ..
       dockerfile: Dockerfile
     image: garmin-fetch-data:physiology
-    container_name: garmin-fetch-data
+    container_name: deploy-garmin-fetch-data
     restart: unless-stopped
     networks:
       - physiology-net
@@ -182,7 +182,7 @@ services:
     build:
       context: ../
       dockerfile: deploy/Dockerfile.whoop
-    container_name: whoop-fetch-data
+    container_name: deploy-whoop-fetch-data
     restart: unless-stopped
     networks:
       - physiology-net
