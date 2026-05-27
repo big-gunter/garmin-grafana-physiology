@@ -24,8 +24,8 @@ GITHUB_ALLOWED_USER  = os.environ["GITHUB_ALLOWED_USER"]
 MCP_BASE_URL         = os.environ["MCP_BASE_URL"].rstrip("/")
 TOKEN_SECRET         = os.environ["TOKEN_SECRET"]
 
-TOKEN_EXPIRY_SECONDS         = 3600       # 1 hour access tokens
-REFRESH_TOKEN_EXPIRY_SECONDS = 86400      # 24 hour refresh tokens
+TOKEN_EXPIRY_SECONDS         = 3600            # 1 hour access tokens
+REFRESH_TOKEN_EXPIRY_SECONDS = 30 * 24 * 3600  # 30 days; rolling (extended on each use)
 
 # Persistent storage for registered clients and issued tokens
 DATA_DIR = Path("/data")
@@ -296,7 +296,12 @@ def issue_tokens(auth_code: str, code_verifier: str,
 
 
 def refresh_access_token(refresh_token: str, client_id: str) -> Optional[dict]:
-    """Issue a new access token from a valid refresh token."""
+    """Issue a new access token from a valid refresh token.
+
+    Also extends the refresh token's expiry (rolling window) so that the session
+    stays alive as long as it is actively used — callers only need to fully
+    re-authenticate if the token is unused for REFRESH_TOKEN_EXPIRY_SECONDS.
+    """
     refresh_tokens = _load(REFRESH_TOKENS_FILE)
     rt_data = refresh_tokens.get(refresh_token)
 
@@ -320,6 +325,11 @@ def refresh_access_token(refresh_token: str, client_id: str) -> Optional[dict]:
         payload["aud"] = resource
 
     access_token = jwt.encode(payload, TOKEN_SECRET, algorithm="HS256")
+
+    # Roll the refresh token expiry forward from now, so the session survives
+    # as long as there is at least one use within each 30-day window.
+    refresh_tokens[refresh_token]["expires_at"] = now + REFRESH_TOKEN_EXPIRY_SECONDS
+    _save(REFRESH_TOKENS_FILE, refresh_tokens)
 
     return {
         "access_token": access_token,

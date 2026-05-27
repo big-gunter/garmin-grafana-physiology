@@ -113,6 +113,8 @@ services:
   mcp-server:
     build:
       context: ./mcp_server
+    volumes:
+      - /opt/physiology/data/mcp-server:/data
     environment:
       - INFLUX_HOST=influxdb
       - INFLUX_PORT=8086
@@ -143,6 +145,8 @@ services:
   mcp-server-gpt:
     build:
       context: ./mcp_server_gpt
+    volumes:
+      - /opt/physiology/data/mcp-server-gpt:/data
     environment:
       - INFLUX_HOST=influxdb
       - INFLUX_PORT=8086
