@@ -6,6 +6,16 @@ from datetime import timedelta
 from typing import Any, Callable
 
 
+def _dev(name: str) -> str:
+    """Return an InfluxQL Device tag filter, or empty string when name is blank.
+
+    When GARMIN_DEVICENAME is not set (blank), omitting the filter lets
+    backfill scripts and rollups find records regardless of which device tag
+    the live pipeline used when writing them.
+    """
+    return f" AND \"Device\"='{name}'" if name else ""
+
+
 @dataclass(frozen=True, slots=True)
 class InfluxV1QueryContext:
     influxdbclient: Any
@@ -30,7 +40,7 @@ def get_hr_zones_for_day(date_str: str, ctx: InfluxV1QueryContext) -> dict[str, 
         '  last("Z5_Low")  AS Z5_Low,  last("Z5_High") AS Z5_High '
         'FROM "PhysiologyDaily" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
-        f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+        f"AND \"Database_Name\"='{ctx.influxdb_database}'{_dev(ctx.garmin_devicename)}"
     )
     row = ctx.query_last_row(q) or {}
 
@@ -134,7 +144,7 @@ def get_gender_for_day(date_str: str, ctx: InfluxV1QueryContext) -> str:
         'FROM "UserProfile" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
         "AND gender_is_known = 1 "
-        f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+        f"AND \"Database_Name\"='{ctx.influxdb_database}'{_dev(ctx.garmin_devicename)}"
     )
     row = ctx.query_last_row(q) or {}
     gc = row.get("gc")
@@ -152,7 +162,7 @@ def get_userprofile_master(ctx: InfluxV1QueryContext) -> dict:
         '       last("gender_code") AS gender_code, '
         '       last("lthr_bpm") AS lthr_bpm '
         'FROM "UserProfileMaster" '
-        f"WHERE \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+        f"WHERE \"Database_Name\"='{ctx.influxdb_database}'{_dev(ctx.garmin_devicename)}"
     )
     return ctx.query_last_row(q) or {}
 
@@ -189,7 +199,7 @@ def get_physiology_for_day(date_str: str, ctx: InfluxV1QueryContext) -> tuple[fl
         'SELECT last("RHR_7d_median") AS rhr, last("HRmax_est") AS hrmax '
         'FROM "PhysiologyDaily" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
-        f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+        f"AND \"Database_Name\"='{ctx.influxdb_database}'{_dev(ctx.garmin_devicename)}"
     )
     row = ctx.query_last_row(q) or {}
     rhr = row.get("rhr")
@@ -257,7 +267,7 @@ def userprofile_exists_for_day(date_str: str, ctx: InfluxV1QueryContext) -> bool
             'SELECT count("gender_is_known") AS c '
             'FROM "UserProfile" '
             f"WHERE time >= '{start_z}' AND time < '{end_z}' "
-            f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+            f"AND \"Database_Name\"='{ctx.influxdb_database}'{_dev(ctx.garmin_devicename)}"
         )
         res = ctx.influxdbclient.query(q)
         pts = list(res.get_points())
@@ -278,7 +288,7 @@ def userprofile_known_for_day(date_str: str, ctx: InfluxV1QueryContext) -> bool:
             'FROM "UserProfile" '
             f"WHERE time >= '{start_z}' AND time < '{end_z}' "
             'AND "gender_is_known" = 1 '
-            f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+            f"AND \"Database_Name\"='{ctx.influxdb_database}'{_dev(ctx.garmin_devicename)}"
         )
         res = ctx.influxdbclient.query(q)
         pts = list(res.get_points())
@@ -379,7 +389,7 @@ def get_birth_year_for_day(date_str: str, ctx: InfluxV1QueryContext) -> int | No
         'SELECT last("birth_year") '
         'FROM "UserProfile" '
         f"WHERE time >= '{start_z}' AND time < '{end_z}' "
-        f"AND \"Database_Name\"='{ctx.influxdb_database}' AND \"Device\"='{ctx.garmin_devicename}'"
+        f"AND \"Database_Name\"='{ctx.influxdb_database}'{_dev(ctx.garmin_devicename)}"
     )
     row = ctx.query_last_row(q) or {}
     v = row.get("last")
