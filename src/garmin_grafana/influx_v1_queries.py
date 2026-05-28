@@ -13,7 +13,7 @@ def _dev(name: str) -> str:
     backfill scripts and rollups find records regardless of which device tag
     the live pipeline used when writing them.
     """
-    return f" AND \"Device\"='{name}'" if name else ""
+    return f" AND \"Device\"='{name}'" if name and name != "Unknown" else ""
 
 
 @dataclass(frozen=True, slots=True)
