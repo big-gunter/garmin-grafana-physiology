@@ -456,7 +456,10 @@ def _get_gender_for_day_v1(date_str: str) -> str:
         dt_utc=_dt_utc,
         query_last_row=_query_last_row_influx_v1,
     )
-    return _influxv1.get_gender_for_day(date_str, ctx)
+    gender = _influxv1.get_gender_for_day(date_str, ctx)
+    if gender not in {"male", "female"} and USER_GENDER_OVERRIDE:
+        return _norm_gender(USER_GENDER_OVERRIDE)
+    return gender
 
 def _get_userprofile_master_v1() -> dict:
     ctx = _InfluxV1QueryContext(
