@@ -60,7 +60,6 @@ ______________________________________________________________________
 
 """
 print(banner_text)
-USER_GENDER_OVERRIDE = cfg.USER_GENDER_OVERRIDE
 
 # %%
 def _norm_tag_value(v: object) -> str | None:
@@ -285,9 +284,6 @@ def _gender_code(g: str) -> int:
     return 1 if g == "male" else 2 if g == "female" else 0
 
 def _get_user_gender_from_garmin() -> str:
-    if USER_GENDER_OVERRIDE:
-        return _norm_gender(USER_GENDER_OVERRIDE)
-
     try:
         # garminconnect library commonly exposes get_user_profile()
         prof = garmin_obj.get_user_profile() if garmin_obj is not None else {}
@@ -456,10 +452,7 @@ def _get_gender_for_day_v1(date_str: str) -> str:
         dt_utc=_dt_utc,
         query_last_row=_query_last_row_influx_v1,
     )
-    gender = _influxv1.get_gender_for_day(date_str, ctx)
-    if gender not in {"male", "female"} and USER_GENDER_OVERRIDE:
-        return _norm_gender(USER_GENDER_OVERRIDE)
-    return gender
+    return _influxv1.get_gender_for_day(date_str, ctx)
 
 def _get_userprofile_master_v1() -> dict:
     ctx = _InfluxV1QueryContext(

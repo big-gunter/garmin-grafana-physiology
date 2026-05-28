@@ -31,7 +31,6 @@ def _safe_b64decode_env(name: str) -> str | None:
         return None
 
 
-USER_GENDER_OVERRIDE = os.getenv("USER_GENDER", "").strip().lower()  # male|female|m|f|unknown|"" (auto)
 
 env_override = dotenv.load_dotenv("override-default-vars.env", override=True)
 if env_override:
