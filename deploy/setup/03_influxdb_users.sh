@@ -52,13 +52,13 @@ for i in {1..30}; do
     sleep 3
 done
 
-echo "==> Creating mcp_reader user (READ-ONLY)..."
+echo "==> Creating mcp_reader user (ALL access)..."
 influx_exec -username admin -password "$ADMIN_PASSWORD" \
     -execute "CREATE USER mcp_reader WITH PASSWORD '$MCP_PASSWORD'" 2>/dev/null || \
     echo "    User may already exist, continuing..."
 
 influx_exec -username admin -password "$ADMIN_PASSWORD" \
-    -execute "GRANT READ ON \"$DB\" TO mcp_reader"
+    -execute "GRANT ALL ON \"$DB\" TO mcp_reader"
 
 echo "==> Creating garmin_writer user (WRITE)..."
 influx_exec -username admin -password "$ADMIN_PASSWORD" \
@@ -79,5 +79,5 @@ influx_exec -username admin -password "$ADMIN_PASSWORD" \
 
 echo ""
 echo "==> Done."
-echo "    mcp_reader    → READ-ONLY on $DB"
+echo "    mcp_reader    → ALL on $DB"
 echo "    garmin_writer → ALL on $DB"

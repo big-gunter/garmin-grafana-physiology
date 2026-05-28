@@ -512,17 +512,18 @@ def get_whoop_workouts(days_back: int = 30) -> str:
 
 @mcp.tool()
 def execute_influxdb_query(query: str, database: str = "GarminStats") -> str:
-    """Execute a raw InfluxQL query against GarminStats. Supports SELECT, SHOW, DELETE and DROP SERIES. Use with care."""
+    """Execute a raw InfluxQL query against GarminStats. Supports SELECT, SHOW, INSERT, DELETE and DROP SERIES. Use with care."""
     try:
+        verb = query.strip().split()[0].upper() if query.strip() else ""
+        mutating = verb in ("INSERT", "DELETE", "DROP")
         client = InfluxDBClient(
             host=INFLUX_HOST,
             port=INFLUX_PORT,
-            username=INFLUX_USER,
-            password=INFLUX_PASSWORD,
+            username=INFLUX_WRITER_USER if mutating else INFLUX_USER,
+            password=INFLUX_WRITER_PASSWORD if mutating else INFLUX_PASSWORD,
             database=database,
         )
-        verb = query.strip().split()[0].upper() if query.strip() else ""
-        if verb in ("DELETE", "DROP"):
+        if mutating:
             client.query(query)
             return json.dumps({"status": "ok", "query": query})
         result = client.query(query)
