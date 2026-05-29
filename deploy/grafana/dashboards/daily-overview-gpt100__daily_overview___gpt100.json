@@ -417,7 +417,7 @@
               "type": "influxdb",
               "uid": "garmin_influxdb"
             },
-            "query": "SELECT mean(\"VO2_max_value\") FROM \"VO2_Max\" WHERE $timeFilter AND \"VO2_max_value\" > 0 GROUP BY time(1d) fill(null) ORDER BY time DESC LIMIT 1",
+            "query": "SELECT last(\"VO2_max_value\") FROM \"VO2_Max\" WHERE $timeFilter AND \"VO2_max_value\" > 0",
             "rawQuery": true,
             "refId": "A"
           }
@@ -491,7 +491,7 @@
               "type": "influxdb",
               "uid": "garmin_influxdb"
             },
-            "query": "SELECT mean(\"VO2_max_value\") * 1.09 FROM \"VO2_Max\" WHERE $timeFilter AND \"VO2_max_value\" > 0 GROUP BY time(1d) fill(null) ORDER BY time DESC LIMIT 1",
+            "query": "SELECT last(\"VO2_max_value\") * 1.09 FROM \"VO2_Max\" WHERE $timeFilter AND \"VO2_max_value\" > 0",
             "rawQuery": true,
             "refId": "A"
           }
