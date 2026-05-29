@@ -1,0 +1,364 @@
+{
+  "dashboard": {
+    "panels": [
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Watch for sustained readings below 93%. APCKD context.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 88,
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "targets": [
+          {
+            "alias": "SpO2 Daily Avg",
+            "query": "SELECT mean(\"averageSpo2\") FROM \"DailyStats\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "SpO2 During Sleep",
+            "query": "SELECT mean(\"averageSpO2Value\") FROM \"SleepSummary\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "SpO2 \u2014 Daily Average and Low",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Normal range 12-20 breaths/min. Elevated values can indicate illness or respiratory stress.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "blue",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 25,
+            "min": 10,
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "id": 2,
+        "targets": [
+          {
+            "alias": "Breathing Rate (breaths/min)",
+            "query": "SELECT mean(\"averageRespirationValue\") FROM \"SleepSummary\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Overnight Breathing Rate",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "High stress + low sleep + poor body battery = elevated hyponatraemia and heat risk on training days.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "unit": "h"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        },
+        "id": 3,
+        "targets": [
+          {
+            "alias": "High Stress Hours",
+            "query": "SELECT mean(\"highStressDuration\") / 3600 FROM \"DailyStats\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Total Stress Hours",
+            "query": "SELECT mean(\"stressDuration\") / 3600 FROM \"DailyStats\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Stress Duration \u2014 Daily Hours",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "REM critical for PTSD/anxiety recovery. Deep sleep drives physical recovery.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            },
+            "unit": "m"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        },
+        "id": 4,
+        "targets": [
+          {
+            "alias": "Deep Sleep (min)",
+            "query": "SELECT mean(\"deepSleepSeconds\") / 60 FROM \"SleepSummary\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "REM Sleep (min)",
+            "query": "SELECT mean(\"remSleepSeconds\") / 60 FROM \"SleepSummary\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Light Sleep (min)",
+            "query": "SELECT mean(\"lightSleepSeconds\") / 60 FROM \"SleepSummary\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "C"
+          },
+          {
+            "alias": "Awake (min)",
+            "query": "SELECT mean(\"awakeSleepSeconds\") / 60 FROM \"SleepSummary\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "D"
+          }
+        ],
+        "title": "Sleep Stages",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Significant deviation from baseline indicates illness onset. Early warning system.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "orange",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "unit": "celsius"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        },
+        "id": 5,
+        "targets": [
+          {
+            "alias": "Skin Temp Deviation C",
+            "query": "SELECT mean(\"avgSkinTempDeviationC\") FROM \"SleepSummary\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Skin Temperature Deviation",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Balance of movement throughout day. High sedentary time compounds anxiety.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            },
+            "unit": "m"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        },
+        "id": 6,
+        "targets": [
+          {
+            "alias": "Sedentary (mins)",
+            "query": "SELECT mean(\"sedentarySeconds\") / 60 FROM \"DailyStats\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Highly Active (mins)",
+            "query": "SELECT mean(\"highlyActiveSeconds\") / 60 FROM \"DailyStats\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Sedentary vs Highly Active Minutes",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "RHR rising AND HRV falling = do not train hard. Key daily check. Atenolol suppresses both baselines.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 24
+        },
+        "id": 7,
+        "targets": [
+          {
+            "alias": "Resting HR (bpm)",
+            "query": "SELECT mean(\"restingHeartRate\") FROM \"DailyStats\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Overnight HRV (ms)",
+            "query": "SELECT mean(\"avgOvernightHrv\") FROM \"SleepSummary\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "HRV + RHR Combined \u2014 Daily Readiness",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Two key readiness signals together. Both low = rest day, no exceptions.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 0,
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 32
+        },
+        "id": 8,
+        "targets": [
+          {
+            "alias": "Sleep Score",
+            "query": "SELECT mean(\"sleepScore\") FROM \"SleepSummary\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Body Battery Peak",
+            "query": "SELECT max(\"bodyBatteryHighestValue\") FROM \"DailyStats\" WHERE time >= now() - 30d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Sleep Score + Body Battery \u2014 Readiness Composite",
+        "type": "timeseries"
+      }
+    ],
+    "refresh": "1h",
+    "tags": [
+      "ai",
+      "coach",
+      "medical"
+    ],
+    "time": {
+      "from": "now-30d",
+      "to": "now"
+    },
+    "timezone": "Australia/Melbourne",
+    "title": "AI Coach \u2014 Medical & Safety Monitoring",
+    "uid": "ai-coach-medical"
+  },
+  "folderId": 0,
+  "overwrite": true
+}

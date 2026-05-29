@@ -1,0 +1,1181 @@
+{
+  "dashboard": {
+    "panels": [
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Personal readiness score. Primary signal.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 34
+                },
+                {
+                  "color": "yellow",
+                  "value": 50
+                },
+                {
+                  "color": "green",
+                  "value": 67
+                }
+              ]
+            },
+            "unit": "none"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "id": 20,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"coach_readiness\") FROM \"CoachReadiness\" WHERE time > now()-48h",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "TODAY \u2014 COACH READINESS",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Today's HRV as % of 30-day personal average. Above 100% = better than norm.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 80
+                },
+                {
+                  "color": "yellow",
+                  "value": 95
+                },
+                {
+                  "color": "green",
+                  "value": 105
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        },
+        "id": 21,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"hrv_value\") / last(\"hrv_baseline_30d\") * 100 FROM \"CoachReadiness\" WHERE time > now()-48h",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "HRV vs PERSONAL BASELINE",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "WHOOP recovery for reference.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 34
+                },
+                {
+                  "color": "yellow",
+                  "value": 50
+                },
+                {
+                  "color": "green",
+                  "value": 67
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        },
+        "id": 22,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"recovery_score\") FROM \"WhoopRecovery\" WHERE time > now()-48h",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "WHOOP RECOVERY (ref only)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 26
+                },
+                {
+                  "color": "yellow",
+                  "value": 50
+                },
+                {
+                  "color": "green",
+                  "value": 75
+                }
+              ]
+            },
+            "unit": "none"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        },
+        "id": 23,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"bodyBatteryHighestValue\") FROM \"DailyStats\" WHERE time > now()-48h",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "BODY BATTERY (peak)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Primary readiness signal. Orange = composite score. Components show what's driving it each day.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 1.5
+            },
+            "max": 100,
+            "min": 0,
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Coach Readiness \u2605"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#f97316",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 3
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 15
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "HRV Component"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#8b5cf6",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Sleep Component"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#3b82f6",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "WHOOP Recovery (ref)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#ef4444",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      6,
+                      3
+                    ],
+                    "fill": "dash"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 1
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 4
+        },
+        "id": 24,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean"
+            ],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Coach Readiness \u2605",
+            "query": "SELECT mean(\"coach_readiness\") FROM \"CoachReadiness\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "HRV Component",
+            "query": "SELECT mean(\"hrv_component\") FROM \"CoachReadiness\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Sleep Component",
+            "query": "SELECT mean(\"sleep_component\") FROM \"CoachReadiness\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "C"
+          },
+          {
+            "alias": "WHOOP Recovery (ref)",
+            "query": "SELECT mean(\"recovery_score\") FROM \"WhoopRecovery\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "D"
+          }
+        ],
+        "title": "COACH READINESS \u2014 90 Day Trend",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "red",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 52
+                },
+                {
+                  "color": "red",
+                  "value": 58
+                }
+              ]
+            },
+            "unit": "bpm"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 12
+        },
+        "id": 1,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Resting HR",
+            "query": "SELECT mean(\"restingHeartRate\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Resting Heart Rate",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "blue",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 28
+                },
+                {
+                  "color": "green",
+                  "value": 33
+                }
+              ]
+            },
+            "unit": "ms"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 12
+        },
+        "id": 2,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Overnight HRV",
+            "query": "SELECT mean(\"avgOvernightHrv\") FROM \"SleepSummary\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Overnight HRV",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "purple",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 60
+                },
+                {
+                  "color": "green",
+                  "value": 75
+                }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 20
+        },
+        "id": 3,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Sleep Score",
+            "query": "SELECT mean(\"sleepScore\") FROM \"SleepSummary\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Sleep Score",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "green",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 40
+                },
+                {
+                  "color": "green",
+                  "value": 65
+                }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 8,
+          "y": 20
+        },
+        "id": 4,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Body Battery Peak",
+            "query": "SELECT max(\"bodyBatteryHighestValue\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Body Battery \u2014 Daily Peak",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "orange",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 6
+                },
+                {
+                  "color": "green",
+                  "value": 7.5
+                }
+              ]
+            },
+            "unit": "h"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 20
+        },
+        "id": 5,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Sleep Hours",
+            "query": "SELECT mean(\"sleepTimeSeconds\") / 3600 FROM \"SleepSummary\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Sleep Duration",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "blue",
+              "mode": "fixed"
+            },
+            "unit": "km"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 28
+        },
+        "id": 6,
+        "targets": [
+          {
+            "alias": "Weekly km",
+            "query": "SELECT sum(\"totalDistanceMeters\") / 1000 FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Weekly Training Distance (km)",
+        "type": "barchart"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "orange",
+              "mode": "fixed"
+            },
+            "unit": "kcal"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 28
+        },
+        "id": 7,
+        "targets": [
+          {
+            "alias": "Active kcal",
+            "query": "SELECT sum(\"activeKilocalories\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Weekly Active Calories",
+        "type": "barchart"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "teal",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 36
+        },
+        "id": 8,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Steps",
+            "query": "SELECT mean(\"totalSteps\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Daily Steps",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "yellow",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 6
+                },
+                {
+                  "color": "red",
+                  "value": 9
+                }
+              ]
+            },
+            "unit": "h"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 36
+        },
+        "id": 9,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Stress Hours",
+            "query": "SELECT mean(\"stressDuration\") / 3600 FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Stress Duration (hours)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "light-blue",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 88,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 93
+                },
+                {
+                  "color": "green",
+                  "value": 95
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 44
+        },
+        "id": 10,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "alias": "SpO2",
+            "query": "SELECT mean(\"averageSpo2\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "SpO2 Daily Average",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "dark-red",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 0,
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 44
+        },
+        "id": 11,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Body Battery Low",
+            "query": "SELECT min(\"bodyBatteryLowestValue\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Body Battery \u2014 Daily Low",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            },
+            "unit": "m"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 52
+        },
+        "id": 12,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Deep Sleep",
+            "query": "SELECT mean(\"deepSleepSeconds\") / 60 FROM \"SleepSummary\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "REM Sleep",
+            "query": "SELECT mean(\"remSleepSeconds\") / 60 FROM \"SleepSummary\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Light Sleep",
+            "query": "SELECT mean(\"lightSleepSeconds\") / 60 FROM \"SleepSummary\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "C"
+          },
+          {
+            "alias": "Awake",
+            "query": "SELECT mean(\"awakeSleepSeconds\") / 60 FROM \"SleepSummary\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "D"
+          }
+        ],
+        "title": "Sleep Stages Breakdown",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "green",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "unit": "lengthm"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 60
+        },
+        "id": 13,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Elevation (m)",
+            "query": "SELECT sum(\"floorsAscendedInMeters\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Floors Ascended (metres)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "m"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 60
+        },
+        "id": 14,
+        "targets": [
+          {
+            "alias": "Vigorous Mins",
+            "query": "SELECT sum(\"vigorousIntensityMinutes\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(0)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Moderate Mins",
+            "query": "SELECT sum(\"moderateIntensityMinutes\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(0)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Vigorous + Moderate Intensity Minutes",
+        "type": "barchart"
+      }
+    ],
+    "refresh": "5m",
+    "schemaVersion": 42,
+    "tags": [
+      "ai",
+      "coach",
+      "overview"
+    ],
+    "time": {
+      "from": "now-90d",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "1m",
+        "5m",
+        "15m",
+        "1h"
+      ]
+    },
+    "timezone": "Australia/Melbourne",
+    "title": "AI Coach \u2014 Athlete Overview",
+    "uid": "ai-coach-overview"
+  },
+  "folderId": 0,
+  "overwrite": true
+}

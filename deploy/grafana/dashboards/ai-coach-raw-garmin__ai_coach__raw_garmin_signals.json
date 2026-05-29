@@ -1,0 +1,354 @@
+{
+  "dashboard": {
+    "panels": [
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "none"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"sleepScore\") FROM \"SleepSummary\" WHERE $timeFilter",
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "SleepScore (SleepSummary.sleepScore)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bpm"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        },
+        "id": 2,
+        "options": {
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"restingHeartRate\") FROM \"DailyStats\" WHERE $timeFilter",
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "RHR (DailyStats.restingHeartRate)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        },
+        "id": 3,
+        "options": {
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"avgOvernightHrv\") FROM \"SleepSummary\" WHERE $timeFilter",
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "Overnight HRV (SleepSummary.avgOvernightHrv)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        },
+        "id": 4,
+        "options": {
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"sleepTimeSeconds\") FROM \"SleepSummary\" WHERE $timeFilter",
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "Sleep time (SleepSummary.sleepTimeSeconds)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bpm"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 5
+        },
+        "id": 10,
+        "targets": [
+          {
+            "query": "SELECT mean(\"restingHeartRate\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "RHR trend (DailyStats.restingHeartRate)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 5
+        },
+        "id": 11,
+        "targets": [
+          {
+            "query": "SELECT mean(\"avgOvernightHrv\") FROM \"SleepSummary\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "Overnight HRV trend (SleepSummary.avgOvernightHrv)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "none"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 13
+        },
+        "id": 12,
+        "targets": [
+          {
+            "query": "SELECT mean(\"sleepScore\") FROM \"SleepSummary\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "SleepScore trend (SleepSummary.sleepScore)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 13
+        },
+        "id": 13,
+        "targets": [
+          {
+            "query": "SELECT sum(\"movingDuration\") FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(1d) fill(0)",
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "Moving duration (ActivitySummary.movingDuration)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ml/kg/min"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 21
+        },
+        "id": 30,
+        "targets": [
+          {
+            "query": "SELECT last(\"vo2max_est\") AS \"vo2max_run\" FROM \"AgentDerivedActivity\" WHERE $timeFilter AND \"sport_tag\" =~ /running/ GROUP BY time(1d) fill(null)",
+            "refId": "A",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "Agent-derived VO2max (Running)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "none"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 29
+        },
+        "id": 31,
+        "targets": [
+          {
+            "query": "SELECT last(\"trimp_banister\") AS \"trimp_banister\" FROM \"AgentDerivedActivity\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "refId": "A",
+            "resultFormat": "time_series"
+          },
+          {
+            "query": "SELECT last(\"trimp_edwards\") AS \"trimp_edwards\" FROM \"AgentDerivedActivity\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "refId": "B",
+            "resultFormat": "time_series"
+          }
+        ],
+        "title": "Agent-derived TRIMP (Banister / Edwards)",
+        "type": "timeseries"
+      }
+    ],
+    "refresh": "5m",
+    "schemaVersion": 42,
+    "tags": [
+      "ai",
+      "coach"
+    ],
+    "time": {
+      "from": "now-30d",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "1m",
+        "5m",
+        "15m",
+        "1h"
+      ]
+    },
+    "timezone": "Australia/Melbourne",
+    "title": "AI Coach (Raw Garmin Signals)",
+    "uid": "ai-coach-raw-garmin"
+  },
+  "folderId": 0,
+  "overwrite": true
+}

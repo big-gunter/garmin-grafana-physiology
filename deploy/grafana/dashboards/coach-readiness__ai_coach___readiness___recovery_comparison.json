@@ -1,0 +1,1086 @@
+{
+  "dashboard": {
+    "panels": [
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Custom readiness score based on personal HRV baseline, sleep, RHR and training form.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 34
+                },
+                {
+                  "color": "yellow",
+                  "value": 50
+                },
+                {
+                  "color": "green",
+                  "value": 67
+                }
+              ]
+            },
+            "unit": "none"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "value"
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"coach_readiness\") FROM \"CoachReadiness\" WHERE time > now()-48h",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "TODAY \u2014 COACH READINESS",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 34
+                },
+                {
+                  "color": "yellow",
+                  "value": 50
+                },
+                {
+                  "color": "green",
+                  "value": 67
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 4,
+          "y": 0
+        },
+        "id": 2,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "value"
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"recovery_score\") FROM \"WhoopRecovery\" WHERE time > now()-48h",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "TODAY \u2014 WHOOP RECOVERY",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 26
+                },
+                {
+                  "color": "yellow",
+                  "value": 50
+                },
+                {
+                  "color": "green",
+                  "value": 75
+                }
+              ]
+            },
+            "unit": "none"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 8,
+          "y": 0
+        },
+        "id": 3,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "value"
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"bodyBatteryHighestValue\") FROM \"DailyStats\" WHERE time > now()-48h",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "TODAY \u2014 BODY BATTERY",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Raw WHOOP HRV \u2014 valid regardless of WHOOP recovery score accuracy.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "#8b5cf6",
+              "mode": "fixed"
+            },
+            "decimals": 1,
+            "unit": "ms"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 12,
+          "y": 0
+        },
+        "id": 4,
+        "options": {
+          "colorMode": "none",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "value"
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"hrv_rmssd_milli\") FROM \"WhoopRecovery\" WHERE time > now()-48h",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "TODAY \u2014 HRV (WHOOP)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Today's HRV as % of 30-day personal average. Above 100% = better than norm.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 80
+                },
+                {
+                  "color": "yellow",
+                  "value": 95
+                },
+                {
+                  "color": "green",
+                  "value": 105
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 16,
+          "y": 0
+        },
+        "id": 5,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "value"
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"hrv_value\") / last(\"hrv_baseline_30d\") * 100 FROM \"CoachReadiness\" WHERE time > now()-48h",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "HRV vs BASELINE",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Your personal 30-day rolling average HRV.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "#475569",
+              "mode": "fixed"
+            },
+            "decimals": 1,
+            "unit": "ms"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 20,
+          "y": 0
+        },
+        "id": 6,
+        "options": {
+          "colorMode": "none",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "value"
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"hrv_baseline_30d\") FROM \"CoachReadiness\" WHERE time > now()-48h",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "HRV BASELINE (30d)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "All three on 0\u2013100 scale. WHOOP may show sawtooth resets every ~7 days. CoachReadiness uses personal rolling baseline.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "fillOpacity": 8,
+              "lineWidth": 2,
+              "pointSize": 4,
+              "showPoints": "auto"
+            },
+            "max": 100,
+            "min": 0,
+            "unit": "none"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Coach Readiness"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#f97316",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 2.5
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "WHOOP Recovery"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#ef4444",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      6,
+                      3
+                    ],
+                    "fill": "dash"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Body Battery (peak)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#3b82f6",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      4,
+                      4
+                    ],
+                    "fill": "dash"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 4
+        },
+        "id": 7,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "min",
+              "max"
+            ],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Coach Readiness",
+            "query": "SELECT \"coach_readiness\" FROM \"CoachReadiness\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "WHOOP Recovery",
+            "query": "SELECT \"recovery_score\" FROM \"WhoopRecovery\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Body Battery (peak)",
+            "query": "SELECT \"bodyBatteryHighestValue\" FROM \"DailyStats\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "C"
+          }
+        ],
+        "title": "READINESS COMPARISON \u2014 Coach vs WHOOP vs Body Battery",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Raw HRV values. WHOOP is better sensor (optimal deep sleep window). Orange = personal 30d rolling mean.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2,
+              "pointSize": 4,
+              "showPoints": "auto"
+            },
+            "unit": "ms"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "WHOOP HRV (raw)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#8b5cf6",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Garmin HRV (overnight avg)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#22c55e",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      4,
+                      4
+                    ],
+                    "fill": "dash"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Personal 30d Baseline"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#f59e0b",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 1.5
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      8,
+                      4
+                    ],
+                    "fill": "dash"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 14
+        },
+        "id": 8,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "min",
+              "max"
+            ],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "alias": "WHOOP HRV (raw)",
+            "query": "SELECT \"hrv_rmssd_milli\" FROM \"WhoopRecovery\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Garmin HRV (overnight avg)",
+            "query": "SELECT \"avgOvernightHrv\" FROM \"SleepSummary\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Personal 30d Baseline",
+            "query": "SELECT \"hrv_baseline_30d\" FROM \"CoachReadiness\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "C"
+          }
+        ],
+        "title": "HRV COMPARISON \u2014 WHOOP vs Garmin vs Personal Baseline",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "What's driving the score each day. HRV 40% / Sleep 30% / RHR 20% / Form 10%.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 1.5
+            },
+            "max": 100,
+            "min": 0,
+            "unit": "none"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "HRV Component (40%)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#8b5cf6",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Sleep Component (30%)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#3b82f6",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "RHR Component (20%)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#22c55e",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Form Component (10%)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#f97316",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 23
+        },
+        "id": 9,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean"
+            ],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "alias": "HRV Component (40%)",
+            "query": "SELECT \"hrv_component\" FROM \"CoachReadiness\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Sleep Component (30%)",
+            "query": "SELECT \"sleep_component\" FROM \"CoachReadiness\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "RHR Component (20%)",
+            "query": "SELECT \"rhr_component\" FROM \"CoachReadiness\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "C"
+          },
+          {
+            "alias": "Form Component (10%)",
+            "query": "SELECT \"form_component\" FROM \"CoachReadiness\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "D"
+          }
+        ],
+        "title": "COACH READINESS \u2014 COMPONENT BREAKDOWN",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "WHOOP recovery isolated. Look for sawtooth drops every ~7 days from age-based baseline resets.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "fillOpacity": 15,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 34
+                },
+                {
+                  "color": "green",
+                  "value": 67
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 32
+        },
+        "id": 10,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean"
+            ],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "alias": "WHOOP Recovery %",
+            "query": "SELECT \"recovery_score\" FROM \"WhoopRecovery\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "WHOOP RECOVERY \u2014 7-DAY RESET PATTERN",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "CoachReadiness over same period. Should be smoother \u2014 no 7-day sawtooth.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "fillOpacity": 15,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 34
+                },
+                {
+                  "color": "green",
+                  "value": 67
+                }
+              ]
+            },
+            "unit": "none"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 32
+        },
+        "id": 11,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean"
+            ],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Coach Readiness",
+            "query": "SELECT \"coach_readiness\" FROM \"CoachReadiness\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "COACH READINESS \u2014 STABILITY CHECK",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Full CoachReadiness record with all components and source data.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto",
+              "displayMode": "auto"
+            },
+            "decimals": 1
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "coach_readiness"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Coach Score"
+                },
+                {
+                  "id": "custom.displayMode",
+                  "value": "color-background-solid"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "orange",
+                        "value": 34
+                      },
+                      {
+                        "color": "green",
+                        "value": 67
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "hrv_component"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "HRV Comp"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "sleep_component"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Sleep Comp"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "rhr_component"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "RHR Comp"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "form_component"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Form Comp"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "hrv_value"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "HRV (ms)"
+                },
+                {
+                  "id": "unit",
+                  "value": "ms"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "hrv_baseline_30d"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "HRV Baseline"
+                },
+                {
+                  "id": "unit",
+                  "value": "ms"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "rhr_value"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "RHR"
+                },
+                {
+                  "id": "unit",
+                  "value": "bpm"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "whoop_recovery"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "WHOOP %"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 40
+        },
+        "id": 12,
+        "options": {
+          "footer": {
+            "show": false
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT \"coach_readiness\", \"hrv_component\", \"sleep_component\", \"rhr_component\", \"form_component\", \"hrv_value\", \"hrv_baseline_30d\", \"rhr_value\", \"whoop_recovery\", \"garmin_body_battery\" FROM \"CoachReadiness\" WHERE $timeFilter ORDER BY time DESC",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "RAW DATA \u2014 Time range window",
+        "type": "table"
+      }
+    ],
+    "refresh": "5m",
+    "schemaVersion": 42,
+    "tags": [
+      "ai",
+      "coach",
+      "readiness",
+      "recovery",
+      "whoop",
+      "gpt100"
+    ],
+    "time": {
+      "from": "now-90d",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "1m",
+        "5m",
+        "15m",
+        "1h"
+      ]
+    },
+    "timezone": "Australia/Melbourne",
+    "title": "AI Coach \u2014 Readiness & Recovery Comparison",
+    "uid": "coach-readiness"
+  },
+  "folderId": 0,
+  "overwrite": true
+}

@@ -1,0 +1,389 @@
+{
+  "dashboard": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "liveNow": false,
+    "panels": [
+      {
+        "gridPos": {
+          "h": 16,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "# Grampians Peaks Trail 100 Miler \u2014 Pairs\n\n| | |\n|---|---|\n| **Event** | GPT100 Miler \u2014 Pairs Category |\n| **Date** | Friday 6 November 2026, 8:00am |\n| **Distance** | 162km |\n| **Elevation** | 7,544m gain / 7,557m loss |\n| **Course** | Mt Zero Picnic Area \u2192 Dunkeld (point-to-point) |\n| **Total Cutoff** | 50 hours (finish by Sunday 10:00am) |\n| **Target Finish** | 42-44 hours (conservative with buffer) |\n| **Training Start** | Week of 18 May 2026 |\n| **Weeks to Race** | ~25 weeks |\n\n---\n\n## Key Medical Protocols for Race Day\n- **Fuelling:** Eat every 30-45 mins regardless of hunger (Vyvanse suppresses appetite)\n- **Sodium:** 500-1000mg/hour from AS5 onwards, drink to thirst not schedule\n- **Heat:** Z1-Z2 only (115-142 bpm) when temp exceeds 28C \u2014 Legs 1-3 may be hot\n- **Night legs:** Lights, warmth layers, sodium vigilance from AS5 onwards\n- **Symbicort:** Pre-dose before cold morning sections (AS6 dawn, AS11 dawn)",
+          "mode": "markdown"
+        },
+        "pluginVersion": "13.0.1",
+        "targets": [],
+        "title": "GPT100 MILER \u2014 Race Overview",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 17,
+          "w": 13,
+          "x": 0,
+          "y": 16
+        },
+        "id": 2,
+        "options": {
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "## Aid Station Plan \u2014 Friday 6 Nov 2026 Start (8:00am)\n\n| Aid Station | Dist | Elev | Cutoff | Target Arrive | Buffer |\n|---|---|---|---|---|---|\n| **Start** Mt Zero | 0km | 266m | 8:00am Fri | 8:00am | \u2014 |\n| **AS1** GAR Trailhead | 15.5km | 252m | 12:00pm | 10:30am | 1.5hr |\n| **AS2** Mt Difficult | 35.5km | 712m | 5:00pm | 3:00pm | 2.0hr |\n| **AS3** Halls Gap | 49.5km | 256m | 8:00pm | 6:00pm | 2.0hr |\n| **AS4** Rosea Carpark | 59km | 632m | 11:00pm | 8:30pm | 2.5hr |\n| **AS5** Borough Huts | 72km | 327m | 2:15am Sat | 11:30pm | 2.75hr |\n| **AS6** Mt William | 87km | 1068m | 8:15am Sat | 5:00am | 3.25hr |\n| **AS7** Jimmy Creek | 106km | 472m | 2:30pm Sat | 11:00am | 3.5hr |\n| **AS8** Yarram Gap | 117km | 432m | 6:30pm Sat | 2:30pm | 4.0hr |\n| **AS9** Griffin Fireline | 129km | 433m | 10:15pm Sat | 5:30pm | 4.75hr |\n| **AS10** Cassidys Gap | 140.5km | 686m | 2:00am Sun | 9:30pm | 4.5hr |\n| **AS11** Bainggug | 151.5km | 305m | 6:30am Sun | 2:00am | 4.5hr |\n| **FINISH** Dunkeld | 162km | 253m | 10:00am Sun | 5:30am | 4.5hr |\n\n**Target finish time: ~45.5 hours** (conservative, ~4hr buffer to cutoff)\n\n*Pairs note: these targets include buffer for pair dynamics. Do not chase faster times early \u2014 bank time in legs 1-5 to spend on legs 6-8.*",
+          "mode": "markdown"
+        },
+        "pluginVersion": "13.0.1",
+        "targets": [],
+        "title": "Aid Station Cut-offs vs Target Times",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 17,
+          "w": 11,
+          "x": 13,
+          "y": 16
+        },
+        "id": 3,
+        "options": {
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "## Section Difficulty Rating\n\n| Section | Gain | Rating | Notes |\n|---|---|---|---|\n| Start \u2192 AS1 | 620m | \u2605\u2605\u2605\u2606\u2606 | Flat Rock opening climb |\n| AS1 \u2192 AS2 | 1100m | \u2605\u2605\u2605\u2605\u2605 | THE DOOZY. Long exposed climb |\n| AS2 \u2192 AS3 | 300m | \u2605\u2605\u2605\u2606\u2606 | Faster, descent to Halls Gap |\n| AS3 \u2192 AS4 | 650m | \u2605\u2605\u2605\u2605\u2606 | Pinnacles, technical rocky |\n| AS4 \u2192 AS5 | 440m | \u2605\u2605\u2605\u2606\u2606 | Flowy 8km descent \u2014 best running |\n| AS5 \u2192 AS6 | **1260m** | \u2605\u2605\u2605\u2605\u2605 | THE CRUX. Night. Seven Dials + Redmans + Mt William |\n| AS6 \u2192 AS7 | 775m | \u2605\u2605\u2605\u2605\u2605 | Durd Durd 1167m. 1400m descent. Longest leg |\n| AS7 \u2192 AS8 | 580m | \u2605\u2605\u2605\u2606\u2606 | Beautiful valley, recoverable |\n| AS8 \u2192 AS9 | 440m | \u2605\u2605\u2605\u2606\u2606 | New trails, boardwalks |\n| AS9 \u2192 AS10 | 450m | \u2605\u2605\u2605\u2606\u2606 | Rolling, manageable |\n| AS10 \u2192 AS11 | **650m** | \u2605\u2605\u2605\u2605\u2606 | Signal Peak + Mt Abrupt. Hurt legs |\n| AS11 \u2192 Finish | 455m | \u2605\u2605\u2605\u2606\u2606 | Mt Sturgeon then 6km to line |\n\n**Key: Save legs for AS5-AS7. That 34km section with 2035m gain/loss will make or break the race.**\n\n**High point: 1167m (Durd Durd, ~km 100)**\n**Coldest point: AS6 Mt William 1068m (~5am Sat)**",
+          "mode": "markdown"
+        },
+        "pluginVersion": "13.0.1",
+        "targets": [],
+        "title": "Course Elevation Profile by Section",
+        "type": "text"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Zone distribution from previous ultra events in database. Little River 2025 = gold standard pacing reference.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "fillOpacity": 80,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineWidth": 1,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "m"
+          }
+        },
+        "gridPos": {
+          "h": 15,
+          "w": 13,
+          "x": 0,
+          "y": 33
+        },
+        "id": 4,
+        "options": {
+          "barRadius": 0,
+          "barWidth": 0.97,
+          "fullHighlight": false,
+          "groupWidth": 0.7,
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "orientation": "auto",
+          "showValue": "auto",
+          "stacking": "none",
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          },
+          "xTickLabelRotation": 0,
+          "xTickLabelSpacing": 0
+        },
+        "pluginVersion": "13.0.1",
+        "targets": [
+          {
+            "alias": "Z1 Recovery",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_1\") / 60 FROM \"ActivitySummary\" WHERE time >= '2025-07-10' AND time <= '2025-07-12' AND \"activityType\"='trail_running'",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Z2 Aerobic",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_2\") / 60 FROM \"ActivitySummary\" WHERE time >= '2025-07-10' AND time <= '2025-07-12' AND \"activityType\"='trail_running'",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Z3 Threshold",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_3\") / 60 FROM \"ActivitySummary\" WHERE time >= '2025-07-10' AND time <= '2025-07-12' AND \"activityType\"='trail_running'",
+            "rawQuery": true,
+            "refId": "C"
+          },
+          {
+            "alias": "Z4 LT",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_4\") / 60 FROM \"ActivitySummary\" WHERE time >= '2025-07-10' AND time <= '2025-07-12' AND \"activityType\"='trail_running'",
+            "rawQuery": true,
+            "refId": "D"
+          },
+          {
+            "alias": "Z5 VO2max",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_5\") / 60 FROM \"ActivitySummary\" WHERE time >= '2025-07-10' AND time <= '2025-07-12' AND \"activityType\"='trail_running'",
+            "rawQuery": true,
+            "refId": "E"
+          }
+        ],
+        "title": "Historical Ultra HR Zone Distribution",
+        "type": "barchart"
+      },
+      {
+        "gridPos": {
+          "h": 15,
+          "w": 11,
+          "x": 13,
+          "y": 33
+        },
+        "id": 5,
+        "options": {
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "## Race Day HR Pacing \u2014 GPT100\n\nBased on Little River 2025 (106.8km, 19.9hrs) \u2014 GOLD STANDARD reference.\nActual: Z1 29%, Z2 52%, Z3 18%, Z4 1%, Z5 0%\n\n### GPT100 Target Distribution\n\n| Zone | BPM | Target % | Purpose |\n|---|---|---|---|\n| Z1 | 115-129 | **35%** | Climbs, night, recovery sections |\n| Z2 | 129-142 | **50%** | Primary race effort |\n| Z3 | 142-156 | **13%** | Short climbs only |\n| Z4 | 156-169 | **2%** | Absolute maximum |\n| Z5 | 169-183 | **0%** | Never in a 162km race |\n\n**Target avg HR: 110-120 bpm** (similar to Little River 109 avg)\n\n**Red flags during race:**\n- HR > 145 sustained on flat = too fast, slow down\n- HR > 155 on any climb = walk it\n- HR < 100 + feeling terrible = check sodium (hyponatraemia risk)\n- HR unusually low + nausea = stop and assess",
+          "mode": "markdown"
+        },
+        "pluginVersion": "13.0.1",
+        "targets": [],
+        "title": "GPT100 Target HR Pacing Strategy",
+        "type": "text"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "barWidthFactor": 0.6,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "auto",
+              "showValues": false,
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "km"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 48
+        },
+        "id": 6,
+        "options": {
+          "annotations": {
+            "clustering": -1,
+            "multiLane": false
+          },
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "13.0.1",
+        "targets": [
+          {
+            "alias": "Weekly Distance km",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"totalDistanceMeters\") / 1000 FROM \"DailyStats\" WHERE time >= now() - 180d GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Vigorous Intensity Mins",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"vigorousIntensityMinutes\") FROM \"DailyStats\" WHERE time >= now() - 180d GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Weekly Training Volume \u2014 Build to GPT100",
+        "type": "timeseries"
+      }
+    ],
+    "preload": false,
+    "refresh": "1h",
+    "schemaVersion": 42,
+    "tags": [
+      "ai",
+      "coach",
+      "gpt100",
+      "race"
+    ],
+    "time": {
+      "from": "now-365d",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "5s",
+        "10s",
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "1d"
+      ]
+    },
+    "timezone": "Australia/Melbourne",
+    "title": "GPT100 \u2014 Race Plan & Cut-off Tracker",
+    "uid": "gpt100-race-plan"
+  },
+  "folderId": 0,
+  "overwrite": true
+}

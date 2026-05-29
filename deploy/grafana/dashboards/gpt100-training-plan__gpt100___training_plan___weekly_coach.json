@@ -1,0 +1,729 @@
+{
+  "dashboard": {
+    "panels": [
+      {
+        "gridPos": {
+          "h": 11,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "# Grampians Peaks Trail 100 Miler \u2014 Pairs | 6 November 2026 | 162km | 7,544m gain\n\n| Phase | Weeks | Dates | Volume | Focus |\n|---|---|---|---|---|\n| **0 \u2014 Soft Start** | W0 | 15-17 May | 12km | Single session, moving again |\n| **1 \u2014 Base Transition** | W1-3 | 18 May \u2013 7 Jun | 35-45km | Routine, Z1-Z2, strength restart |\n| **2 \u2014 Aerobic Base** | W4-9 | 8 Jun \u2013 19 Jul | 50-70km | Build base, back-to-back weekends |\n| **3 \u2014 Specific Build** | W10-16 | 20 Jul \u2013 6 Sep | 70-90km | Race vert, shared long runs |\n| **4 \u2014 Peak** | W17-20 | 7 Sep \u2013 4 Oct | 85-100km | Peak block |\n| **5 \u2014 Taper** | W21-24 | 5 Oct \u2013 1 Nov | 40\u219215km | Progressive reduction |\n| **6 \u2014 Race Week** | W25 | 2-6 Nov | 10km | Travel, prep, race |\n\n**HR Zones:** Z1 115-129 \u00b7 Z2 129-142 \u00b7 Z3 142-156 \u00b7 Z4 156-169 \u00b7 Z5 169-183 bpm",
+          "mode": "markdown"
+        },
+        "targets": [],
+        "title": "GPT100 RACE PLAN \u2014 6 November 2026",
+        "type": "text"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Updated every Monday by coach.",
+        "gridPos": {
+          "h": 14,
+          "w": 14,
+          "x": 0,
+          "y": 11
+        },
+        "id": 20,
+        "options": {
+          "dedupStrategy": "none",
+          "enableInfiniteScrolling": false,
+          "enableLogDetails": true,
+          "prettifyLogMessage": false,
+          "showControls": false,
+          "showFieldSelector": false,
+          "showLabels": false,
+          "showLevel": true,
+          "showTime": false,
+          "sortOrder": "Descending",
+          "wrapLogMessage": true
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT \"note\" FROM \"CoachNotes\" WHERE time >= now() - 8d AND time <= now() AND \"category\" = 'weekly_plan_display' ORDER BY time DESC LIMIT 3",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "\ud83d\udcc5 CURRENT WEEK \u2014 Training Sessions",
+        "type": "logs"
+      },
+      {
+        "gridPos": {
+          "h": 7,
+          "w": 10,
+          "x": 14,
+          "y": 11
+        },
+        "id": 21,
+        "options": {
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "## This Week at a Glance\n\nSee Current Week panel for session targets.\n\n| | Target |\n|---|---|\n| **Intensity** | Z1-Z2 only |\n| **Strength** | As per plan |\n\n## Go/No-Go Rules\n| WHOOP | Action |\n|---|---|\n| >60% \ud83d\udfe2 | Full session |\n| 40-60% \ud83d\udfe1 | Shorten |\n| <40% \ud83d\udd34 | Rest \u2014 no guilt |",
+          "mode": "markdown"
+        },
+        "targets": [],
+        "title": "\ud83d\udcca This Week at a Glance",
+        "type": "text"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 40
+                },
+                {
+                  "color": "green",
+                  "value": 60
+                }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 5,
+          "x": 14,
+          "y": 18
+        },
+        "id": 22,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "vertical",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "targets": [
+          {
+            "alias": "WHOOP Recovery %",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT mean(\"recovery_score\") FROM \"WhoopRecovery\" WHERE time >= now() - 36h GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "HRV (ms)",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT mean(\"hrv_rmssd_milli\") FROM \"WhoopRecovery\" WHERE time >= now() - 36h GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Body Battery",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT max(\"bodyBatteryHighestValue\") FROM \"DailyStats\" WHERE time >= now() - 36h GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "C"
+          }
+        ],
+        "title": "Today's Recovery",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Weeks remaining until GPT100 on 6 Nov 2026. Auto-calculated from current date.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 14
+                },
+                {
+                  "color": "red",
+                  "value": 21
+                }
+              ]
+            },
+            "unit": "none"
+          }
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 5,
+          "x": 19,
+          "y": 18
+        },
+        "id": 23,
+        "options": {
+          "content": "See countdown: race is **6 Nov 2026**",
+          "mode": "markdown"
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT (unixNow() - 1762387200) / 604800 FROM (SELECT last(\"coach_readiness\") FROM \"CoachReadiness\" WHERE time > now()-1d)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "\u23f1 Weeks to GPT100",
+        "type": "text"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 80,
+              "lineWidth": 1
+            },
+            "unit": "km"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 16,
+          "x": 0,
+          "y": 25
+        },
+        "id": 2,
+        "options": {
+          "barRadius": 0,
+          "barWidth": 0.97,
+          "groupWidth": 0.7,
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "orientation": "auto",
+          "stacking": "none",
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Actual Weekly km",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"totalDistanceMeters\") / 1000 FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Weekly Training Distance \u2014 Actual",
+        "type": "barchart"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 0,
+              "lineWidth": 2,
+              "showPoints": "auto",
+              "spanNulls": false
+            },
+            "max": 100,
+            "min": 0,
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 25
+        },
+        "id": 5,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "alias": "WHOOP Recovery",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT mean(\"recovery_score\") FROM \"WhoopRecovery\" WHERE time >= now() - 7d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Body Battery",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT max(\"bodyBatteryHighestValue\") FROM \"DailyStats\" WHERE time >= now() - 7d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Readiness \u2014 Last 7 Days",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "green",
+              "mode": "fixed"
+            },
+            "unit": "lengthm"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 33
+        },
+        "id": 6,
+        "targets": [
+          {
+            "alias": "Weekly Vert (m)",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"floorsAscendedInMeters\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Weekly Elevation Gain (metres)",
+        "type": "barchart"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "m"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 33
+        },
+        "id": 7,
+        "options": {
+          "stacking": {
+            "mode": "normal"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Z1 (115-129)",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_1\") / 60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Z2 (129-142)",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_2\") / 60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Z3 (142-156)",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_3\") / 60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "C"
+          },
+          {
+            "alias": "Z4 (156-169)",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_4\") / 60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "D"
+          },
+          {
+            "alias": "Z5 (169-183)",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_5\") / 60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "E"
+          }
+        ],
+        "title": "HR Zone Distribution \u2014 Weekly Polarisation",
+        "type": "barchart"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "unit": "ms"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 41
+        },
+        "id": 8,
+        "targets": [
+          {
+            "alias": "Daily HRV (WHOOP)",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT mean(\"hrv_rmssd_milli\") FROM \"WhoopRecovery\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "7-Day Rolling HRV",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT moving_average(mean(\"hrv_rmssd_milli\"), 7) FROM \"WhoopRecovery\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "HRV Trend",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            },
+            "unit": "bpm"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 41
+        },
+        "id": 9,
+        "targets": [
+          {
+            "alias": "WHOOP RHR",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT mean(\"resting_heart_rate\") FROM \"WhoopRecovery\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Garmin RHR",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT mean(\"restingHeartRate\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Resting HR Trend",
+        "type": "timeseries"
+      },
+      {
+        "gridPos": {
+          "h": 10,
+          "w": 14,
+          "x": 0,
+          "y": 49
+        },
+        "id": 10,
+        "options": {
+          "content": "## Aid Station Plan \u2014 Start 8:00am Friday 6 Nov\n\n| Km | Aid Station | Cutoff | Target | Buffer |\n|---|---|---|---|---|\n| 0 | Start Mt Zero | 8:00am Fri | 8:00am | \u2014 |\n| 15.5 | AS1 GAR Trailhead | 12:00pm | 10:30am | 1.5hr |\n| 35.5 | AS2 Mt Difficult | 5:00pm | 3:00pm | 2.0hr |\n| 49.5 | AS3 Halls Gap | 8:00pm | 6:00pm | 2.0hr |\n| 59 | AS4 Rosea Carpark | 11:00pm | 8:30pm | 2.5hr |\n| 72 | AS5 Borough Huts | 2:15am Sat | 11:30pm | 2.75hr |\n| 87 | **AS6 Mt William** | 8:15am Sat | 5:00am | 3.25hr |\n| 106 | **AS7 Jimmy Creek** | 2:30pm Sat | 11:00am | 3.5hr |\n| 117 | AS8 Yarram Gap | 6:30pm Sat | 2:30pm | 4.0hr |\n| 129 | AS9 Griffin Fireline | 10:15pm Sat | 5:30pm | 4.75hr |\n| 140.5 | AS10 Cassidys Gap | 2:00am Sun | 9:30pm | 4.5hr |\n| 151.5 | AS11 Bainggug | 6:30am Sun | 2:00am | 4.5hr |\n| 162 | **FINISH Dunkeld** | **10:00am Sun** | **5:30am** | **4.5hr** |\n\n**Target: ~45.5hrs \u00b7 Buffer: ~4.5hrs \u00b7 Crux: AS5\u2192AS7 overnight**",
+          "mode": "markdown"
+        },
+        "targets": [],
+        "title": "GPT100 Course \u2014 Aid Station Plan",
+        "type": "text"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 10,
+          "x": 14,
+          "y": 49
+        },
+        "id": 11,
+        "targets": [
+          {
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT \"note\", \"category\" FROM \"CoachNotes\" WHERE $timeFilter AND (\"category\" = 'weekly_review' OR \"category\" = 'weekly_adjustment') ORDER BY time DESC LIMIT 5",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Weekly Coach Notes & Reviews",
+        "type": "logs"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "purple",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 55,
+            "min": 40,
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 0,
+          "y": 59
+        },
+        "id": 12,
+        "targets": [
+          {
+            "alias": "VO2max (Garmin)",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT mean(\"VO2_max_value\") FROM \"VO2_Max\" WHERE $timeFilter GROUP BY time(7d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "VO2max Trajectory",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            }
+          }
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 12,
+          "y": 59
+        },
+        "id": 13,
+        "targets": [
+          {
+            "alias": "Weight (kg) \u2014 target 95kg by race day",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT mean(\"weight\") / 1000 FROM \"BodyComposition\" WHERE $timeFilter GROUP BY time(7d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Muscle Mass (kg)",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT mean(\"muscleMass\") / 1000 FROM \"BodyComposition\" WHERE $timeFilter GROUP BY time(7d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Body Composition \u2014 Weight & Target",
+        "type": "timeseries"
+      }
+    ],
+    "refresh": "5m",
+    "schemaVersion": 42,
+    "tags": [
+      "gpt100",
+      "training",
+      "coach",
+      "plan"
+    ],
+    "time": {
+      "from": "2026-05-15T00:00:00Z",
+      "to": "2026-11-10T00:00:00Z"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "1m",
+        "5m",
+        "15m",
+        "1h"
+      ]
+    },
+    "timezone": "Australia/Melbourne",
+    "title": "GPT100 \u2014 Training Plan & Weekly Coach",
+    "uid": "gpt100-training-plan"
+  },
+  "folderId": 0,
+  "overwrite": true
+}

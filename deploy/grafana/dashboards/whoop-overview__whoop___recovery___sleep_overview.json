@@ -1,0 +1,552 @@
+{
+  "dashboard": {
+    "panels": [
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Green >67%, Yellow 34-66%, Red <33%.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 34
+                },
+                {
+                  "color": "green",
+                  "value": 67
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "targets": [
+          {
+            "alias": "Recovery Score %",
+            "query": "SELECT mean(\"recovery_score\") FROM \"WhoopRecovery\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "WHOOP Recovery Score",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "WHOOP continuous HRV vs Garmin overnight HRV for cross-validation.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            },
+            "unit": "ms"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "id": 2,
+        "targets": [
+          {
+            "alias": "WHOOP HRV (rMSSD ms)",
+            "query": "SELECT mean(\"hrv_rmssd_milli\") FROM \"WhoopRecovery\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Garmin Overnight HRV (ms)",
+            "query": "SELECT mean(\"avgOvernightHrv\") FROM \"SleepSummary\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "WHOOP HRV (rMSSD)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "WHOOP RHR vs Garmin RHR. 5-10 bpm gap is normal.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            },
+            "unit": "bpm"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        },
+        "id": 3,
+        "targets": [
+          {
+            "alias": "WHOOP RHR",
+            "query": "SELECT mean(\"resting_heart_rate\") FROM \"WhoopRecovery\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Garmin RHR",
+            "query": "SELECT mean(\"restingHeartRate\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "WHOOP vs Garmin Resting HR",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "purple",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 60
+                },
+                {
+                  "color": "green",
+                  "value": 75
+                }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        },
+        "id": 4,
+        "targets": [
+          {
+            "alias": "WHOOP Sleep Score",
+            "query": "SELECT mean(\"score_total\") FROM \"WhoopSleep\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "WHOOP Sleep Score",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            },
+            "unit": "m"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 16,
+          "x": 0,
+          "y": 16
+        },
+        "id": 5,
+        "targets": [
+          {
+            "alias": "Deep/SWS (min)",
+            "query": "SELECT mean(\"total_slow_wave_sleep_milli\") / 60000 FROM \"WhoopSleep\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "REM (min)",
+            "query": "SELECT mean(\"total_rem_sleep_milli\") / 60000 FROM \"WhoopSleep\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Light (min)",
+            "query": "SELECT mean(\"total_light_sleep_milli\") / 60000 FROM \"WhoopSleep\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "C"
+          },
+          {
+            "alias": "Awake (min)",
+            "query": "SELECT mean(\"total_awake_milli\") / 60000 FROM \"WhoopSleep\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "D"
+          }
+        ],
+        "title": "WHOOP Sleep Stages",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "green",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 80,
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 16
+        },
+        "id": 6,
+        "targets": [
+          {
+            "alias": "Sleep Efficiency %",
+            "query": "SELECT mean(\"sleep_efficiency_percentage\") FROM \"WhoopSleep\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Sleep Efficiency %",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "0-21 scale. >18 = all out, 14-18 = strenuous, 10-14 = moderate, <10 = light/recovery.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "fillOpacity": 0,
+              "lineWidth": 0,
+              "pointSize": 6,
+              "showPoints": "always"
+            },
+            "max": 21,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 10
+                },
+                {
+                  "color": "orange",
+                  "value": 14
+                },
+                {
+                  "color": "red",
+                  "value": 18
+                }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 24
+        },
+        "id": 7,
+        "targets": [
+          {
+            "alias": "Daily Strain Score",
+            "query": "SELECT mean(\"day_strain\") FROM \"WhoopStrain\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "WHOOP Daily Strain",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "High strain + low recovery = overreaching.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 24
+        },
+        "id": 8,
+        "targets": [
+          {
+            "alias": "Recovery Score %",
+            "query": "SELECT mean(\"recovery_score\") FROM \"WhoopRecovery\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Strain (scaled to 100)",
+            "query": "SELECT mean(\"day_strain\") * 4.76 FROM \"WhoopStrain\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "WHOOP Strain vs Recovery \u2014 Training Balance",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "light-blue",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 88,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 93
+                },
+                {
+                  "color": "green",
+                  "value": 95
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 32
+        },
+        "id": 9,
+        "targets": [
+          {
+            "alias": "WHOOP SpO2 %",
+            "query": "SELECT mean(\"spo2_percentage\") FROM \"WhoopRecovery\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "SpO2 \u2014 WHOOP",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Deviation from baseline indicates illness onset.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "orange",
+              "mode": "fixed"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "unit": "celsius"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 32
+        },
+        "id": 10,
+        "targets": [
+          {
+            "alias": "Skin Temp C",
+            "query": "SELECT mean(\"skin_temp_celsius\") FROM \"WhoopRecovery\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Skin Temperature",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            },
+            "max": 22,
+            "min": 10,
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 40
+        },
+        "id": 11,
+        "targets": [
+          {
+            "alias": "WHOOP Respiratory Rate",
+            "query": "SELECT mean(\"respiratory_rate\") FROM \"WhoopSleep\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Garmin Respiratory Rate",
+            "query": "SELECT mean(\"averageRespirationValue\") FROM \"SleepSummary\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Respiratory Rate \u2014 WHOOP vs Garmin",
+        "type": "timeseries"
+      }
+    ],
+    "refresh": "5m",
+    "schemaVersion": 42,
+    "tags": [
+      "whoop",
+      "recovery",
+      "sleep"
+    ],
+    "time": {
+      "from": "now-90d",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "1m",
+        "5m",
+        "15m",
+        "1h"
+      ]
+    },
+    "timezone": "Australia/Melbourne",
+    "title": "WHOOP \u2014 Recovery & Sleep Overview",
+    "uid": "whoop-overview"
+  },
+  "folderId": 0,
+  "overwrite": true
+}

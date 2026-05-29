@@ -1,0 +1,533 @@
+{
+  "dashboard": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "panels": [
+      {
+        "gridPos": {
+          "h": 3,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "content": "**Readiness gates** (check HRV before getting up each morning): \ud83d\udfe2 Garmin HRV \u226528ms = full session \u00b7 \ud83d\udfe1 24\u201327ms = shorten/Z1 only \u00b7 \ud83d\udd34 <24ms = walk only\n\n**Non-negotiables:** Monday rest \u00b7 Saturday long run \u00b7 Everything else flexes around family, work, commitments.",
+          "mode": "markdown"
+        },
+        "title": "Week 2 \u2014 25\u201331 May 2026 | Phase 1: Base Transition | Target: 38km \u00b7 ~1,000m vert \u00b7 Z1-Z2 only (Karvonen Z2 ceiling 142 bpm)",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 4,
+          "w": 3,
+          "x": 0,
+          "y": 3
+        },
+        "id": 10,
+        "options": {
+          "content": "## MON\n### 25 May\n\n\ud83d\udd34 **REST**",
+          "mode": "markdown"
+        },
+        "title": "Monday 25 May",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 4,
+          "w": 9,
+          "x": 3,
+          "y": 3
+        },
+        "id": 11,
+        "options": {
+          "content": "### Rest \u2014 Non-Negotiable\nPost long-run recovery buffer. 196m altitude range yesterday.\n\nHRV needs to reset. No athletic activity.\n\n20 min walk is the absolute ceiling if restless.",
+          "mode": "markdown"
+        },
+        "title": "Session",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 3
+        },
+        "id": 12,
+        "options": {
+          "content": "**Type:** Rest\n\n**Duration:** \u2014\n\n**Zone:** \u2014\n\n**Priority:** NON-NEGOTIABLE",
+          "mode": "markdown"
+        },
+        "title": "Load & Targets",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 3
+        },
+        "id": 13,
+        "options": {
+          "content": "Family, life, admin \u2014 this day is already claimed by recovery.\n\nThe long run loaded ATL to 36. Rest brings it down. That IS the adaptation.",
+          "mode": "markdown"
+        },
+        "title": "Notes",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 6,
+          "w": 3,
+          "x": 0,
+          "y": 7
+        },
+        "id": 20,
+        "options": {
+          "content": "## TUE\n### 26 May\n\n\ud83d\udfe2 **RUN**\n\n*(HRV gated)*",
+          "mode": "markdown"
+        },
+        "title": "Tuesday 26 May",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 6,
+          "w": 9,
+          "x": 3,
+          "y": 7
+        },
+        "id": 21,
+        "options": {
+          "content": "### Easy Trail Run \u2014 HRV Gated\n**HRV \u226528ms:** 8\u201310km Z1-Z2, ceiling 138 bpm\n\n**HRV 24\u201327ms:** 6km Z1 only, ceiling 132 bpm\n\n**HRV <24ms:** 20\u201330 min walk only, no running\n\nMorning preferred (pre-Vyvanse). Walk every climb that pushes above ceiling. Conversational pace on flats.",
+          "mode": "markdown"
+        },
+        "title": "Session",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 12,
+          "y": 7
+        },
+        "id": 22,
+        "options": {
+          "content": "**Duration:** 55\u201370 mins\n\n**Distance:** 8\u201310km (full) / 6km (modified)\n\n**Zone:** Z1-Z2 (full) / Z1 (modified)\n\n**HR ceiling:** 138 bpm (full) / 132 bpm (mod)\n\n**Priority:** HIGH",
+          "mode": "markdown"
+        },
+        "title": "Load & Targets",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 18,
+          "y": 7
+        },
+        "id": 23,
+        "options": {
+          "content": "**If work clash:** afternoon is fine \u2014 add 10 bpm to perceived effort post-Vyvanse but ceiling on watch stays the same.\n\nTuesday's run tells you whether Saturday can step up or hold. How the body responds here = your data.\n\nCS target from today: \u22652.70 m/s confirms fitness direction.",
+          "mode": "markdown"
+        },
+        "title": "Notes",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 6,
+          "w": 3,
+          "x": 0,
+          "y": 13
+        },
+        "id": 30,
+        "options": {
+          "content": "## WED\n### 27 May\n\n\ud83d\udcaa **STRENGTH**\n\n#2",
+          "mode": "markdown"
+        },
+        "title": "Wednesday 27 May",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 6,
+          "w": 9,
+          "x": 3,
+          "y": 13
+        },
+        "id": 31,
+        "options": {
+          "content": "### Strength \u2014 Lower Body #2\nHome gym. Afternoon gap preferred.\n\n- Goblet squat 3\u00d710 **(+2.5kg vs Week 1)**\n- Romanian deadlift 3\u00d710 **(+2.5kg vs Week 1)**\n- Bulgarian split squat 3\u00d78 each leg **(bodyweight still \u2014 tendons need 3 weeks)**\n- Leg extension 3\u00d715 (same or +5kg if Week 1 felt very easy)\n- Side plank 3\u00d735s each side\n- Dead bug 3\u00d710\n\nStop before failure.",
+          "mode": "markdown"
+        },
+        "title": "Session",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 12,
+          "y": 13
+        },
+        "id": 32,
+        "options": {
+          "content": "**Duration:** 35 mins\n\n**Progression:** +2.5kg goblet + RDL only\n\n**BSS:** bodyweight (week 3 before load)\n\n**Focus:** Quality over weight\n\n**Priority:** MEDIUM",
+          "mode": "markdown"
+        },
+        "title": "Load & Targets",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 18,
+          "y": 13
+        },
+        "id": 33,
+        "options": {
+          "content": "**If legs wrecked from Tuesday:** drop to bodyweight goblet and RDL. Quality over load \u2014 never skip entirely.\n\nYou are session 2 of tendon reconnection. Muscles remember. Tendons need time.\n\n2.5kg is the progression. Resist adding more.",
+          "mode": "markdown"
+        },
+        "title": "Notes",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 5,
+          "w": 3,
+          "x": 0,
+          "y": 19
+        },
+        "id": 40,
+        "options": {
+          "content": "## THU\n### 28 May\n\n\ud83d\udfe1 **RUN**\n*(droppable)*",
+          "mode": "markdown"
+        },
+        "title": "Thursday 28 May",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 5,
+          "w": 9,
+          "x": 3,
+          "y": 19
+        },
+        "id": 41,
+        "options": {
+          "content": "### Easy Trail Run \u2014 Most Droppable\nZ1 only. Short and easy.\n\n**Drop this session without guilt if:** Tuesday was hard \u00b7 Work heavy \u00b7 Kids need you \u00b7 Legs still sore from Wednesday strength.\n\nSaturday is worth more than this session.",
+          "mode": "markdown"
+        },
+        "title": "Session",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 12,
+          "y": 19
+        },
+        "id": 42,
+        "options": {
+          "content": "**Duration:** 45\u201355 mins\n\n**Distance:** 6\u20138km\n\n**Zone:** Z1 only\n\n**HR ceiling:** 132 bpm\n\n**Priority:** LOW \u2014 drop freely",
+          "mode": "markdown"
+        },
+        "title": "Load & Targets",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 18,
+          "y": 19
+        },
+        "id": 43,
+        "options": {
+          "content": "Success = done at Z1, OR not done.\n\nBoth are correct outcomes for this session.\n\nIf HR creeps above 132 on a climb: walk. Z1 ceiling is real today.",
+          "mode": "markdown"
+        },
+        "title": "Notes",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 5,
+          "w": 3,
+          "x": 0,
+          "y": 24
+        },
+        "id": 50,
+        "options": {
+          "content": "## FRI\n### 29 May\n\n\ud83d\udd34 **REST**\n\n*(upper body\nopt.)*",
+          "mode": "markdown"
+        },
+        "title": "Friday 29 May",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 5,
+          "w": 9,
+          "x": 3,
+          "y": 24
+        },
+        "id": 51,
+        "options": {
+          "content": "### Rest \u2014 Protect Saturday\nFull rest preferred.\n\n**If physically good + 30 mins free:** optional upper body and core only.\n- Single arm DB row 3\u00d712\n- Overhead press 3\u00d710\n- Farmer carries 3\u00d730m\n- Hanging knee raises 3\u00d712\n- Side plank 3\u00d735s\n\n**No running. No lower body.**",
+          "mode": "markdown"
+        },
+        "title": "Session",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 12,
+          "y": 24
+        },
+        "id": 52,
+        "options": {
+          "content": "**Type:** Rest (preferred)\n\n**Optional:** 30 min upper body only\n\n**Condition:** Must feel physically well\n\n**Priority:** Rest > optional session\n\n**No lower body work",
+          "mode": "markdown"
+        },
+        "title": "Load & Targets",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 5,
+          "w": 6,
+          "x": 18,
+          "y": 24
+        },
+        "id": 53,
+        "options": {
+          "content": "Fresh legs for Saturday > second strength session.\n\nWhen in doubt: full rest.\n\nFamily time, evening wind-down, early bed.",
+          "mode": "markdown"
+        },
+        "title": "Notes",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 7,
+          "w": 3,
+          "x": 0,
+          "y": 29
+        },
+        "id": 60,
+        "options": {
+          "content": "## SAT\n### 30 May\n\n\u26f0 **LONG\nRUN**\n\n\u2b50 ANCHOR\n\n*(HRV gated)*",
+          "mode": "markdown"
+        },
+        "title": "Saturday 30 May",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 7,
+          "w": 9,
+          "x": 3,
+          "y": 29
+        },
+        "id": 61,
+        "options": {
+          "content": "### Long Run \u2014 Anchor Session\n**HRV \u226526ms:** 16\u201318km, Z1-Z2, ceiling 140 bpm\n\n**HRV 23\u201325ms:** hold at 15km (same as Week 1), ceiling 140\n\n**HRV <23ms:** 90 min max, no distance target\n\nEarly start. Z1-Z2 throughout. On terrain climbs: HR will exceed ceiling \u2014 that's the terrain, not overreach (confirmed by Week 1 data). RPE controls on climbs. HR controls on flat sections.\n\n**Fuelling:** eat every 30 mins from minute 1. Race protocol practice.",
+          "mode": "markdown"
+        },
+        "title": "Session",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 7,
+          "w": 6,
+          "x": 12,
+          "y": 29
+        },
+        "id": 62,
+        "options": {
+          "content": "**Duration:** 115\u2013125 mins (full)\n\n**Distance:** 16\u201318km (full) / 15km (modified)\n\n**Zone:** Z1-Z2\n\n**HR ceiling:** 140 bpm\n\n**Vert:** natural (your terrain)\n\n**Fuelling:** every 30 mins\n\n**Priority:** HIGHEST",
+          "mode": "markdown"
+        },
+        "title": "Load & Targets",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 7,
+          "w": 6,
+          "x": 18,
+          "y": 29
+        },
+        "id": 63,
+        "options": {
+          "content": "**Week 1 benchmark:** 15.72km, 113:48, avg HR 142, 688m GPS gain, 510m peak altitude.\n\nAdd 1km only if HRV recovered well. Don't add distance AND push effort.\n\n**If can't do Saturday:** Sunday only if truly unavoidable. Rearrange the other thing.\n\nSunday is rest \u2014 go easy knowing recovery is already built in.",
+          "mode": "markdown"
+        },
+        "title": "Notes",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 4,
+          "w": 3,
+          "x": 0,
+          "y": 36
+        },
+        "id": 70,
+        "options": {
+          "content": "## SUN\n### 31 May\n\n\ud83d\udd34 **REST**",
+          "mode": "markdown"
+        },
+        "title": "Sunday 31 May",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 4,
+          "w": 9,
+          "x": 3,
+          "y": 36
+        },
+        "id": 71,
+        "options": {
+          "content": "### Rest\nFull rest. Short walk fine if legs genuinely loose.\n\nNo running. Refuel well tonight \u2014 Week 3 starts Monday.",
+          "mode": "markdown"
+        },
+        "title": "Session",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 36
+        },
+        "id": 72,
+        "options": {
+          "content": "**Type:** Rest\n\n**Optional:** 20 min walk\n\n**No running**",
+          "mode": "markdown"
+        },
+        "title": "Load & Targets",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 36
+        },
+        "id": 73,
+        "options": {
+          "content": "Family time. Early rest.\n\nPhase 1 finishes 7 June. Week 3 is the final base week before intensity begins.",
+          "mode": "markdown"
+        },
+        "title": "Notes",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 7,
+          "w": 8,
+          "x": 0,
+          "y": 40
+        },
+        "id": 80,
+        "options": {
+          "content": "## Week 2 Targets\n\n| Metric | Target |\n|---|---|\n| Total km | 38km |\n| Long run | 16\u201318km |\n| Vert | ~1,000m |\n| Intensity | Z1-Z2 only |\n| Strength | 1 session (Wed) |\n| Run days | 2\u20133 |\n| **Priority** | **Sat long run** |\n\n---\n\n**Entry state:** ATL 36 \u00b7 CTL 44 \u00b7 TSB +7.5\n\n**HRV going in:** 23ms (mildly suppressed)\n\n**Target HRV recovery:** \u226528ms by Tuesday AM",
+          "mode": "markdown"
+        },
+        "title": "Week 2 Targets",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 7,
+          "w": 8,
+          "x": 8,
+          "y": 40
+        },
+        "id": 81,
+        "options": {
+          "content": "## What Can Move\n\n\ud83d\udd34 **LOCKED:** Monday rest \u00b7 Saturday long run\n\n\ud83d\udfe2 **HIGH:** Tuesday run \u00b7 Wednesday strength\n\n\ud83d\udfe1 **CONDITIONAL:** Thursday run (drop freely)\n\n\u26aa **OPTIONAL:** Friday upper body\n\n---\n\n**Life events this week?**\n\nWork clash Tuesday \u2192 afternoon run or modified session\n\nKids need Thursday \u2192 skip it, no guilt\n\nLate Friday \u2192 full rest, no strength\n\nSomething clashes Saturday \u2192 move to Sunday only",
+          "mode": "markdown"
+        },
+        "title": "Flexibility Framework",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 7,
+          "w": 8,
+          "x": 16,
+          "y": 40
+        },
+        "id": 82,
+        "options": {
+          "content": "## Phase 1: Base Transition\nWeeks 1\u20133 | 18 May \u2013 7 Jun\n\n**Week 1 done:** 35.9km \u2713\n\n**Week 2:** 38km target\n\n**Week 3 (1\u20137 Jun):** ~40km \u2014 final base week\n\n---\n\n## Phase 2 Starts 8 June\nFirst structured tempo work enters.\n\nThese 3 weeks of Z1-Z2 discipline are not soft \u2014 they are the aerobic foundation Phase 2 intensity builds on.\n\n**GPT100 race:** 6 Nov 2026 \u00b7 24 weeks out",
+          "mode": "markdown"
+        },
+        "title": "Phase 1 Context + What's Next",
+        "type": "text"
+      }
+    ],
+    "refresh": "1h",
+    "schemaVersion": 42,
+    "tags": [
+      "gpt100",
+      "training",
+      "plan",
+      "weekly"
+    ],
+    "time": {
+      "from": "2026-05-15T00:00:00Z",
+      "to": "2026-11-10T00:00:00Z"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "5s",
+        "10s",
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "1d"
+      ]
+    },
+    "timezone": "Australia/Melbourne",
+    "title": "GPT100 \u2014 Weekly Training Plan",
+    "uid": "gpt100-weekly-plan"
+  },
+  "folderId": 0,
+  "overwrite": true
+}

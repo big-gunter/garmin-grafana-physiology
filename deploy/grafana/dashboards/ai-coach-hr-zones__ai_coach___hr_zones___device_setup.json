@@ -1,0 +1,511 @@
+{
+  "dashboard": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "liveNow": false,
+    "panels": [
+      {
+        "gridPos": {
+          "h": 26,
+          "w": 14,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "## HR Zone Settings \u2014 Recalculated from Raw Data (Best Practice, May 2026)\n\n| Anchor | Value | Derivation |\n|---|---|---|\n| **HRmax** | **184 bpm** | Validated: 5 Feb 2025 trail run, ~26 min sustained near max (all-time per-sec p99.99 = 184; 205/217 are spikes) |\n| **Resting HR** | **47 bpm** | Sleeping-HR floor (30d abs min 46, 1st pct 48) |\n| **HRR** | **137 bpm** | 184 \u2212 47 |\n| **LTHR / FTHR** | **166 bpm** | Best sustained 20-min HR (5 Sep 2025 run, last-20-min avg 165.9) = 90.2% HRmax |\n\n\u26a0\ufe0f Old `AthleteProfile.lthr_bpm = 136` was **invalid** \u2014 it equalled HRR (184\u221247), a Garmin misconfig artefact, not a threshold. Corrected to **166**.\n\n---\n\n### Method 1 \u2014 Karvonen (HRR-based)\n| Zone | Name | % HRR | BPM |\n|---|---|---|---|\n| **Z1** | Recovery | 50-60% | **116 - 129** |\n| **Z2** | Aerobic Base | 60-70% | **129 - 143** |\n| **Z3** | Aerobic Threshold | 70-80% | **143 - 157** |\n| **Z4** | Lactate Threshold | 80-90% | **157 - 170** |\n| **Z5** | VO2max | 90-100% | **170 - 184** |\n\n### Method 2 \u2014 Friel (LTHR-based)\n| Zone | Name | % LTHR | BPM |\n|---|---|---|---|\n| **Z1** | Recovery | <85% | **< 141** |\n| **Z2** | Aerobic | 85-89% | **141 - 148** |\n| **Z3** | Tempo | 90-94% | **149 - 156** |\n| **Z4** | Sub-Threshold | 95-99% | **158 - 164** |\n| **Z5a** | Super-Threshold | 100-102% | **166 - 169** |\n| **Z5b** | Aerobic Capacity | 103-106% | **171 - 176** |\n| **Z5c** | Anaerobic | >106% | **177+** |\n\n### Method 3 \u2014 FTHR (field-test threshold)\nIdentical to Friel/LTHR for running (same threshold anchor, 166 bpm). Enter a separate value here only if you run a distinct bike 20-min field test.\n\n---\n\n**Medication note:** Zones reflect current pharmacological state (Atenolol 25mg + Vyvanse 60mg).\n**Ultra target:** 80-85% of weekly volume in Z1-Z2 (Karvonen 116-143 bpm).",
+          "mode": "markdown"
+        },
+        "pluginVersion": "13.0.1",
+        "targets": [],
+        "title": "YOUR HR ZONES \u2014 Three Methodologies (Program Karvonen Into Garmin)",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 26,
+          "w": 10,
+          "x": 14,
+          "y": 0
+        },
+        "id": 3,
+        "options": {
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "## HRmax Evidence Summary\n\n**328+ activities | Jan 2024 to May 2026**\n\n| Metric | Value | Status |\n|---|---|---|\n| Highest observed | 217 | Artefact |\n| 2nd highest | 205 | Spike |\n| Best credible (running) | **184** | 26 min near-max |\n| All-time per-sec p99.99 | **184** | confirmed |\n| Running 95th percentile | 177 | confirmed |\n| **HRmax (USE THIS)** | **184** | validated |\n\n**Definitive evidence:**\n5 Feb 2025 Trail Run \u2014 MaxHR 184, AvgHR 151, session p99.9 = 182 (sustained, not a spike).\n\n---\n\n## LTHR Evidence Summary\n\n| Effort | Best 20-min HR |\n|---|---|\n| 5 Sep 2025 trail run | **165.9** |\n| 23 Sep 2025 trail run | ~161 |\n| **LTHR (USE THIS)** | **166** |\n\nFriel protocol: avg HR of a sustained ~20-min maximal effort. 166 = 90.2% of HRmax \u2014 textbook for a trained athlete.\n\n---\n\n## RHR Evidence Summary\n\n| Metric (30d sleeping HR) | Value |\n|---|---|\n| Absolute min | 46 |\n| 1st percentile | 48 |\n| **Floor (USE THIS)** | **47** |",
+          "mode": "markdown"
+        },
+        "pluginVersion": "13.0.1",
+        "targets": [],
+        "title": "Evidence \u2014 HRmax / LTHR / RHR Derivation",
+        "type": "text"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "barWidthFactor": 0.6,
+              "drawStyle": "line",
+              "fillOpacity": 0,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "linear",
+              "lineWidth": 0,
+              "pointSize": 6,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "always",
+              "showValues": false,
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "bpm"
+          }
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 26
+        },
+        "id": 2,
+        "options": {
+          "annotations": {
+            "clustering": -1,
+            "multiLane": false
+          },
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "13.0.1",
+        "targets": [
+          {
+            "alias": "Trail Running MaxHR",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT max(\"maxHR\") FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='trail_running' GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Inline Skating MaxHR",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT max(\"maxHR\") FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='inline_skating' GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Cycling MaxHR",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT max(\"maxHR\") FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='gravel_cycling' GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "C"
+          }
+        ],
+        "title": "HRmax Evidence \u2014 MaxHR per Activity by Type",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              }
+            },
+            "unit": "m"
+          }
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 10,
+          "x": 0,
+          "y": 35
+        },
+        "id": 4,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "pieType": "pie",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "sort": "desc",
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "13.0.1",
+        "targets": [
+          {
+            "alias": "Z1 Recovery",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_1\")/60 FROM \"ActivitySummary\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Z2 Aerobic Base",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_2\")/60 FROM \"ActivitySummary\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Z3 Threshold",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_3\")/60 FROM \"ActivitySummary\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "C"
+          },
+          {
+            "alias": "Z4 LT",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_4\")/60 FROM \"ActivitySummary\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "D"
+          },
+          {
+            "alias": "Z5 VO2max",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_5\")/60 FROM \"ActivitySummary\" WHERE $timeFilter",
+            "rawQuery": true,
+            "refId": "E"
+          }
+        ],
+        "title": "Zone Distribution \u2014 Pie (device zones, last 90 days)",
+        "type": "piechart"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "80/20 rule: Z1+Z2 should be ~80% of total training time for ultra preparation. NOTE: bars use Garmin device-recorded hrTimeInZone, which reflect the zones currently programmed on the watch \u2014 reprogram the watch to the Karvonen ranges above for these to align.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "fillOpacity": 80,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineWidth": 1,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            },
+            "unit": "m"
+          }
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 14,
+          "x": 10,
+          "y": 35
+        },
+        "id": 5,
+        "options": {
+          "barRadius": 0,
+          "barWidth": 0.97,
+          "fullHighlight": false,
+          "groupWidth": 0.7,
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "orientation": "auto",
+          "showValue": "auto",
+          "stacking": {
+            "mode": "normal"
+          },
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "single",
+            "sort": "none"
+          },
+          "xTickLabelRotation": 0,
+          "xTickLabelSpacing": 0
+        },
+        "pluginVersion": "13.0.1",
+        "targets": [
+          {
+            "alias": "Z1",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_1\")/60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Z2",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_2\")/60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Z3",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_3\")/60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "C"
+          },
+          {
+            "alias": "Z4",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_4\")/60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "D"
+          },
+          {
+            "alias": "Z5",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT sum(\"hrTimeInZone_5\")/60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "E"
+          }
+        ],
+        "title": "Weekly Zone Distribution \u2014 Polarisation Check",
+        "type": "barchart"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            },
+            "unit": "bpm"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 44
+        },
+        "id": 6,
+        "options": {},
+        "pluginVersion": "",
+        "targets": [
+          {
+            "alias": "Resting HR",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT mean(\"restingHeartRate\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Daily MaxHR recorded",
+            "datasource": {
+              "type": "influxdb",
+              "uid": "garmin_influxdb"
+            },
+            "query": "SELECT max(\"maxHeartRate\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Daily MaxHR vs Resting HR",
+        "type": "timeseries"
+      }
+    ],
+    "preload": false,
+    "refresh": "1h",
+    "schemaVersion": 42,
+    "tags": [
+      "ai",
+      "coach",
+      "hr-zones"
+    ],
+    "time": {
+      "from": "now-90d",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "5s",
+        "10s",
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "1d"
+      ]
+    },
+    "timezone": "Australia/Melbourne",
+    "title": "AI Coach \u2014 HR Zones & Device Setup",
+    "uid": "ai-coach-hr-zones"
+  },
+  "folderId": 0,
+  "overwrite": true
+}

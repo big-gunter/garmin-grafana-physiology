@@ -1,0 +1,1319 @@
+{
+  "dashboard": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "panels": [
+      {
+        "gridPos": {
+          "h": 5,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "content": "## Peak Endurance Model\n\n| Metric | What it measures | Why it matters |\n|---|---|---|\n| **Critical Speed (CS)** | Fastest sustainable velocity \u2014 the aerobic steady-state ceiling | The single best predictor of endurance race performance. Higher CS = faster you can run without accumulating fatigue |\n| **D\u2032 (D-prime)** | Finite work capacity above CS | How many surge metres you have available above threshold \u2014 crucial for climbs and race finishes |\n| **Efficiency Factor (EF)** | Speed per heartbeat (m/s \u00f7 avgHR) | Rising EF = getting faster for the same cardiac cost = improving aerobic economy |\n| **CS:VO2max ratio** | Fraction of aerobic ceiling you can sustain | Differentiates athletes with equal VO2max. Higher ratio = better endurance adaptation |\n| **Cardiac Cost (hrTSS/km)** | Stress per kilometre | Lower = more efficient. Improves with base training and economy work |\n\n_VO2max is your engine size. CS and EF determine how efficiently you drive it._",
+          "mode": "markdown"
+        },
+        "type": "text"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Rolling best CS from PerformanceDaily. The maximum sustainable running velocity \u2014 your endurance performance ceiling.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "displayName": "CS pace",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 480
+                },
+                {
+                  "color": "orange",
+                  "value": 420
+                },
+                {
+                  "color": "yellow",
+                  "value": 390
+                },
+                {
+                  "color": "green",
+                  "value": 365
+                },
+                {
+                  "color": "dark-green",
+                  "value": 330
+                }
+              ]
+            },
+            "unit": "s"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 0,
+          "y": 5
+        },
+        "id": 2,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "value_and_name"
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"CS_pace_s_per_km\") FROM \"PerformanceDaily\" WHERE time > now()-2d AND \"CS_pace_s_per_km\" > 0 AND \"CS_pace_s_per_km\" < 700",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Critical Speed \u2014 Current",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Critical speed in m/s. GPT100 target: 2.8+ m/s by Phase 3.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 2.2
+                },
+                {
+                  "color": "green",
+                  "value": 2.6
+                },
+                {
+                  "color": "dark-green",
+                  "value": 3
+                }
+              ]
+            },
+            "unit": "velocityms"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 4,
+          "y": 5
+        },
+        "id": 3,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "value_and_name"
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"CS_mps\") FROM \"PerformanceDaily\" WHERE time > now()-2d AND \"CS_mps\" > 0",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "CS \u2014 m/s",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Finite work capacity above CS in metres. How far you can run at max effort above threshold before exhaustion.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 300
+                },
+                {
+                  "color": "green",
+                  "value": 600
+                },
+                {
+                  "color": "dark-green",
+                  "value": 900
+                }
+              ]
+            },
+            "unit": "lengthm"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 8,
+          "y": 5
+        },
+        "id": 4,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "value_and_name"
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"Dprime_m\") FROM \"PerformanceDaily\" WHERE time > now()-2d AND \"Dprime_m\" > 0",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "D\u2032 (D-prime) \u2014 Surge Reserve",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "avgSpeed (m/s) / avgHR (bpm) from most recent run. Rising trend = improving economy. Note: atenolol suppresses HR so absolute EF is inflated vs unmedicated athletes \u2014 use trend only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 4,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.015
+                },
+                {
+                  "color": "green",
+                  "value": 0.018
+                },
+                {
+                  "color": "dark-green",
+                  "value": 0.021
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 12,
+          "y": 5
+        },
+        "id": 5,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "value_and_name"
+        },
+        "targets": [
+          {
+            "query": "SELECT mean(\"averageSpeed\") / mean(\"averageHR\") FROM \"ActivitySummary\" WHERE time > now()-3d AND \"activityType\"='trail_running' AND \"averageHR\" > 0 AND \"averageSpeed\" > 0 GROUP BY time(1d) fill(null) ORDER BY time DESC LIMIT 1",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Efficiency Factor \u2014 Latest",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Critical Speed as a fraction of VO2max-implied speed. Measures fractional utilisation \u2014 the endurance adaptation ratio. Elite endurance athletes: >0.85. Higher = better.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 2,
+            "description": "CS_mps / (VO2max * 0.1) \u2014 crude fractional utilisation proxy",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.55
+                },
+                {
+                  "color": "green",
+                  "value": 0.65
+                },
+                {
+                  "color": "dark-green",
+                  "value": 0.75
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 16,
+          "y": 5
+        },
+        "id": 6,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "value_and_name"
+        },
+        "targets": [
+          {
+            "query": "SELECT last(\"CS_mps\") / (last(\"VO2max_est_run\") * 0.1) FROM \"PerformanceDaily\" WHERE time > now()-2d AND \"CS_mps\" > 0 AND \"VO2max_est_run\" > 0",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "CS:VO2max Ratio",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "hrTSS per kilometre of GAP distance \u2014 how much cardiac stress per km. Lower = more efficient. Target: declining trend over training block.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "description": "lower is more efficient",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "dark-green",
+                  "value": 0
+                },
+                {
+                  "color": "green",
+                  "value": 5
+                },
+                {
+                  "color": "yellow",
+                  "value": 8
+                },
+                {
+                  "color": "orange",
+                  "value": 11
+                },
+                {
+                  "color": "red",
+                  "value": 14
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 20,
+          "y": 5
+        },
+        "id": 7,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "value_and_name"
+        },
+        "targets": [
+          {
+            "query": "SELECT mean(\"hrTSS_ts\") / mean(\"gap_distance_km\") FROM \"DerivedActivity\" WHERE time > now()-7d AND \"gap_distance_km\" > 3 AND \"hrTSS_ts\" > 0 GROUP BY time(7d) fill(null) ORDER BY time DESC LIMIT 1",
+            "rawQuery": true,
+            "refId": "A"
+          }
+        ],
+        "title": "Cardiac Cost (hrTSS/km)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Blue dots = per-activity CS estimate from DerivedActivity. Orange line = rolling best from PerformanceDaily. Upward trend = improving endurance performance ceiling. Target: 2.8+ m/s by Phase 3 (Jul), 3.0+ m/s at peak (Sep). Note: per-session CS varies \u2014 use rolling line as the signal.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 5,
+              "lineWidth": 2,
+              "showPoints": "auto",
+              "spanNulls": true
+            },
+            "unit": "velocityms"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "CS per session (m/s)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#1F60C4",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.pointSize",
+                  "value": 7
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 0
+                },
+                {
+                  "id": "custom.showPoints",
+                  "value": "always"
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 0
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "CS rolling best (m/s)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#FF9900",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 2.5
+                },
+                {
+                  "id": "custom.showPoints",
+                  "value": "never"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 16,
+          "x": 0,
+          "y": 9
+        },
+        "id": 10,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT mean(\"cs_mps\") AS \"CS per session (m/s)\" FROM \"DerivedActivity\" WHERE $timeFilter AND \"cs_mps\" > 1.5 AND \"cs_mps\" < 5 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "query": "SELECT mean(\"CS_mps\") AS \"CS rolling best (m/s)\" FROM \"PerformanceDaily\" WHERE $timeFilter AND \"CS_mps\" > 0 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Critical Speed Trend \u2014 Per Session & Rolling Best (PerformanceDaily)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Work capacity above CS in metres. Larger D\u2032 = more capacity for climbs, hard efforts and race surges. Correlates with GPT100 crux section performance (AS5\u2192AS7).",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 8,
+              "lineWidth": 2,
+              "showPoints": "auto",
+              "spanNulls": true
+            },
+            "unit": "lengthm"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "D\u2032 per session (m)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#8B5CF6",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.pointSize",
+                  "value": 6
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 0
+                },
+                {
+                  "id": "custom.showPoints",
+                  "value": "always"
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 0
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "D\u2032 rolling (m)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#8B5CF6",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 2
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 8,
+          "x": 16,
+          "y": 9
+        },
+        "id": 11,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT mean(\"dprime_m\") AS \"D\u2032 per session (m)\" FROM \"DerivedActivity\" WHERE $timeFilter AND \"dprime_m\" > 100 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "query": "SELECT mean(\"Dprime_m\") AS \"D\u2032 rolling (m)\" FROM \"PerformanceDaily\" WHERE $timeFilter AND \"Dprime_m\" > 0 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "D\u2032 (D-prime) \u2014 Surge Reserve Trend",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "avgSpeed / avgHR per trail run. Rising EF = improving aerobic economy \u2014 you're running faster for each heartbeat. Atenolol inflates absolute values vs unmedicated norms, so interpret trend direction only, not absolute level. Target: consistent upward trend through base phases.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 8,
+              "lineWidth": 1.5,
+              "pointSize": 5,
+              "showPoints": "always",
+              "spanNulls": false
+            },
+            "decimals": 4
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Efficiency Factor"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#37872D",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 0
+                },
+                {
+                  "id": "custom.showPoints",
+                  "value": "always"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "EF 7d rolling avg"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#37872D",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 2.5
+                },
+                {
+                  "id": "custom.showPoints",
+                  "value": "never"
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 0
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 12,
+          "x": 0,
+          "y": 19
+        },
+        "id": 20,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull",
+              "mean",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT mean(\"averageSpeed\") / mean(\"averageHR\") AS \"Efficiency Factor\" FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='trail_running' AND \"averageHR\" > 100 AND \"averageSpeed\" > 1.5 AND \"distance\" > 3000 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "query": "SELECT moving_average(mean(\"averageSpeed\") / mean(\"averageHR\"), 7) AS \"EF 7d rolling avg\" FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='trail_running' AND \"averageHR\" > 100 AND \"averageSpeed\" > 1.5 AND \"distance\" > 3000 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Efficiency Factor \u2014 Aerobic Economy Trend (Speed \u00f7 HR)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "hrTSS / GAP km per session. Lower = more efficient aerobic output per unit of cardiac stress. Should decline through Phase 1-2 as base builds. Spikes on race-effort days are normal.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 5,
+              "lineWidth": 1.5,
+              "pointSize": 5,
+              "showPoints": "always",
+              "spanNulls": false
+            },
+            "decimals": 1
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "hrTSS / GAP km"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#E0226D",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 0
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "7d rolling"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#E0226D",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 2.5
+                },
+                {
+                  "id": "custom.showPoints",
+                  "value": "never"
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 0
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 12,
+          "x": 12,
+          "y": 19
+        },
+        "id": 21,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull",
+              "mean",
+              "min"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT mean(\"hrTSS_ts\") / mean(\"gap_distance_km\") AS \"hrTSS / GAP km\" FROM \"DerivedActivity\" WHERE $timeFilter AND \"gap_distance_km\" > 3 AND \"hrTSS_ts\" > 0 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "query": "SELECT moving_average(mean(\"hrTSS_ts\") / mean(\"gap_distance_km\"), 7) AS \"7d rolling\" FROM \"DerivedActivity\" WHERE $timeFilter AND \"gap_distance_km\" > 3 AND \"hrTSS_ts\" > 0 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Cardiac Cost \u2014 hrTSS per km of GAP Distance",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Overlays Critical Speed (m/s) with VO2max (ml/kg/min) on aligned axes. When CS improves without VO2max changing, your fractional utilisation is rising \u2014 pure endurance adaptation. When both rise together, you're gaining aerobic ceiling AND learning to use it. The gap closing = GPT100 readiness.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 5,
+              "lineWidth": 2,
+              "showPoints": "auto",
+              "spanNulls": true
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Critical Speed (m/s)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#FF9900",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 3
+                },
+                {
+                  "id": "unit",
+                  "value": "velocityms"
+                },
+                {
+                  "id": "custom.axisPlacement",
+                  "value": "left"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "VO2max pipeline (ml/kg/min)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#1F60C4",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.axisPlacement",
+                  "value": "right"
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      6,
+                      3
+                    ],
+                    "fill": "dash"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "VO2max Garmin (ml/kg/min)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#85B7EB",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.axisPlacement",
+                  "value": "right"
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      4,
+                      4
+                    ],
+                    "fill": "dash"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 16,
+          "x": 0,
+          "y": 28
+        },
+        "id": 30,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull",
+              "min",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT mean(\"CS_mps\") AS \"Critical Speed (m/s)\" FROM \"PerformanceDaily\" WHERE $timeFilter AND \"CS_mps\" > 0 GROUP BY time(7d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "query": "SELECT mean(\"VO2max_est_run\") AS \"VO2max pipeline (ml/kg/min)\" FROM \"PerformanceDaily\" WHERE $timeFilter AND \"VO2max_est_run\" > 0 GROUP BY time(7d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "query": "SELECT mean(\"VO2_max_value\") AS \"VO2max Garmin (ml/kg/min)\" FROM \"VO2_Max\" WHERE $timeFilter AND \"VO2_max_value\" > 0 GROUP BY time(7d) fill(null)",
+            "rawQuery": true,
+            "refId": "C"
+          }
+        ],
+        "title": "CS vs VO2max \u2014 Endurance Utilisation Model",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Vertical Ascent Metres per Hour. For GPT100, climbing endurance matters more than flat-road VO2max. Best 20m and 30m efforts over rolling 42d. Target for AS5\u2192AS7 crux (km 72-87, overnight): 210-250 m/hr. Phase 3 training target: 450-550 m/hr.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 8,
+              "lineWidth": 2,
+              "showPoints": "auto",
+              "spanNulls": true
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Best 20-min VAM (m/hr)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#3B6D11",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Best 30-min VAM (m/hr)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#97C459",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 8,
+          "x": 16,
+          "y": 28
+        },
+        "id": 31,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT mean(\"VAM20_best_42d_m_per_h\") AS \"Best 20-min VAM (m/hr)\" FROM \"PerformanceDaily\" WHERE $timeFilter AND \"VAM20_best_42d_m_per_h\" > 0 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "query": "SELECT mean(\"VAM30_best_42d_m_per_h\") AS \"Best 30-min VAM (m/hr)\" FROM \"PerformanceDaily\" WHERE $timeFilter AND \"VAM30_best_42d_m_per_h\" > 0 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "VAM \u2014 Climbing Endurance (20-min & 30-min Best Efforts per 42d Window)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "EF coloured by session intensity. Z1 runs (avg HR <130) should show the highest EF \u2014 pure aerobic economy. Z2 runs (130-142) moderate EF. Long runs show EF decline with fatigue (cardiac drift). Watch Z1 EF trend \u2014 it's the clearest signal of base adaptation.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 0,
+              "lineWidth": 0,
+              "pointSize": 7,
+              "showPoints": "always",
+              "spanNulls": false
+            },
+            "decimals": 4
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Z1 EF (avgHR <130)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#3B6D11",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Z2 EF (avgHR 130-142)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#FF9900",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Long run EF (>15km)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#E0226D",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 12,
+          "x": 0,
+          "y": 37
+        },
+        "id": 40,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull",
+              "mean"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT mean(\"averageSpeed\") / mean(\"averageHR\") AS \"Z1 EF (avgHR <130)\" FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='trail_running' AND \"averageHR\" > 100 AND \"averageHR\" < 130 AND \"distance\" > 3000 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "query": "SELECT mean(\"averageSpeed\") / mean(\"averageHR\") AS \"Z2 EF (avgHR 130-142)\" FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='trail_running' AND \"averageHR\" >= 130 AND \"averageHR\" <= 142 AND \"distance\" > 3000 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "query": "SELECT mean(\"averageSpeed\") / mean(\"averageHR\") AS \"Long run EF (>15km)\" FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='trail_running' AND \"averageHR\" > 100 AND \"distance\" > 15000 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "C"
+          }
+        ],
+        "title": "Efficiency Factor by Session \u2014 Z1 vs Z2 vs Long Run",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "GAP distance / actual distance = terrain adjustment ratio. Higher = more elevation for the km. Useful for tracking whether your EF and CS trends are on comparable terrain or being inflated by flat days. A rising EF with consistent terrain factor = genuine economy improvement.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 8,
+              "lineWidth": 2,
+              "showPoints": "auto",
+              "spanNulls": false
+            },
+            "decimals": 1,
+            "unit": "km"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "GAP distance (km)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#1F60C4",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Actual distance (km)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#888780",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      6,
+                      3
+                    ],
+                    "fill": "dash"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 12,
+          "x": 12,
+          "y": 37
+        },
+        "id": 41,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull",
+              "mean"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "query": "SELECT mean(\"gap_distance_km\") AS \"GAP distance (km)\" FROM \"DerivedActivity\" WHERE $timeFilter AND \"gap_distance_km\" > 3 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "query": "SELECT mean(\"distance\") / 1000 AS \"Actual distance (km)\" FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='trail_running' AND \"distance\" > 3000 GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "GAP vs Actual Distance \u2014 Terrain Adjustment Factor",
+        "type": "timeseries"
+      }
+    ],
+    "refresh": "5m",
+    "schemaVersion": 42,
+    "tags": [
+      "endurance",
+      "cs",
+      "dprime",
+      "efficiency",
+      "gpt100"
+    ],
+    "time": {
+      "from": "now-180d",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "1m",
+        "5m",
+        "15m",
+        "1h"
+      ]
+    },
+    "timezone": "Australia/Melbourne",
+    "title": "Endurance Performance Model \u2014 Peak Sustained Output",
+    "uid": "endurance-performance"
+  },
+  "folderId": 0,
+  "overwrite": true
+}

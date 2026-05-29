@@ -1,0 +1,1267 @@
+{
+  "dashboard": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "panels": [
+      {
+        "gridPos": {
+          "h": 3,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 99,
+        "options": {
+          "content": "All Garmin queries filter `Device = 'fenix 8 - 51mm, AMOLED'` to exclude phantom tactix 7 PRO + Index Smart Scale rows (pipeline writes every activity to ALL registered device tags \u2014 bug documented, fix pending). CoachReadiness uses `Database_Name` tag only (unaffected). WHOOP sync gap: no Saturday reading \u2014 last CoachReadiness was written at UTC midnight, next write after 10am AEST.",
+          "mode": "markdown"
+        },
+        "title": "\u26a0 Data note \u2014 device filtering active",
+        "type": "text"
+      },
+      {
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 3
+        },
+        "id": 1,
+        "options": {
+          "content": "## Combined Health Intelligence \u2014 Data Fusion Logic\n\n| Metric | Primary Source | Fallback | Rationale |\n|---|---|---|---|\n| **Readiness Score** | **CoachReadiness** (personal 30d baseline) | WHOOP Recovery | CoachReadiness uses your personal HRV baseline \u2014 unaffected by WHOOP's age-based 7-day reset. Critical for atenolol athletes. |\n| **HRV** | Garmin overnight (5-min window) | WHOOP rMSSD (non-REM) | Both valid, different methodology \u2014 Garmin typically 5\u201315ms higher. Use trend, not absolute. |\n| **Resting HR** | Garmin daily minimum | WHOOP sleep average | Garmin RHR is lower (overnight min). WHOOP 5\u201310 bpm higher (sleep average). Both directionally consistent. |\n| **Sleep Score** | Garmin + WHOOP | \u2014 | Garmin and WHOOP diverge on scoring algorithm. Show both, watch trends. |\n| **SpO2** | Garmin (daytime avg) | WHOOP (sleep) | Garmin captures waking state |\n| **Training Load** | DerivedActivity (fenix 8 only) | TrainingLoadDaily | TrainingLoadDaily has device pollution \u2014 use DerivedActivity filtered by device for accuracy. |\n\n\u26a0\ufe0f **WHOOP Recovery score resets to age-based norms every ~7 days. Use CoachReadiness as the authoritative readiness signal.**\n\n\u26a0\ufe0f **Tactix 7 PRO / Index Smart Scale phantom data:** pipeline writes all activities to all device tags. All queries here filter to fenix 8 only.",
+          "mode": "markdown"
+        },
+        "title": "\ud83d\udccb Data Source Guide",
+        "type": "text"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "CoachReadiness is computed from your personal 30d HRV baseline (not WHOOP's age-adjusted reset). Primary signal. Green >67 = train. Yellow 34-67 = easy. Red <34 = rest.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 8,
+              "lineWidth": 1.5,
+              "pointSize": 5,
+              "showPoints": "auto"
+            },
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 34
+                },
+                {
+                  "color": "green",
+                  "value": 67
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Coach Readiness \u2605"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#f97316",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 3
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 15
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "WHOOP Recovery %"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#ef4444",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      6,
+                      3
+                    ],
+                    "fill": "dash"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Garmin Body Battery Peak"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#3b82f6",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      4,
+                      4
+                    ],
+                    "fill": "dash"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 16,
+          "x": 0,
+          "y": 12
+        },
+        "id": 2,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "last"
+            ],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "hideZeros": false,
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Coach Readiness \u2605",
+            "query": "SELECT mean(\"coach_readiness\") FROM \"CoachReadiness\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "WHOOP Recovery %",
+            "query": "SELECT mean(\"recovery_score\") FROM \"WhoopRecovery\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Garmin Body Battery Peak",
+            "query": "SELECT max(\"bodyBatteryHighestValue\") FROM \"DailyStats\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "C"
+          }
+        ],
+        "title": "\ud83d\udfe2 Daily Readiness \u2014 CoachReadiness (Primary) vs WHOOP vs Body Battery",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Shows most recently recorded values. CoachReadiness writes at UTC midnight (~10am AEST). WHOOP writes after morning sync. May show yesterday's values until pipeline runs.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 40
+                },
+                {
+                  "color": "green",
+                  "value": 70
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Coach Readiness \u2605"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#f97316",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Garmin HRV (ms)"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "ms"
+                },
+                {
+                  "id": "min",
+                  "value": 0
+                },
+                {
+                  "id": "max",
+                  "value": 60
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "RHR Garmin (bpm)"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "bpm"
+                },
+                {
+                  "id": "min",
+                  "value": 40
+                },
+                {
+                  "id": "max",
+                  "value": 70
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 8,
+          "x": 16,
+          "y": 12
+        },
+        "id": 3,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "targets": [
+          {
+            "alias": "Coach Readiness \u2605",
+            "query": "SELECT last(\"coach_readiness\") FROM \"CoachReadiness\" WHERE time >= now() - 48h",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "WHOOP Recovery %",
+            "query": "SELECT last(\"recovery_score\") FROM \"WhoopRecovery\" WHERE time >= now() - 48h",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Garmin HRV (ms)",
+            "query": "SELECT last(\"avgOvernightHrv\") FROM \"SleepSummary\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 48h",
+            "rawQuery": true,
+            "refId": "C"
+          },
+          {
+            "alias": "RHR Garmin (bpm)",
+            "query": "SELECT last(\"restingHeartRate\") FROM \"DailyStats\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 48h",
+            "rawQuery": true,
+            "refId": "D"
+          },
+          {
+            "alias": "Body Battery Peak",
+            "query": "SELECT last(\"bodyBatteryHighestValue\") FROM \"DailyStats\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 48h",
+            "rawQuery": true,
+            "refId": "E"
+          }
+        ],
+        "title": "Latest Readiness (last recorded)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Garmin: 5-min overnight window (typically higher). WHOOP: rMSSD from non-REM sleep stages (typically lower by 5-15ms). Both trend identically \u2014 use trend direction, not absolute values.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 5,
+              "lineWidth": 2,
+              "pointSize": 5,
+              "showPoints": "auto"
+            },
+            "unit": "ms"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Garmin HRV (ms) \u2605"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#22c55e",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 2.5
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "WHOOP HRV rMSSD (ms)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#8b5cf6",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      4,
+                      4
+                    ],
+                    "fill": "dash"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "CoachReadiness 30d Baseline"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#f97316",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      8,
+                      4
+                    ],
+                    "fill": "dash"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 2
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 21
+        },
+        "id": 4,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "min",
+              "max",
+              "last"
+            ],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Garmin HRV (ms) \u2605",
+            "query": "SELECT mean(\"avgOvernightHrv\") FROM \"SleepSummary\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "WHOOP HRV rMSSD (ms)",
+            "query": "SELECT mean(\"hrv_rmssd_milli\") FROM \"WhoopRecovery\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "CoachReadiness 30d Baseline",
+            "query": "SELECT mean(\"hrv_baseline_30d\") FROM \"CoachReadiness\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "C"
+          }
+        ],
+        "title": "HRV \u2014 Garmin Overnight vs WHOOP rMSSD (Cross-Validated)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Garmin = daily lowest point (true RHR). WHOOP = sleep average (typically 5-10 bpm higher). Both are valid and methodologically consistent within each device.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 5,
+              "lineWidth": 2
+            },
+            "unit": "bpm"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 21
+        },
+        "id": 5,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "last"
+            ],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Garmin RHR (daily min) \u2605",
+            "query": "SELECT mean(\"restingHeartRate\") FROM \"DailyStats\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "WHOOP RHR (sleep avg)",
+            "query": "SELECT mean(\"resting_heart_rate\") FROM \"WhoopRecovery\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Resting HR \u2014 Garmin vs WHOOP",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 0
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 29
+        },
+        "id": 6,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "last"
+            ],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Garmin Sleep Score",
+            "query": "SELECT mean(\"sleepScore\") FROM \"SleepSummary\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "WHOOP Sleep Score",
+            "query": "SELECT mean(\"score_total\") FROM \"WhoopSleep\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Sleep Quality \u2014 Garmin + WHOOP Scores",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 6
+                },
+                {
+                  "color": "green",
+                  "value": 7.5
+                }
+              ]
+            },
+            "unit": "h"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 29
+        },
+        "id": 7,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "last"
+            ],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Garmin Sleep Time (hrs)",
+            "query": "SELECT mean(\"sleepTimeSeconds\") / 3600 FROM \"SleepSummary\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "WHOOP Time in Bed (hrs)",
+            "query": "SELECT mean(\"time_in_bed_millis\") / 3600000 FROM \"WhoopSleep\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Sleep Duration \u2014 Garmin vs WHOOP",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "CoachReadiness vs WHOOP recovery vs weekly running load. Sustained load above readiness = overreaching risk. DailyStats filtered to fenix 8 only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Coach Readiness \u2605"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#f97316",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 2.5
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "WHOOP Recovery %"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#ef4444",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      6,
+                      3
+                    ],
+                    "fill": "dash"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 37
+        },
+        "id": 8,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "last"
+            ],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Coach Readiness \u2605",
+            "query": "SELECT mean(\"coach_readiness\") FROM \"CoachReadiness\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "D"
+          },
+          {
+            "alias": "WHOOP Recovery %",
+            "query": "SELECT mean(\"recovery_score\") FROM \"WhoopRecovery\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Strain Score (scaled to 100)",
+            "query": "SELECT mean(\"day_strain\") * 4.76 FROM \"WhoopStrain\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Vigorous Intensity Mins (Garmin)",
+            "query": "SELECT sum(\"vigorousIntensityMinutes\") FROM \"DailyStats\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 90d GROUP BY time(1d) fill(0)",
+            "rawQuery": true,
+            "refId": "C"
+          }
+        ],
+        "title": "Training Load vs Recovery Balance",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "max": 100,
+            "min": 88,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 93
+                },
+                {
+                  "color": "green",
+                  "value": 95
+                }
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 46
+        },
+        "id": 9,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "last"
+            ],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Garmin SpO2 daytime \u2605",
+            "query": "SELECT mean(\"averageSpo2\") FROM \"DailyStats\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "WHOOP SpO2 sleep",
+            "query": "SELECT mean(\"spo2_percentage\") FROM \"WhoopRecovery\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "SpO2 \u2014 Combined (Garmin daytime + WHOOP sleep)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "High stress duration + low CoachReadiness = compound psychological + physical load. Context: AuDHD/PTSD makes stress signal especially meaningful.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Coach Fatigue (inverted)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#f97316",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 2.5
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "WHOOP Fatigue (inverted)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#ef4444",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      4,
+                      4
+                    ],
+                    "fill": "dash"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 46
+        },
+        "id": 10,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "last"
+            ],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Garmin Stress (hours)",
+            "query": "SELECT mean(\"stressDuration\") / 3600 FROM \"DailyStats\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Coach Fatigue (inverted)",
+            "query": "SELECT (100 - mean(\"coach_readiness\")) / 10 FROM \"CoachReadiness\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "WHOOP Fatigue (inverted)",
+            "query": "SELECT (100 - mean(\"recovery_score\")) / 10 FROM \"WhoopRecovery\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "C"
+          }
+        ],
+        "title": "Stress vs Recovery \u2014 Mental Load Indicator",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 54
+        },
+        "id": 11,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "last"
+            ],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "alias": "VO2max (Garmin official)",
+            "query": "SELECT mean(\"VO2_max_value\") FROM \"VO2_Max\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= '2024-01-01' GROUP BY time(7d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Fitness Age",
+            "query": "SELECT mean(\"fitnessAge\") FROM \"FitnessAge\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= '2024-01-01' GROUP BY time(7d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Achievable Fitness Age",
+            "query": "SELECT mean(\"achievableFitnessAge\") FROM \"FitnessAge\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= '2024-01-01' GROUP BY time(7d) fill(null)",
+            "rawQuery": true,
+            "refId": "C"
+          }
+        ],
+        "title": "VO2max Trend + Fitness Age",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 54
+        },
+        "id": 12,
+        "options": {},
+        "targets": [
+          {
+            "alias": "Weekly km",
+            "query": "SELECT sum(\"totalDistanceMeters\") / 1000 FROM \"DailyStats\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= '2024-01-01' GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Weekly Vert (m)",
+            "query": "SELECT sum(\"floorsAscendedInMeters\") FROM \"DailyStats\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= '2024-01-01' GROUP BY time(7d) fill(0)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Weekly Training Volume + Elevation (fenix 8 only)",
+        "type": "barchart"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Skin temp deviation + elevated RHR + low HRV = illness signature. Catch it before it becomes a training disruption.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 5,
+              "lineWidth": 2
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 62
+        },
+        "id": 13,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Garmin Skin Temp Deviation (C)",
+            "query": "SELECT mean(\"avgSkinTempDeviationC\") FROM \"SleepSummary\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          },
+          {
+            "alias": "Garmin Breathing Rate",
+            "query": "SELECT mean(\"averageRespirationValue\") FROM \"SleepSummary\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "C"
+          },
+          {
+            "alias": "WHOOP Skin Temp (C)",
+            "query": "SELECT mean(\"skin_temp_celsius\") FROM \"WhoopRecovery\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "WHOOP Respiratory Rate",
+            "query": "SELECT mean(\"respiratory_rate\") FROM \"WhoopSleep\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "D"
+          }
+        ],
+        "title": "Illness & Anomaly Detection \u2014 Skin Temp + Breathing Rate",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "influxdb",
+          "uid": "garmin_influxdb"
+        },
+        "description": "Orange dashed = your actual personal 30d rolling HRV baseline from CoachReadiness. This is not WHOOP's age-adjusted reset \u2014 this is your real baseline computed from your data.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2
+            },
+            "unit": "ms"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Daily Garmin HRV"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#22c55e",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Personal 30d Baseline (CoachReadiness)"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "#f97316",
+                    "mode": "fixed"
+                  }
+                },
+                {
+                  "id": "custom.lineWidth",
+                  "value": 2.5
+                },
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "dash": [
+                      8,
+                      4
+                    ],
+                    "fill": "dash"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 70
+        },
+        "id": 14,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "last"
+            ],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "targets": [
+          {
+            "alias": "Daily Garmin HRV",
+            "query": "SELECT mean(\"avgOvernightHrv\") FROM \"SleepSummary\" WHERE Device = 'fenix 8 - 51mm, AMOLED' AND time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "A"
+          },
+          {
+            "alias": "Personal 30d Baseline (CoachReadiness)",
+            "query": "SELECT mean(\"hrv_baseline_30d\") FROM \"CoachReadiness\" WHERE time >= now() - 90d GROUP BY time(1d) fill(null)",
+            "rawQuery": true,
+            "refId": "B"
+          }
+        ],
+        "title": "HRV Personal Baseline \u2014 CoachReadiness (accurate) vs Daily Garmin",
+        "type": "timeseries"
+      }
+    ],
+    "refresh": "30m",
+    "schemaVersion": 42,
+    "tags": [
+      "combined",
+      "health",
+      "readiness"
+    ],
+    "time": {
+      "from": "now-90d",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "5s",
+        "10s",
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "1d"
+      ]
+    },
+    "timezone": "Australia/Melbourne",
+    "title": "Combined Health Intelligence \u2014 Garmin + WHOOP",
+    "uid": "combined-health-overview"
+  },
+  "folderId": 0,
+  "overwrite": true
+}
