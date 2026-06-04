@@ -24,7 +24,7 @@ mkdir -p "$BASE/data/mcp-server-gpt"
 mkdir -p "$BASE/garminconnect-tokens"
 mkdir -p "$BASE/whoop-tokens"
 mkdir -p "$BASE/backups"
-mkdir -p "$BASE/wireguard"
+mkdir -p "$BASE/wireguard/wg_confs"
 
 echo "==> Setting permissions..."
 # Grafana runs as uid 472

@@ -339,6 +339,7 @@ WG_ALLOWED_IPS=0.0.0.0/0
 
 # 3. Generate wg0.conf from env vars
 bash /opt/<username>/wireguard/generate-wg0.sh
+# Writes config to /opt/<username>/wireguard/wg_confs/wg0.conf
 ```
 
 **Token grab (run whenever Garmin auth expires or is needed):**

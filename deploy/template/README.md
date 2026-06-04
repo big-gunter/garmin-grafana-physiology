@@ -87,7 +87,7 @@ deploy/
 | Placeholder | Replaced with |
 |---|---|
 | `{{USERNAME}}` | user's username, e.g. `connor` |
-| `BEGIN_GARMIN_NETWORK` … `END_GARMIN_NETWORK` | `networks:` block or `network_mode:` — see wireguard section |
+| *(none beyond `{{USERNAME}}`)* | garmin-fetch-data always uses standard `networks:` — see WireGuard section |
 
 ## WireGuard — temporary token grab, not persistent routing
 
@@ -119,7 +119,7 @@ chmod 600 deploy/.wireguard.<user>.env
 # fill in WG_* values
 
 ./deploy/stack.sh <user> generate          # installs generate-wg0.sh if ENABLE_WIREGUARD=true
-bash /opt/<user>/wireguard/generate-wg0.sh # writes wg0.conf from env vars
+bash /opt/<user>/wireguard/generate-wg0.sh # writes wg_confs/wg0.conf from env vars
 
 # 2. Start the wireguard tunnel
 ./deploy/stack.sh <user> up --with wireguard
