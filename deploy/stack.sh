@@ -169,7 +169,7 @@ cmd_up() {
   fi
 
   echo "==> Starting $USERNAME stack${profile_args:+ (extra profiles: ${extra_profiles[*]:-})}"
-  compose "${profile_args[@]}" up -d
+  compose "${profile_args[@]}" up -d --build
 }
 
 # ---------------------------------------------------------------------------
