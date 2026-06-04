@@ -180,12 +180,12 @@ def exchange_oauth2(oauth1: dict, consumer_key: str, consumer_secret: str) -> di
     resp.raise_for_status()
 
     data = resp.json()
-    now = datetime.now(timezone.utc).timestamp()
-    data.setdefault("expires_at", now + data.get("expires_in", 3600))
+    now = int(datetime.now(timezone.utc).timestamp())
+    data.setdefault("expires_at", now + int(data.get("expires_in", 3600)))
     if "refresh_token_expires_in" in data:
         data.setdefault(
             "refresh_token_expires_at",
-            now + data["refresh_token_expires_in"]
+            now + int(data["refresh_token_expires_in"])
         )
     return data
 
