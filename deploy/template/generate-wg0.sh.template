@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Reads deploy/.wireguard.{{USERNAME}}.env and writes /opt/{{USERNAME}}/wireguard/wg0.conf
+# Run from /opt/{{USERNAME}}/: bash wireguard/generate-wg0.sh
+# The linuxserver/wireguard container reads /config/wg0.conf on start.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="$SCRIPT_DIR/../deploy/.wireguard.{{USERNAME}}.env"
+
+if [ ! -f "$ENV_FILE" ]; then
+  echo "Error: $ENV_FILE not found" >&2
+  echo "Copy deploy/template/.wireguard.env.template to deploy/.wireguard.{{USERNAME}}.env and fill in values" >&2
+  exit 1
+fi
+
+# shellcheck source=/dev/null
+source "$ENV_FILE"
+
+: "${WG_PRIVATE_KEY:?WG_PRIVATE_KEY is required}"
+: "${WG_ADDRESS:?WG_ADDRESS is required}"
+: "${WG_DNS:?WG_DNS is required}"
+: "${WG_PEER_PUBLIC_KEY:?WG_PEER_PUBLIC_KEY is required}"
+: "${WG_PEER_ENDPOINT:?WG_PEER_ENDPOINT is required}"
+: "${WG_ALLOWED_IPS:=0.0.0.0/0}"
+
+CONF_FILE="$SCRIPT_DIR/wg0.conf"
+
+cat > "$CONF_FILE" <<WGCONF
+[Interface]
+PrivateKey = ${WG_PRIVATE_KEY}
+Address = ${WG_ADDRESS}
+DNS = ${WG_DNS}
+
+[Peer]
+PublicKey = ${WG_PEER_PUBLIC_KEY}
+WGCONF
+
+if [ -n "${WG_PEER_PRESHARED_KEY:-}" ]; then
+  echo "PresharedKey = ${WG_PEER_PRESHARED_KEY}" >> "$CONF_FILE"
+fi
+
+cat >> "$CONF_FILE" <<WGCONF
+Endpoint = ${WG_PEER_ENDPOINT}
+AllowedIPs = ${WG_ALLOWED_IPS}
+PersistentKeepalive = 25
+WGCONF
+
+chmod 600 "$CONF_FILE"
+echo "Generated: $CONF_FILE"

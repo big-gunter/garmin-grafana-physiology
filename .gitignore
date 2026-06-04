@@ -13,3 +13,4 @@ __pycache__/
 agent-memory/
 data/agent-memory/
 whoop-tokens-local/
+.wireguard.*.env
