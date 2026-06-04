@@ -175,10 +175,11 @@ python deploy/setup/08_garmin_browser_auth.py --output ./tokens
 
 A browser window opens. Log in with the child's Garmin credentials. Once login succeeds the script captures the session and exits automatically.
 
-Copy tokens to the server:
+Copy tokens to the server and fix ownership (`garmin-fetch-data` runs as uid 1000, not root):
 
 ```sh
 scp ./tokens/oauth*.json root@<server-ip>:/opt/<username>/garminconnect-tokens/
+ssh -p 22444 root@<server-ip> "chown 1000:1000 /opt/<username>/garminconnect-tokens/oauth*.json"
 ```
 
 ### Option B — Run on server with X11 forwarding (Linux/Mac only)
