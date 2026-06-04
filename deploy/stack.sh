@@ -211,8 +211,8 @@ cmd_token_grab() {
 
   # The token-grab container shares wireguard's network namespace, which uses
   # an external DNS (e.g. 8.8.8.8) rather than Docker's internal resolver.
-  # Docker service names like 'influxdb' won't resolve via external DNS, so we
-  # look up the container's actual IP and inject it via --add-host instead.
+  # --add-host is incompatible with --network container:X, so we pass the
+  # influxdb container's IP directly as INFLUXDB_HOST instead of the hostname.
   local influxdb_ip
   influxdb_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${USERNAME}-influxdb" 2>/dev/null)
   if [ -z "$influxdb_ip" ]; then
@@ -233,9 +233,8 @@ cmd_token_grab() {
   docker run --rm -it \
     --name "${USERNAME}-garmin-token-grab" \
     --network "container:${wg_container}" \
-    --add-host "influxdb:${influxdb_ip}" \
     -v "/opt/${USERNAME}/garminconnect-tokens:/home/appuser/.garminconnect" \
-    -e INFLUXDB_HOST=influxdb \
+    -e INFLUXDB_HOST="${influxdb_ip}" \
     -e INFLUXDB_PORT=8086 \
     -e INFLUXDB_VERSION=1 \
     -e INFLUXDB_ENDPOINT_IS_HTTP=true \
