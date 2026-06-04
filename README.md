@@ -10,6 +10,7 @@ Self-host a **Garmin Connect → InfluxDB → Grafana** pipeline on your own mac
 - [Architecture](#architecture)
 - [Requirements](#requirements)
 - [Local deployment](#local-deployment)
+- [Managed and child Garmin accounts](#managed-and-child-garmin-accounts)
 - [Cloud deployment](#cloud-deployment)
   - [Multi-user instances](#multi-user-instances)
   - [WireGuard — Garmin token grab](#wireguard--garmin-token-grab)
@@ -146,6 +147,77 @@ docker compose logs -f garmin-fetch-data
 ```
 
 The first sync backfills roughly the last week. For older data see [Bulk historical fetch](#bulk-historical-fetch).
+
+---
+
+## Managed and child Garmin accounts
+
+Garmin restricts programmatic SSO login for child/managed accounts — the same restriction that prevents Garmin Express from syncing child accounts directly. The `garmin-fetch-data` container's normal authentication flow hits this restriction and fails with `Unable To Sign In`.
+
+The workaround: use a real browser for the one-time login. `deploy/setup/08_garmin_browser_auth.py` opens a Chromium window where you log in manually, captures the resulting SSO ticket, and exchanges it for OAuth tokens that `garmin-fetch-data` uses directly. The browser login works because Garmin only blocks the programmatic (non-browser) SSO flow for child accounts, not the actual web login.
+
+Tokens last approximately one year and auto-refresh — you only need to do this once per year when they expire.
+
+### Prerequisites
+
+```sh
+pip install playwright requests requests-oauthlib
+playwright install chromium
+```
+
+### Option A — Run locally (recommended, works on all platforms)
+
+Run the script on your own machine, then copy the tokens to the server:
+
+```sh
+python deploy/setup/08_garmin_browser_auth.py --output ./tokens
+```
+
+A browser window opens. Log in with the child's Garmin credentials. Once login succeeds the script captures the session and exits automatically.
+
+Copy tokens to the server:
+
+```sh
+scp ./tokens/oauth*.json root@<server-ip>:/opt/<username>/garminconnect-tokens/
+```
+
+### Option B — Run on server with X11 forwarding (Linux/Mac only)
+
+Forwards the browser display from the server to your local machine over SSH. Tokens are written directly to the correct path — no SCP needed.
+
+> Mac users need [XQuartz](https://www.xquartz.org) installed first.
+
+Connect with X11 forwarding enabled:
+
+```sh
+ssh -XC -p 22444 root@<server-ip>
+```
+
+Then on the server:
+
+```sh
+pip install playwright requests requests-oauthlib
+playwright install chromium
+python /opt/<username>/deploy/setup/08_garmin_browser_auth.py \
+    --output /opt/<username>/garminconnect-tokens
+```
+
+### After token extraction (both options)
+
+Restart `garmin-fetch-data` to pick up the new tokens:
+
+```sh
+./deploy/stack.sh <username> down garmin-fetch-data
+./deploy/stack.sh <username> up
+```
+
+Check it authenticated successfully:
+
+```sh
+docker compose -f deploy/docker-compose.<username>.yml logs --follow garmin-fetch-data
+```
+
+You should see a successful data fetch within the first poll cycle. WireGuard is not needed for this flow — the browser auth bypasses the SSO restriction entirely.
 
 ---
 
