@@ -166,7 +166,11 @@ def exchange_oauth2(oauth1: dict, consumer_key: str, consumer_secret: str) -> di
     """Exchange an OAuth1 token for an OAuth2 token."""
     resp = requests.post(
         OAUTH2_ENDPOINT,
-        headers={"User-Agent": MOBILE_USER_AGENT},
+        headers={
+            "User-Agent":   MOBILE_USER_AGENT,
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        data={"audience": "GARMIN_CONNECT_MOBILE_ANDROID_DI"},
         auth=OAuth1(
             consumer_key, consumer_secret,
             oauth1["oauth_token"], oauth1["oauth_token_secret"],
