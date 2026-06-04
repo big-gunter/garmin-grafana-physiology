@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Reads deploy/.wireguard.{{USERNAME}}.env and writes /opt/{{USERNAME}}/wireguard/wg0.conf
+# Reads deploy/.wireguard.{{USERNAME}}.env and writes /opt/{{USERNAME}}/wireguard/wg_confs/wg0.conf
 # Run from /opt/{{USERNAME}}/: bash wireguard/generate-wg0.sh
-# The linuxserver/wireguard container reads /config/wg0.conf on start.
+# The linuxserver/wireguard container reads configs from /config/wg_confs/ on start.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,7 +23,8 @@ source "$ENV_FILE"
 : "${WG_PEER_ENDPOINT:?WG_PEER_ENDPOINT is required}"
 : "${WG_ALLOWED_IPS:=0.0.0.0/0}"
 
-CONF_FILE="$SCRIPT_DIR/wg0.conf"
+mkdir -p "$SCRIPT_DIR/wg_confs"
+CONF_FILE="$SCRIPT_DIR/wg_confs/wg0.conf"
 
 cat > "$CONF_FILE" <<WGCONF
 [Interface]
