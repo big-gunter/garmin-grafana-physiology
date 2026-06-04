@@ -11,6 +11,8 @@ Self-host a **Garmin Connect → InfluxDB → Grafana** pipeline on your own mac
 - [Requirements](#requirements)
 - [Local deployment](#local-deployment)
 - [Cloud deployment](#cloud-deployment)
+  - [Multi-user instances](#multi-user-instances)
+  - [WireGuard — Garmin token grab](#wireguard--garmin-token-grab)
 - [WHOOP integration](#whoop-integration)
 - [MCP servers](#mcp-servers)
 - [Grafana dashboards](#grafana-dashboards)
@@ -69,17 +71,20 @@ garmin-fetch-data  ──writes──▶  influxdb (GarminStats, :8086)
 
 All services share bridge network **`garmin-grafana-internal`** and address each other by service name.
 
-### Cloud stack (`deploy/docker-compose.yml`)
+### Cloud stack (`deploy/docker-compose.<user>.yml`)
 
-| Service | Role |
-|---|---|
-| **`cloudflared`** | Cloudflare tunnel — no open inbound ports required. |
-| **`influxdb`** | Same 1.11 image; data in `/opt/physiology/influxdb`. |
-| **`grafana`** | Provisioned from `deploy/grafana/datasource.yaml`. |
-| **`garmin-fetch-data`** | Same fetcher image built from repo root `Dockerfile`. |
-| **`mcp-server`** | `deploy/mcp_server/` — GitHub OAuth + bearer token gateway for Claude. Internal port 8000. |
-| **`mcp-server-gpt`** | `deploy/mcp_server_gpt/` — ChatGPT-compatible MCP gateway. Internal port 8001. Separate GitHub OAuth app + env vars. |
-| **`whoop-fetch-data`** *(profile `whoop`)* | WHOOP sync; shares the same `GarminStats` database. |
+Generated per-user from `deploy/template/docker-compose.template.yml` via `stack.sh generate`. Each user runs a fully isolated Docker Compose project — separate network, container name prefix, and data volume paths. Multiple users can run on the same host without any interference.
+
+| Service | Profile | Role |
+|---|---|---|
+| **`cloudflared`** | *(always)* | Cloudflare tunnel — no open inbound ports required |
+| **`influxdb`** | *(always)* | InfluxDB 1.11; data at `/opt/<user>/data/influxdb` |
+| **`grafana`** | *(always)* | Dashboards provisioned from `deploy/grafana/` and `Grafana_Dashboard/` |
+| **`garmin-fetch-data`** | *(always)* | Fetcher; tokens at `/opt/<user>/garminconnect-tokens` |
+| **`mcp-server`** | *(always)* | GitHub OAuth + bearer token MCP gateway for Claude. Port 8000 |
+| **`mcp-server-gpt`** | `gpt-mcp` | ChatGPT-compatible MCP gateway. Port 8001. Separate GitHub OAuth app |
+| **`whoop-fetch-data`** | `whoop` | WHOOP sync into the same `GarminStats` database |
+| **`wireguard`** | `wireguard` | VPN tunnel — temporary use for Garmin token grab only |
 
 ---
 
@@ -146,55 +151,211 @@ The first sync backfills roughly the last week. For older data see [Bulk histori
 
 ## Cloud deployment
 
-Runs on a remote server with a Cloudflare tunnel (no open ports), Cloudflare Access protecting Grafana, GitHub OAuth protecting the MCP server, and automated backups. Tested on Hetzner CAX21 ARM (Ubuntu 22.04).
+Runs on a remote server with a Cloudflare tunnel (no open ports), GitHub OAuth protecting the MCP servers, and automated backups. Tested on Hetzner CAX21 ARM (Ubuntu 22.04).
 
-The cloud stack lives entirely under `deploy/`. Run all commands from that directory unless noted.
+> **All stack management goes through `deploy/stack.sh`.** Do not run `docker compose` commands directly for day-to-day use — `stack.sh` handles profile selection, env file wiring, and generates the per-user compose file from the template.
 
 ### Setup scripts
 
-| Script / file | What it does |
+| Script / file | Purpose |
 |---|---|
-| `deploy/setup/01_server_setup.sh` | Install Docker, UFW firewall, fail2ban, move SSH to port 22444 |
-| `deploy/setup/02_folders.sh` | Create `/opt/physiology` data dirs (influxdb, grafana, MCP, garmin/whoop tokens), patch dashboard JSON, copy `.env.example` |
-| `deploy/setup/02_folders_garton.sh` | Same as above for the garton instance (`/opt/garton`) |
-| `deploy/setup/03_influxdb_users.sh` | Create `garmin_writer` and `mcp_reader` InfluxDB users with correct grants |
-| `deploy/setup/04_backup.sh` | Example nightly cron: InfluxDB portable backup + Grafana volume backup |
-| `deploy/setup/05_grafana_token.md` | Instructions for creating a Grafana service account token for MCP |
+| `deploy/setup/01_server_setup.sh` | Install Docker, UFW firewall, fail2ban; move SSH to port 22444 |
+| `deploy/setup/02_folders.sh` | Create `/opt/<user>` data dirs, set permissions |
+| `deploy/setup/03_influxdb_users.sh` | Create `garmin_writer` and `mcp_reader` InfluxDB users |
+| `deploy/setup/04_backup.sh` | Nightly cron: InfluxDB portable backup + Grafana volume backup |
+| `deploy/setup/05_grafana_token.md` | Create a Grafana service account token for the MCP server |
 | `deploy/setup/06_whoop_auth.md` | Full WHOOP OAuth setup guide |
 | `deploy/setup/07_whoop_influxdb_reader.sh` | Verify `mcp_reader` grants include WHOOP measurements |
 
-### Step-by-step
+### Step-by-step setup
+
+#### 1. Clone the repo
 
 ```bash
-# 1. Clone to server
-git clone https://github.com/big-gunter/garmin-grafana-physiology.git /opt/physiology-repo
-cd /opt/physiology-repo
-
-# 2. Harden server (SSH moves to port 22444 — reconnect on that port afterwards)
-bash deploy/setup/01_server_setup.sh
-
-# 3. Create data directories and .env template
-bash deploy/setup/02_folders.sh
-
-# 4. Fill in credentials
-nano deploy/.env  # see Configuration reference below
-
-# 5. Build the Garmin fetcher image
-cd deploy && docker compose build garmin-fetch-data
-
-# 6. Start InfluxDB, then create users
-docker compose up -d influxdb
-# wait ~10 seconds for healthy, then:
-bash /opt/physiology-repo/deploy/setup/03_influxdb_users.sh
-
-# 7. Authenticate with Garmin (interactive, one-time)
-docker compose run --rm garmin-fetch-data
-
-# 8. Start everything
-docker compose up -d
+git clone https://github.com/big-gunter/garmin-grafana-physiology.git /opt/<username>
+cd /opt/<username>
 ```
 
-For Cloudflare tunnel setup, GitHub OAuth app creation, and connecting Claude.ai, see **`deploy/README.md`**.
+#### 2. Harden the server *(first time only, run as root)*
+
+```bash
+bash deploy/setup/01_server_setup.sh
+# SSH moves to port 22444 — reconnect on that port after this completes
+```
+
+#### 3. Create data directories *(run as root)*
+
+```bash
+bash deploy/setup/02_folders.sh
+```
+
+#### 4. Create the user config
+
+```bash
+cp deploy/users/connor.conf deploy/users/<username>.conf
+nano deploy/users/<username>.conf
+```
+
+Set `USERNAME` and the feature flags:
+
+```bash
+USERNAME=<username>
+ENABLE_WHOOP=false       # true if this user has a WHOOP
+ENABLE_GPT_MCP=false     # true to also run the ChatGPT MCP server
+ENABLE_WIREGUARD=false   # leave false — wireguard is brought up manually when needed
+```
+
+#### 5. Create the env file
+
+```bash
+cp deploy/template/.env.template deploy/.env
+chmod 600 deploy/.env
+nano deploy/.env
+```
+
+| Variable | How to get it |
+|---|---|
+| `CLOUDFLARE_TUNNEL_TOKEN` | Cloudflare Zero Trust → Networks → Tunnels → create tunnel → copy token |
+| `INFLUX_PASSWORD` | Choose a strong password |
+| `INFLUX_MCP_PASSWORD` | Choose a strong password |
+| `INFLUX_WRITER_PASSWORD` | Choose a strong password |
+| `GRAFANA_ADMIN_PASSWORD` | Choose a strong password |
+| `GRAFANA_TOKEN` | Generated in step 9 — leave blank for now |
+| `GITHUB_CLIENT_ID/SECRET` | Create a GitHub OAuth app; callback: `https://<user>-mcp.big-gunter.com/oauth/callback` |
+| `GITHUB_ALLOWED_USER` | Your GitHub username |
+| `TOKEN_SECRET` | `openssl rand -hex 32` |
+
+#### 6. Generate the compose file
+
+```bash
+./deploy/stack.sh <username> generate
+```
+
+This renders `deploy/docker-compose.<username>.yml` from `deploy/template/docker-compose.template.yml`. Re-run whenever you change the user config or the template.
+
+#### 7. Start InfluxDB and create users
+
+```bash
+./deploy/stack.sh <username> up
+# wait ~15 seconds for InfluxDB to become healthy, then:
+bash deploy/setup/03_influxdb_users.sh
+```
+
+#### 8. Grab Garmin tokens
+
+Cloud server IPs are commonly blocked by Garmin. Use the [WireGuard token grab](#wireguard--garmin-token-grab) below unless you know your server's IP is not blocked.
+
+If the IP is not blocked, set `GARMINCONNECT_EMAIL` and `GARMINCONNECT_BASE64_PASSWORD` in `deploy/.env` — `garmin-fetch-data` will authenticate automatically on startup.
+
+#### 9. Create a Grafana service account token
+
+Required for the MCP server's Grafana tools. Follow `deploy/setup/05_grafana_token.md`, then add the token to `deploy/.env` as `GRAFANA_TOKEN` and restart:
+
+```bash
+docker compose -f deploy/docker-compose.<username>.yml restart mcp-server
+```
+
+#### 10. Seed the athlete profile
+
+Physiological constants (HRmax, resting HR, LTHR, Karvonen zones) are stored as versioned records in InfluxDB. Seed the initial values:
+
+```bash
+docker compose -f deploy/docker-compose.<username>.yml \
+  exec garmin-fetch-data python /app/scripts/write_athlete_profile.py
+```
+
+---
+
+### Multi-user instances
+
+Each user is an independent stack. To add a second user, repeat the setup from step 1 on, substituting the new username. Both stacks run simultaneously on the same server — they share the Docker daemon but nothing else.
+
+```
+/opt/alice/   ← repo clone + data for alice
+  deploy/
+    .env                        ← alice's secrets
+    docker-compose.alice.yml    ← generated from template
+/opt/bob/     ← repo clone + data for bob
+  deploy/
+    .env                        ← bob's secrets
+    docker-compose.bob.yml      ← generated from template
+```
+
+Each `./deploy/stack.sh` call is scoped to that user's compose file. There is no shared state between stacks.
+
+---
+
+### stack.sh reference
+
+```bash
+./deploy/stack.sh <user> generate              # render docker-compose.<user>.yml from template
+./deploy/stack.sh <user> up                    # start stack (profiles from user conf)
+./deploy/stack.sh <user> up --with <profile>   # start + add a profile temporarily
+./deploy/stack.sh <user> up --all              # start with all optional profiles enabled
+./deploy/stack.sh <user> down                  # stop and remove entire stack
+./deploy/stack.sh <user> down <service>        # stop a single service
+./deploy/stack.sh <user> token-grab            # Garmin auth through WireGuard (see below)
+```
+
+| Profile | Container | Enabled when |
+|---|---|---|
+| *(none)* | cloudflared, influxdb, grafana, garmin-fetch-data, mcp-server | always |
+| `whoop` | whoop-fetch-data | `ENABLE_WHOOP=true` or `--with whoop` |
+| `gpt-mcp` | mcp-server-gpt | `ENABLE_GPT_MCP=true` or `--with gpt-mcp` |
+| `wireguard` | wireguard | `--with wireguard` or `ENABLE_WIREGUARD=true` |
+
+---
+
+### WireGuard — Garmin token grab
+
+Garmin blocks authentication from cloud server IPs. WireGuard routes the one-time auth through a home or trusted endpoint. Once tokens are written to the shared volume, WireGuard stops and `garmin-fetch-data` continues on a direct connection — no other containers are affected.
+
+> `garmin-fetch-data` **always** uses the standard Docker network. WireGuard is an independent container. `token-grab` runs a temporary container through the tunnel, writes tokens, and exits.
+
+**One-time WireGuard setup:**
+
+```bash
+# 1. Create the WireGuard env file
+cp deploy/template/.wireguard.env.template deploy/.wireguard.<username>.env
+chmod 600 deploy/.wireguard.<username>.env
+nano deploy/.wireguard.<username>.env
+```
+
+```bash
+WG_PRIVATE_KEY=          # this peer's private key — run: wg genkey
+WG_ADDRESS=              # tunnel IP, e.g. 10.0.0.2/32
+WG_DNS=                  # DNS through tunnel, e.g. 1.1.1.1
+WG_PEER_PUBLIC_KEY=      # your home server's public key
+WG_PEER_ENDPOINT=        # home server address:port, e.g. home.example.com:51820
+WG_PEER_PRESHARED_KEY=   # optional — leave blank if not used
+WG_ALLOWED_IPS=0.0.0.0/0
+```
+
+```bash
+# 2. Enable wireguard in user conf and regenerate
+#    (edit deploy/users/<username>.conf: ENABLE_WIREGUARD=true)
+./deploy/stack.sh <username> generate
+# This installs generate-wg0.sh at /opt/<username>/wireguard/generate-wg0.sh
+
+# 3. Generate wg0.conf from env vars
+bash /opt/<username>/wireguard/generate-wg0.sh
+```
+
+**Token grab (run whenever Garmin auth expires or is needed):**
+
+```bash
+# Start the WireGuard tunnel
+./deploy/stack.sh <username> up --with wireguard
+
+# Run ephemeral auth container through the tunnel
+# It connects to Garmin via VPN, writes tokens to the shared volume, then exits
+./deploy/stack.sh <username> token-grab
+
+# Stop WireGuard — the rest of the stack is completely unaffected
+./deploy/stack.sh <username> down wireguard
+```
+
+After the token grab, set `ENABLE_WIREGUARD=false` in the user conf so WireGuard doesn't start automatically on future `up` calls. `garmin-fetch-data` will continue fetching directly using the cached tokens (which are valid for approximately one year).
 
 ---
 
@@ -660,20 +821,27 @@ docker compose build && docker compose up -d   # rebuild after dep changes
 
 > Do **not** use `docker compose down -v` unless you intend to delete InfluxDB and Grafana volumes.
 
-### Cloud stack (run from `deploy/`)
+### Cloud stack
 
 ```bash
-docker compose up -d
-docker compose stop
-git pull && docker compose down && docker compose up -d --build   # update
+# Start / stop
+./deploy/stack.sh <user> up
+./deploy/stack.sh <user> down
 
-# Re-authenticate Garmin
-docker compose stop garmin-fetch-data
-docker compose run --rm garmin-fetch-data
-docker compose up -d garmin-fetch-data
+# Update repo and restart
+git pull
+./deploy/stack.sh <user> generate          # if template or conf changed
+./deploy/stack.sh <user> down
+./deploy/stack.sh <user> up
 
-# Re-authenticate WHOOP (after re-running local auth flow and SCP-ing tokens)
-docker compose --profile whoop restart whoop-fetch-data
+# Re-authenticate Garmin (tokens expire ~annually)
+./deploy/stack.sh <user> down garmin-fetch-data
+./deploy/stack.sh <user> up --with wireguard
+./deploy/stack.sh <user> token-grab
+./deploy/stack.sh <user> down wireguard
+
+# Re-authenticate WHOOP (after re-running local auth flow and scp-ing tokens)
+docker compose -f deploy/docker-compose.<user>.yml --profile whoop restart whoop-fetch-data
 ```
 
 ### Export live InfluxDB schema
