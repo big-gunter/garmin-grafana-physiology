@@ -209,7 +209,19 @@ cmd_token_grab() {
   local influx_db;     influx_db="$(env_val INFLUX_DATABASE GarminStats)"
   local influx_pass;   influx_pass="$(env_val INFLUX_WRITER_PASSWORD)"
 
+  # The token-grab container shares wireguard's network namespace, which uses
+  # an external DNS (e.g. 8.8.8.8) rather than Docker's internal resolver.
+  # Docker service names like 'influxdb' won't resolve via external DNS, so we
+  # look up the container's actual IP and inject it via --add-host instead.
+  local influxdb_ip
+  influxdb_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${USERNAME}-influxdb" 2>/dev/null)
+  if [ -z "$influxdb_ip" ]; then
+    echo "Error: could not determine IP of ${USERNAME}-influxdb — is the stack running?" >&2
+    exit 1
+  fi
+
   echo "==> Running Garmin token grab through WireGuard tunnel ($wg_container)"
+  echo "    InfluxDB: $influxdb_ip (${USERNAME}-influxdb)"
   echo "    Tokens will be written to /opt/$USERNAME/garminconnect-tokens"
   echo "    Stop this container once authentication succeeds (Ctrl+C or it exits)."
   echo ""
@@ -221,6 +233,7 @@ cmd_token_grab() {
   docker run --rm -it \
     --name "${USERNAME}-garmin-token-grab" \
     --network "container:${wg_container}" \
+    --add-host "influxdb:${influxdb_ip}" \
     -v "/opt/${USERNAME}/garminconnect-tokens:/home/appuser/.garminconnect" \
     -e INFLUXDB_HOST=influxdb \
     -e INFLUXDB_PORT=8086 \
