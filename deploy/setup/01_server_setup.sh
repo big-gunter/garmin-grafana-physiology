@@ -58,7 +58,7 @@ fail2ban-client status sshd
 echo "==> Applying kernel network hardening..."
 cat >> /etc/sysctl.conf << 'EOF'
 
-# Network hardening - physiology stack
+# Network hardening
 net.ipv4.tcp_syncookies = 1
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
@@ -78,4 +78,4 @@ EOF
 
 echo ""
 echo "==> Server setup complete."
-echo "    Next step: run 02_folders.sh"
+echo "    Next step: run 'sudo bash deploy/setup/02_folders.sh' from inside the cloned repo"
