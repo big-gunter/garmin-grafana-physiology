@@ -1,0 +1,1154 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "description": "From PhysiologyDaily \u2014 sourced from athlete_profile observed max.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#ef4444",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "bpm"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "query": "SELECT last(\"HRmax_est\") FROM \"PhysiologyDaily\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "HRmax (pipeline estimate)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "description": "From PhysiologyDaily \u2014 rolling 7-day median used in zone calculations.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#22c55e",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "bpm"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "query": "SELECT last(\"RHR_7d_median\") FROM \"PhysiologyDaily\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "RHR 7d Median (pipeline)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "description": "Heart Rate Reserve from PhysiologyDaily \u2014 drives zone widths.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#f97316",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "bpm"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "query": "SELECT last(\"HRR\") FROM \"PhysiologyDaily\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "HRR (HRmax \u2212 RHR)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "description": "Highest maxHR recorded across all activities in ActivitySummary.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#8b5cf6",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "bpm"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "id": 13,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "query": "SELECT max(\"maxHR\") FROM \"ActivitySummary\"",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "All-time MaxHR observed",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "description": "Lowest ever heart rate recorded during sleep \u2014 true physiological floor.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#3b82f6",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "bpm"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "id": 14,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "query": "SELECT min(\"heartRate\") FROM \"SleepIntraday\"",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "RHR absolute floor (SleepIntraday min)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "description": "Source annotation from PhysiologyDaily.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#64748b",
+            "mode": "fixed"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "id": 15,
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "query": "SELECT last(\"HRmax_est_source\") FROM \"PhysiologyDaily\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "HRmax source",
+      "type": "stat"
+    },
+    {
+      "gridPos": {
+        "h": 20,
+        "w": 14,
+        "x": 0,
+        "y": 4
+      },
+      "id": 1,
+      "options": {
+        "content": "## HR Zone Anchors \u2014 Calculated from Data\n\nAll values below are **read from InfluxDB** (`PhysiologyDaily`). The stat panels above show the live values. The table to the right shows the actual zone boundaries in use.\n\n| Anchor | Live Value | Source |\n|---|---|---|\n| **HRmax** | See stat panel | `PhysiologyDaily.HRmax_est` \u2014 from observed peak |\n| **RHR (7d median)** | See stat panel | `PhysiologyDaily.RHR_7d_median` \u2014 rolling |\n| **HRR** | See stat panel | `PhysiologyDaily.HRR` = HRmax \u2212 RHR |\n\n> \u26a0\ufe0f **Note on RHR baseline:** The pipeline uses a 7-day rolling median RHR, which shifts with training load and stress. Current RHR baseline is elevated vs the historical floor. This is real: elevated training load and/or less recovery.\n\n---\n\n### Zone Method \u2014 Karvonen (HRR-based)\nZones are calculated as: `RHR + (HRR \u00d7 %)`\n\n| Zone | Name | % HRR |\n|---|---|---|\n| **Z1** | Recovery | 50\u201360% |\n| **Z2** | Aerobic Base | 60\u201370% |\n| **Z3** | Aerobic Threshold | 70\u201380% |\n| **Z4** | Lactate Threshold | 80\u201390% |\n| **Z5** | VO2max | 90\u2013100% |\n\nActual BPM boundaries are live in the **Zone Boundaries** table to the right.\n\n---\n\n### HRmax Evidence\n\nPipeline uses **183 bpm** (observed 184 bpm on 5 Feb 2025). A **189 bpm** was recorded on 1 Jun 2026 (running, avgHR 165, 20 min). If genuine, the athlete profile should be updated. Trail running max = 180 (reliable, sustained).\n\n---\n\n### LTHR Status\n\u26a0\ufe0f `LTHR_run_bpm_est` is not currently being calculated (null in `PerformanceDaily`). The `lthr_used` values in `DerivedActivity` show 181\u2013186 bpm \u2014 near HRmax and physiologically implausible. Pipeline misconfiguration. Best proxy: 20-min HR from sustained efforts.\n\n---\n\n### Device\nCurrent device: **Instinct 3 - 50mm, AMOLED**\n\n**Medication note:** Atenolol + Vyvanse. Elevated RHR baseline (~60 bpm rolling) narrows HRR and shifts all zone boundaries upward.\n\n**Ultra target:** 80\u201385% of weekly volume in Z1\u2013Z2.",
+        "mode": "markdown"
+      },
+      "targets": [],
+      "title": "HR ZONES \u2014 Live from PhysiologyDaily (Karvonen / HRR-based)",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "description": "Actual HR zone boundaries in use by the pipeline today. Updated daily.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "decimals": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Zone"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "index": 0,
+                        "text": "Z1 \u2014 Recovery"
+                      },
+                      "1": {
+                        "index": 1,
+                        "text": "Z2 \u2014 Aerobic"
+                      },
+                      "2": {
+                        "index": 2,
+                        "text": "Z3 \u2014 Tempo"
+                      },
+                      "3": {
+                        "index": 3,
+                        "text": "Z4 \u2014 Threshold"
+                      },
+                      "4": {
+                        "index": 4,
+                        "text": "Z5 \u2014 VO2max"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HR Low"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bpm"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HR High"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bpm"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 20,
+        "w": 10,
+        "x": 14,
+        "y": 4
+      },
+      "id": 3,
+      "options": {
+        "cellHeight": "md",
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "alias": "Zone 1",
+          "query": "SELECT last(\"Z1_Low\") AS \"HR Low\", last(\"Z1_High\") AS \"HR High\" FROM \"PhysiologyDaily\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "table"
+        },
+        {
+          "alias": "Zone 2",
+          "query": "SELECT last(\"Z2_Low\") AS \"HR Low\", last(\"Z2_High\") AS \"HR High\" FROM \"PhysiologyDaily\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "B",
+          "resultFormat": "table"
+        },
+        {
+          "alias": "Zone 3",
+          "query": "SELECT last(\"Z3_Low\") AS \"HR Low\", last(\"Z3_High\") AS \"HR High\" FROM \"PhysiologyDaily\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "C",
+          "resultFormat": "table"
+        },
+        {
+          "alias": "Zone 4",
+          "query": "SELECT last(\"Z4_Low\") AS \"HR Low\", last(\"Z4_High\") AS \"HR High\" FROM \"PhysiologyDaily\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "D",
+          "resultFormat": "table"
+        },
+        {
+          "alias": "Zone 5",
+          "query": "SELECT last(\"Z5_Low\") AS \"HR Low\", last(\"Z5_High\") AS \"HR High\" FROM \"PhysiologyDaily\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "E",
+          "resultFormat": "table"
+        }
+      ],
+      "title": "Zone Boundaries \u2014 Live from PhysiologyDaily",
+      "transformations": [
+        {
+          "id": "reduce",
+          "options": {
+            "includeTimeField": false,
+            "labelsToFields": false,
+            "mode": "reduceFields",
+            "reducers": [
+              "lastNotNull"
+            ]
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Zone",
+            "mode": "index",
+            "reduce": {
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "HR High": 2,
+              "HR Low": 1,
+              "Zone": 0
+            },
+            "orderByMode": "manual",
+            "renameByName": {
+              "Zone": "HR Zone"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 0,
+            "pointSize": 6,
+            "showPoints": "always",
+            "spanNulls": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "bpm"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HRmax (pipeline)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#f59e0b",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    8,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Trail Running MaxHR",
+          "query": "SELECT max(\"maxHR\") FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='trail_running' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Running MaxHR",
+          "query": "SELECT max(\"maxHR\") FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='running' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
+        },
+        {
+          "alias": "Inline Skating MaxHR",
+          "query": "SELECT max(\"maxHR\") FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='inline_skating' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "C"
+        },
+        {
+          "alias": "Indoor Cardio MaxHR",
+          "query": "SELECT max(\"maxHR\") FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='indoor_cardio' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "D"
+        },
+        {
+          "alias": "HRmax (pipeline)",
+          "query": "SELECT last(\"HRmax_est\") FROM \"PhysiologyDaily\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "E"
+        }
+      ],
+      "title": "HRmax Evidence \u2014 MaxHR per Activity by Type",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "m"
+        }
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 10,
+        "x": 0,
+        "y": 33
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "sort": "desc"
+      },
+      "targets": [
+        {
+          "alias": "Z1 Recovery",
+          "query": "SELECT sum(\"hrTimeInZone_1\")/60 FROM \"ActivitySummary\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Z2 Aerobic Base",
+          "query": "SELECT sum(\"hrTimeInZone_2\")/60 FROM \"ActivitySummary\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "B"
+        },
+        {
+          "alias": "Z3 Threshold",
+          "query": "SELECT sum(\"hrTimeInZone_3\")/60 FROM \"ActivitySummary\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "C"
+        },
+        {
+          "alias": "Z4 LT",
+          "query": "SELECT sum(\"hrTimeInZone_4\")/60 FROM \"ActivitySummary\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "D"
+        },
+        {
+          "alias": "Z5 VO2max",
+          "query": "SELECT sum(\"hrTimeInZone_5\")/60 FROM \"ActivitySummary\" WHERE $timeFilter",
+          "rawQuery": true,
+          "refId": "E"
+        }
+      ],
+      "title": "Zone Distribution \u2014 All activities (device-recorded zones)",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 80
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "m"
+        }
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 14,
+        "x": 10,
+        "y": 33
+      },
+      "id": 5,
+      "options": {
+        "barWidth": 0.97,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "stacking": {
+          "mode": "normal"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Z1",
+          "query": "SELECT sum(\"hrTimeInZone_1\")/60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Z2",
+          "query": "SELECT sum(\"hrTimeInZone_2\")/60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+          "rawQuery": true,
+          "refId": "B"
+        },
+        {
+          "alias": "Z3",
+          "query": "SELECT sum(\"hrTimeInZone_3\")/60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+          "rawQuery": true,
+          "refId": "C"
+        },
+        {
+          "alias": "Z4",
+          "query": "SELECT sum(\"hrTimeInZone_4\")/60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+          "rawQuery": true,
+          "refId": "D"
+        },
+        {
+          "alias": "Z5",
+          "query": "SELECT sum(\"hrTimeInZone_5\")/60 FROM \"ActivitySummary\" WHERE $timeFilter GROUP BY time(7d) fill(0)",
+          "rawQuery": true,
+          "refId": "E"
+        }
+      ],
+      "title": "Weekly Zone Distribution \u2014 Polarisation Check",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "bpm"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RHR 7d Median (pipeline)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#22c55e",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2.5
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HRmax estimate (pipeline)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#f59e0b",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    8,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Resting HR"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3b82f6",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Daily MaxHR recorded"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#ef4444",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    3,
+                    3
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Resting HR",
+          "query": "SELECT mean(\"restingHeartRate\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Daily MaxHR recorded",
+          "query": "SELECT max(\"maxHeartRate\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
+        },
+        {
+          "alias": "RHR 7d Median (pipeline)",
+          "query": "SELECT last(\"RHR_7d_median\") FROM \"PhysiologyDaily\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "C"
+        },
+        {
+          "alias": "HRmax estimate (pipeline)",
+          "query": "SELECT last(\"HRmax_est\") FROM \"PhysiologyDaily\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Daily MaxHR vs RHR \u2014 Zone Anchor Drift",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "bpm"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RHR 7d Median"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#22c55e",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Z1 Low boundary"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3b82f6",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    4,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Z2 High boundary"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#f97316",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    4,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "RHR 7d Median",
+          "query": "SELECT last(\"RHR_7d_median\") FROM \"PhysiologyDaily\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Z1 Low boundary",
+          "query": "SELECT last(\"Z1_Low\") FROM \"PhysiologyDaily\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
+        },
+        {
+          "alias": "Z2 High boundary",
+          "query": "SELECT last(\"Z2_High\") FROM \"PhysiologyDaily\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "C"
+        }
+      ],
+      "title": "RHR Trend \u2014 7d Median (zone anchor drift over time)",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "1h",
+  "schemaVersion": 42,
+  "tags": [
+    "ai",
+    "coach",
+    "hr-zones"
+  ],
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "1h",
+      "6h",
+      "1d"
+    ]
+  },
+  "timezone": "Australia/Melbourne",
+  "title": "AI Coach \u2014 HR Zones & Device Setup",
+  "uid": "ai-coach-hr-zones"
+}

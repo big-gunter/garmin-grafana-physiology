@@ -1,0 +1,829 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "description": "CTL (42d), ATL (7d), TSB from TrainingLoadDaily. TSB guide: >25=stale \u00b7 10-25=race ready \u00b7 0-10=neutral \u00b7 -10 to -30=training load \u00b7 <-30=overreached",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 16,
+        "x": 0,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "min",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "CTL \u2014 Fitness (42d avg hrTSS)",
+          "query": "SELECT last(\"CTL_42_TRIMP\") FROM \"TrainingLoadDaily\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "ATL \u2014 Fatigue (7d avg hrTSS)",
+          "query": "SELECT last(\"ATL_7_TRIMP\") FROM \"TrainingLoadDaily\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
+        },
+        {
+          "alias": "TSB \u2014 Form",
+          "query": "SELECT last(\"TSB_TRIMP\") FROM \"TrainingLoadDaily\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "C"
+        },
+        {
+          "alias": "Daily hrTSS",
+          "query": "SELECT mean(\"hrTSS_ts\") FROM \"DerivedActivity\" WHERE $timeFilter GROUP BY time(1d) fill(0)",
+          "rawQuery": true,
+          "refId": "D"
+        }
+      ],
+      "title": "CTL / ATL / TSB \u2014 Training Load Management",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "dark-red",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": -30
+              },
+              {
+                "color": "orange",
+                "value": -10
+              },
+              {
+                "color": "yellow",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 5
+              },
+              {
+                "color": "blue",
+                "value": 25
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "alias": "Form (TSB)",
+          "query": "SELECT last(\"TSB_TRIMP\") FROM \"TrainingLoadDaily\" WHERE time > now()-2d",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Today's Form (TSB)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "alias": "Weekly hrTSS",
+          "query": "SELECT mean(\"hrTSS_ts\") FROM \"DerivedActivity\" WHERE time >= now() - 7d AND time <= now() GROUP BY time(1d) fill(0)",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Weekly TSS",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 16,
+        "y": 4
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "alias": "CTL",
+          "query": "SELECT last(\"CTL_42_TRIMP\") FROM \"TrainingLoadDaily\" WHERE time > now()-2d",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "CTL \u2014 Fitness",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 20,
+        "y": 4
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "alias": "ATL",
+          "query": "SELECT last(\"ATL_7_TRIMP\") FROM \"TrainingLoadDaily\" WHERE time > now()-2d",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "ATL / Fatigue",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 0,
+            "pointSize": 8,
+            "showPoints": "always"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 9
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "hrTSS (running)",
+          "query": "SELECT mean(\"hrTSS_ts\") FROM \"DerivedActivity\" WHERE $timeFilter AND \"hrTSS_ts\" > 0 GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "bikeTSS (cycling)",
+          "query": "SELECT mean(\"bikeTSS_ts\") FROM \"DerivedActivity\" WHERE $timeFilter AND \"bikeTSS_ts\" > 0 GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
+        }
+      ],
+      "title": "hrTSS Per Activity \u2014 Raw Training Stress",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "purple",
+            "mode": "fixed"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 0,
+            "pointSize": 6,
+            "showPoints": "always"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 9
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "TRIMP Edwards",
+          "query": "SELECT mean(\"TRIMP_Edwards_ts\") FROM \"DerivedActivity\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "TRIMP \u2014 Training Impulse (Edwards Method)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "description": "Calculated as avgHR/LTHR (166 bpm validated). IF=1.0 = threshold effort. Ultra target: IF 0.70-0.80.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 0,
+            "pointSize": 8,
+            "showPoints": "always"
+          },
+          "max": 1.3,
+          "min": 0.5,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 0.65
+              },
+              {
+                "color": "yellow",
+                "value": 0.85
+              },
+              {
+                "color": "orange",
+                "value": 0.95
+              },
+              {
+                "color": "red",
+                "value": 1.05
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "IF (avgHR/LTHR=166)",
+          "query": "SELECT mean(\"averageHR\") / 166 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='trail_running' AND \"averageHR\" > 0 GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Intensity Factor \u2014 How Hard Were Sessions?",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 0,
+            "pointSize": 8,
+            "showPoints": "always"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Critical Speed Pace (s/km)",
+          "query": "SELECT mean(\"cs_pace_s_per_km\") FROM \"DerivedActivity\" WHERE $timeFilter AND \"cs_pace_s_per_km\" > 0 AND \"cs_pace_s_per_km\" < 700 GROUP BY time(7d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "GAP Pace Trend \u2014 Grade Adjusted Performance",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 80
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "km"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 25
+      },
+      "id": 14,
+      "options": {
+        "barWidth": 0.97,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Trail Running km",
+          "query": "SELECT sum(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='trail_running' GROUP BY time(7d) fill(0)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Cross Training km",
+          "query": "SELECT sum(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND (\"activityType\"='inline_skating' OR \"activityType\"='gravel_cycling') GROUP BY time(7d) fill(0)",
+          "rawQuery": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Weekly Distance \u2014 Actual",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "km"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 25
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "sort": "desc"
+      },
+      "targets": [
+        {
+          "alias": "Trail Running",
+          "query": "SELECT sum(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='trail_running'",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Inline Skating",
+          "query": "SELECT sum(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='inline_skating'",
+          "rawQuery": true,
+          "refId": "B"
+        },
+        {
+          "alias": "Gravel Cycling",
+          "query": "SELECT sum(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='gravel_cycling'",
+          "rawQuery": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Volume Distribution by Activity Type",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto"
+          },
+          "max": 55,
+          "min": 35,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "VO2max (Garmin official)",
+          "query": "SELECT mean(\"VO2_max_value\") FROM \"VO2_Max\" WHERE $timeFilter GROUP BY time(7d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "VO2max (pipeline est)",
+          "query": "SELECT mean(\"VO2max_est_run\") FROM \"PerformanceDaily\" WHERE $timeFilter AND \"VO2max_est_run\" > 0 GROUP BY time(7d) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
+        },
+        {
+          "alias": "VO2max (per activity)",
+          "query": "SELECT mean(\"vo2max_est\") FROM \"DerivedActivity\" WHERE $timeFilter AND \"vo2max_est\" > 30 GROUP BY time(7d) fill(null)",
+          "rawQuery": true,
+          "refId": "C"
+        }
+      ],
+      "title": "VO2max Trajectory \u2014 All Sources",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "5m",
+  "schemaVersion": 42,
+  "tags": [
+    "performance",
+    "analytics",
+    "tss",
+    "ctl",
+    "atl"
+  ],
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m",
+      "1h",
+      "1d"
+    ]
+  },
+  "timezone": "Australia/Melbourne",
+  "title": "Performance Analytics \u2014 TrainingPeaks Style",
+  "uid": "performance-analytics"
+}

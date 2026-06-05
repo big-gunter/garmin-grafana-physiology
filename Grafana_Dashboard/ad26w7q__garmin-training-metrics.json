@@ -1,46 +1,45 @@
 {
-
   "__requires": [
     {
-      "type": "panel",
       "id": "barchart",
       "name": "Bar chart",
+      "type": "panel",
       "version": ""
     },
     {
-      "type": "panel",
       "id": "gauge",
       "name": "Gauge",
+      "type": "panel",
       "version": ""
     },
     {
-      "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
+      "type": "grafana",
       "version": "12.4.0"
     },
     {
-      "type": "datasource",
       "id": "influxdb",
       "name": "InfluxDB",
+      "type": "datasource",
       "version": "1.0.0"
     },
     {
-      "type": "panel",
       "id": "stat",
       "name": "Stat",
+      "type": "panel",
       "version": ""
     },
     {
-      "type": "panel",
       "id": "table",
       "name": "Table",
+      "type": "panel",
       "version": ""
     },
     {
-      "type": "panel",
       "id": "timeseries",
       "name": "Time series",
+      "type": "panel",
       "version": ""
     }
   ],
@@ -2991,6 +2990,5 @@
   "timezone": "browser",
   "title": "Garmin Training Metrics",
   "uid": "ad26w7q",
-  "version": 2,
   "weekStart": ""
 }

@@ -1,0 +1,885 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "minWidth": 80
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "activityName"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Activity"
+              },
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "activityType"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Type"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "dist_km"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Dist (km)"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "elapsedDuration"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Duration"
+              },
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "averageHR"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Avg HR"
+              },
+              {
+                "id": "unit",
+                "value": "bpm"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "#22c55e",
+                      "value": 0
+                    },
+                    {
+                      "color": "#f59e0b",
+                      "value": 130
+                    },
+                    {
+                      "color": "#ef4444",
+                      "value": 155
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "maxHR"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Max HR"
+              },
+              {
+                "id": "unit",
+                "value": "bpm"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "calories"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cal"
+              },
+              {
+                "id": "unit",
+                "value": "kcal"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "locationName"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Location"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lapCount"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Laps"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "query": "SELECT \"activityName\", \"activityType\", \"distance\"/1000 AS \"dist_km\", \"elapsedDuration\", \"averageHR\", \"maxHR\", \"calories\", \"locationName\", \"lapCount\" FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\" != 'No Activity' ORDER BY time DESC LIMIT 15",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "RECENT ACTIVITIES",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 90,
+            "lineWidth": 0
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hrTimeInZone_1"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Z1 Recovery"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3b82f6",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hrTimeInZone_2"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Z2 Aerobic"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#22c55e",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hrTimeInZone_3"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Z3 Threshold"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#f59e0b",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hrTimeInZone_4"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Z4 Lactate"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#f97316",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hrTimeInZone_5"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Z5 VO2max"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#ef4444",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 15,
+        "x": 0,
+        "y": 8
+      },
+      "id": 2,
+      "options": {
+        "barWidth": 0.97,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "stacking": "normal",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "xTickLabelRotation": -30
+      },
+      "targets": [
+        {
+          "query": "SELECT \"hrTimeInZone_1\", \"hrTimeInZone_2\", \"hrTimeInZone_3\", \"hrTimeInZone_4\", \"hrTimeInZone_5\" FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\" != 'No Activity' ORDER BY time DESC LIMIT 10",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "HR ZONE DISTRIBUTION \u2014 LAST 10 ACTIVITIES",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#f97316",
+            "mode": "fixed"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Activities"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total Distance"
+              },
+              {
+                "id": "unit",
+                "value": "km"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total Time"
+              },
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "D"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Total Calories"
+              },
+              {
+                "id": "unit",
+                "value": "kcal"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 9,
+        "x": 15,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "query": "SELECT count(\"distance\") FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\" != 'No Activity'",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "query": "SELECT sum(\"distance\")/1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\" != 'No Activity'",
+          "rawQuery": true,
+          "refId": "B"
+        },
+        {
+          "query": "SELECT sum(\"elapsedDuration\") FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\" != 'No Activity'",
+          "rawQuery": true,
+          "refId": "C"
+        },
+        {
+          "query": "SELECT sum(\"calories\") FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\" != 'No Activity'",
+          "rawQuery": true,
+          "refId": "D"
+        }
+      ],
+      "title": "PERIOD TOTALS",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "description": "GPS points from the most recent activity in the time window, coloured by heart rate. Narrow the time picker to now-1d to isolate a specific activity.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "dark-red",
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 4,
+      "options": {
+        "basemap": {
+          "config": {
+            "server": "world-imagery",
+            "showLabels": true,
+            "theme": "auto"
+          },
+          "name": "Layer 0",
+          "opacity": 1,
+          "tooltip": true,
+          "type": "esri-xyz"
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": false,
+          "showScale": true,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "showLegend": false,
+              "style": {
+                "color": {
+                  "fixed": "#040404"
+                },
+                "opacity": 0.4,
+                "size": {
+                  "fixed": 5,
+                  "max": 15,
+                  "min": 2
+                },
+                "symbol": {
+                  "fixed": "img/icons/marker/circle.svg",
+                  "mode": "fixed"
+                }
+              }
+            },
+            "location": {
+              "mode": "auto"
+            },
+            "name": "Backdrop",
+            "tooltip": true,
+            "type": "markers"
+          },
+          {
+            "config": {
+              "showLegend": true,
+              "style": {
+                "color": {
+                  "field": "HR",
+                  "fixed": "dark-green"
+                },
+                "opacity": 0.8,
+                "size": {
+                  "fixed": 3,
+                  "max": 15,
+                  "min": 2
+                },
+                "symbol": {
+                  "fixed": "img/icons/marker/circle.svg",
+                  "mode": "fixed"
+                }
+              }
+            },
+            "filterData": {
+              "id": "byRefId",
+              "options": "joinByField-I-J-A"
+            },
+            "location": {
+              "mode": "auto"
+            },
+            "name": "Heart Rate",
+            "opacity": 0.8,
+            "tooltip": false,
+            "type": "markers"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allLayers": true,
+          "id": "fit",
+          "lat": -37.9,
+          "lon": 145.35,
+          "padding": 3,
+          "zoom": 12
+        }
+      },
+      "targets": [
+        {
+          "alias": "lat",
+          "query": "SELECT \"Latitude\" FROM \"ActivityGPS\" WHERE $timeFilter ORDER BY time DESC LIMIT 8000",
+          "rawQuery": true,
+          "refId": "I"
+        },
+        {
+          "alias": "lon",
+          "query": "SELECT \"Longitude\" FROM \"ActivityGPS\" WHERE $timeFilter ORDER BY time DESC LIMIT 8000",
+          "rawQuery": true,
+          "refId": "J"
+        },
+        {
+          "alias": "HR",
+          "query": "SELECT \"HeartRate\" FROM \"ActivityGPS\" WHERE $timeFilter ORDER BY time DESC LIMIT 8000",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "GPS ROUTE \u2014 MOST RECENT ACTIVITY (HR colour overlay)",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "Time",
+            "mode": "outer"
+          }
+        }
+      ],
+      "type": "geomap"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Activity_ID"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Activity ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TRIMP_Edwards_ts"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TRIMP (Edwards)"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TRIMP_Banister_ts"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "TRIMP (Banister)"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rTSS_ts"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "rTSS"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hrTSS_ts"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HR-TSS"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "vo2max_est"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "VO\u2082max Est."
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cs_pace_s_per_km"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Critical Pace (s/km)"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "gap_distance_km"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "GAP Dist (km)"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "best20m_vam_m_per_h"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "VAM 20m (m/h)"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "id": 5,
+      "options": {
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "query": "SELECT \"Activity_ID\", \"TRIMP_Edwards_ts\", \"TRIMP_Banister_ts\", \"rTSS_ts\", \"hrTSS_ts\", \"vo2max_est\", \"cs_pace_s_per_km\", \"gap_distance_km\", \"best20m_vam_m_per_h\" FROM \"DerivedActivity\" WHERE $timeFilter ORDER BY time DESC LIMIT 15",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "LOAD & PERFORMANCE METRICS",
+      "type": "table"
+    }
+  ],
+  "preload": false,
+  "refresh": "5m",
+  "schemaVersion": 42,
+  "tags": [
+    "gpt100",
+    "activities",
+    "coaching"
+  ],
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ]
+  },
+  "timezone": "Australia/Melbourne",
+  "title": "Recent Activities",
+  "uid": "gpt100-recent-activities"
+}

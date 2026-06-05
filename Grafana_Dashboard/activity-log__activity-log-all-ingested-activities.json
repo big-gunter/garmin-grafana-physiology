@@ -1,0 +1,321 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "custom": {
+            "fillOpacity": 80
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "barWidth": 0.97,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Activities per Week",
+          "query": "SELECT count(\"distance\") FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\" != 'No Activity' GROUP BY time(7d) fill(0)",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Activity Count by Week \u2014 Full History",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 0,
+            "pointSize": 6,
+            "showPoints": "always",
+            "spanNulls": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "km"
+        }
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Trail Running (km)",
+          "query": "SELECT mean(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='trail_running' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Inline Skating (km)",
+          "query": "SELECT mean(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='inline_skating' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
+        },
+        {
+          "alias": "Gravel Cycling (km)",
+          "query": "SELECT mean(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='gravel_cycling' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "C"
+        },
+        {
+          "alias": "Road Cycling (km)",
+          "query": "SELECT mean(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='road_biking' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "D"
+        },
+        {
+          "alias": "Running (km)",
+          "query": "SELECT mean(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='running' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "E"
+        }
+      ],
+      "title": "All Activities \u2014 Distance per Activity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 1,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Steps (data presence indicator)",
+          "query": "SELECT mean(\"totalSteps\") FROM \"DailyStats\" WHERE $timeFilter GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "DailyStats Coverage \u2014 Steps per Day",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "garmin_influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 80
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "km"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 6,
+      "options": {
+        "barWidth": 0.97,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "stacking": {
+          "mode": "normal"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Trail Running",
+          "query": "SELECT sum(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='trail_running' GROUP BY time(30d) fill(0)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Inline Skating",
+          "query": "SELECT sum(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='inline_skating' GROUP BY time(30d) fill(0)",
+          "rawQuery": true,
+          "refId": "B"
+        },
+        {
+          "alias": "Gravel Cycling",
+          "query": "SELECT sum(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='gravel_cycling' GROUP BY time(30d) fill(0)",
+          "rawQuery": true,
+          "refId": "C"
+        },
+        {
+          "alias": "Road Cycling",
+          "query": "SELECT sum(\"distance\") / 1000 FROM \"ActivitySummary\" WHERE $timeFilter AND \"activityType\"='road_biking' GROUP BY time(30d) fill(0)",
+          "rawQuery": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Monthly Distance by Sport",
+      "type": "barchart"
+    }
+  ],
+  "preload": false,
+  "refresh": "5m",
+  "schemaVersion": 42,
+  "tags": [
+    "activities",
+    "log"
+  ],
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m",
+      "1h"
+    ]
+  },
+  "timezone": "Australia/Melbourne",
+  "title": "Activity Log \u2014 All Ingested Activities",
+  "uid": "activity-log"
+}
