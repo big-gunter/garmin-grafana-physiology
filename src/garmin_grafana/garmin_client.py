@@ -1,12 +1,31 @@
 from __future__ import annotations
 
+import json
 import logging
+import os
 import sys
 from typing import Any
 
 import requests
 from garth.exc import GarthHTTPError
 from garminconnect import Garmin, GarminConnectAuthenticationError
+
+
+def _sanitize_token_timestamps(token_dir: str) -> None:
+    """Cast float timestamps to int — pydantic OAuth2Token requires strict int."""
+    token_file = os.path.join(token_dir, "oauth2_token.json")
+    if not os.path.exists(token_file):
+        return
+    with open(token_file) as f:
+        data = json.load(f)
+    changed = False
+    for key in ("expires_at", "refresh_token_expires_at"):
+        if isinstance(data.get(key), float):
+            data[key] = int(data[key])
+            changed = True
+    if changed:
+        with open(token_file, "w") as f:
+            json.dump(data, f, indent=2)
 
 
 def garmin_login(
@@ -24,6 +43,7 @@ def garmin_login(
     """
     try:
         logging.info(f"Trying to login to Garmin Connect using token data from directory '{token_dir}'...")
+        _sanitize_token_timestamps(token_dir)
         garmin = Garmin()
         garmin.login(token_dir)
         logging.info("login to Garmin Connect successful using stored session tokens.")
