@@ -827,8 +827,11 @@ def acsm_vo2_running(speed_mps: np.ndarray, grade: np.ndarray) -> np.ndarray:
 
 def best_rolling_mean(series: np.ndarray, window_s: int, sample_rate_hz: float) -> float:
     w = max(3, int(window_s * sample_rate_hz))
+    # Require 90% of the window to be non-NaN. GPS speed has small gaps (3–8%)
+    # from signal dropouts; min_periods=w would make every window fail.
+    min_p = max(3, int(w * 0.9))
     s = pd.Series(series)
-    rm = s.rolling(w, min_periods=w).mean()
+    rm = s.rolling(w, min_periods=min_p).mean()
     if rm.dropna().empty:
         return np.nan
     return float(rm.max())
