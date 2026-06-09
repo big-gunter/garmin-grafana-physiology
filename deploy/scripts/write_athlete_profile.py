@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-write_athlete_profile.py — Seed the AthleteProfile record in InfluxDB.
+write_athlete_profile.py — Write an AthleteProfile record to InfluxDB.
 
-Writes validated physiological constants for the athlete.  Run this once
-after deploying a new stack, or whenever constants change (new observed HRmax,
-updated LTHR, revised RHR floor, etc.).
+Writes physiological constants for an athlete.  Run this once after deploying
+a new stack, or whenever constants change (new observed HRmax, updated LTHR,
+revised RHR floor, etc.).  Version is auto-incremented from the existing record
+so the history stays auditable.
 
 The ingest system reads the most recent AthleteProfile record at startup.
 After writing a new record, restart the garmin-fetch-data container to pick it
@@ -16,11 +17,14 @@ prints a confirmation and skips writing.  Pass --force to overwrite anyway.
 
 Usage (inside container):
   docker compose exec garmin-fetch-data \\
-    python /app/scripts/write_athlete_profile.py
+    python /app/scripts/write_athlete_profile.py \\
+      --athlete-id connor_cooper --hrmax 200 --rhr-floor 59 --lthr 170 \\
+      --hrmax-source observed_200bpm
 
 Usage (local, with env loaded):
   source <(grep -v '^#' deploy/.env | sed 's/^/export /') \\
-    && python deploy/scripts/write_athlete_profile.py
+    && python deploy/scripts/write_athlete_profile.py \\
+         --athlete-id jon_cooper --hrmax 183 --rhr-floor 47 --lthr 136
 
 Env vars required: INFLUXDB_HOST, INFLUXDB_PORT, INFLUXDB_USERNAME,
                    INFLUXDB_PASSWORD, INFLUXDB_DATABASE
@@ -46,35 +50,24 @@ from garmin_grafana.athlete_profile import (  # noqa: E402
     write_athlete_profile,
 )
 
-# ── Athlete constants ──────────────────────────────────────────────────────────
-# Jon Cooper validated values — update this block when values change, then
-# increment version so the history is auditable in InfluxDB.
-PROFILE = AthleteProfile.build(
-    hrmax_bpm=183,
-    rhr_floor_bpm=47,
-    lthr_bpm=136,
-    hrmax_source="observed_184bpm_2025-02-05",
-    notes=(
-        "atenolol 25mg suppresses HR; validated max 184 bpm observed 5 Feb 2025 "
-        "trail run; zones Karvonen HRR method"
-    ),
-    version=1,
-    athlete_id="jon_cooper",
-)
-# ──────────────────────────────────────────────────────────────────────────────
-
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Seed AthleteProfile in InfluxDB")
+    parser = argparse.ArgumentParser(description="Write an AthleteProfile record to InfluxDB")
+    parser.add_argument("--athlete-id",   required=True, help="Athlete identifier (e.g. jon_cooper)")
+    parser.add_argument("--hrmax",        required=True, type=int, help="Maximum heart rate (bpm)")
+    parser.add_argument("--rhr-floor",    required=True, type=int, help="Resting HR floor for Karvonen zones (bpm)")
+    parser.add_argument("--lthr",         required=True, type=int, help="Lactate threshold HR (bpm, reference only)")
+    parser.add_argument("--hrmax-source", default="", help="Label for HRmax provenance (e.g. observed_200bpm)")
+    parser.add_argument("--notes",        default="", help="Free-text notes stored with the record")
     parser.add_argument(
         "--force", action="store_true",
-        help="Write even if a record with the same hrmax_bpm already exists"
+        help="Write even if a record with the same hrmax_bpm already exists",
     )
     args = parser.parse_args()
 
     existing = load_athlete_profile(garmin_fetch.influxdbclient, garmin_fetch.INFLUXDB_DATABASE)
 
-    if existing.version > 0 and existing.hrmax_bpm == PROFILE.hrmax_bpm and not args.force:
+    if existing.version > 0 and existing.hrmax_bpm == args.hrmax and not args.force:
         print(
             f"AthleteProfile already exists with hrmax_bpm={existing.hrmax_bpm} "
             f"(version={existing.version}, source={existing.hrmax_source!r}) — skipping.\n"
@@ -82,25 +75,37 @@ def main() -> int:
         )
         return 0
 
+    next_version = existing.version + 1
+
+    profile = AthleteProfile.build(
+        hrmax_bpm=args.hrmax,
+        rhr_floor_bpm=args.rhr_floor,
+        lthr_bpm=args.lthr,
+        hrmax_source=args.hrmax_source,
+        notes=args.notes,
+        version=next_version,
+        athlete_id=args.athlete_id,
+    )
+
     write_athlete_profile(
         garmin_fetch.influxdbclient,
-        PROFILE,
+        profile,
         influx_version=garmin_fetch.INFLUXDB_VERSION,
     )
     print(
         f"\nAthleteProfile written successfully:\n"
-        f"  athlete_id    = {PROFILE.athlete_id}\n"
-        f"  hrmax_bpm     = {PROFILE.hrmax_bpm}\n"
-        f"  rhr_floor_bpm = {PROFILE.rhr_floor_bpm}\n"
-        f"  lthr_bpm      = {PROFILE.lthr_bpm}\n"
-        f"  hrr_bpm       = {PROFILE.hrr_bpm}\n"
-        f"  hrmax_source  = {PROFILE.hrmax_source}\n"
-        f"  version       = {PROFILE.version}\n"
-        f"  Z1:  {PROFILE.karvonen_z1_low}–{PROFILE.karvonen_z1_high} bpm\n"
-        f"  Z2:  {PROFILE.karvonen_z2_low}–{PROFILE.karvonen_z2_high} bpm\n"
-        f"  Z3:  {PROFILE.karvonen_z3_low}–{PROFILE.karvonen_z3_high} bpm\n"
-        f"  Z4:  {PROFILE.karvonen_z4_low}–{PROFILE.karvonen_z4_high} bpm\n"
-        f"  Z5:  {PROFILE.karvonen_z5_low}–{PROFILE.karvonen_z5_high} bpm\n"
+        f"  athlete_id    = {profile.athlete_id}\n"
+        f"  hrmax_bpm     = {profile.hrmax_bpm}\n"
+        f"  rhr_floor_bpm = {profile.rhr_floor_bpm}\n"
+        f"  lthr_bpm      = {profile.lthr_bpm}\n"
+        f"  hrr_bpm       = {profile.hrr_bpm}\n"
+        f"  hrmax_source  = {profile.hrmax_source}\n"
+        f"  version       = {profile.version}\n"
+        f"  Z1:  {profile.karvonen_z1_low}–{profile.karvonen_z1_high} bpm\n"
+        f"  Z2:  {profile.karvonen_z2_low}–{profile.karvonen_z2_high} bpm\n"
+        f"  Z3:  {profile.karvonen_z3_low}–{profile.karvonen_z3_high} bpm\n"
+        f"  Z4:  {profile.karvonen_z4_low}–{profile.karvonen_z4_high} bpm\n"
+        f"  Z5:  {profile.karvonen_z5_low}–{profile.karvonen_z5_high} bpm\n"
         f"\nNext steps:\n"
         f"  1. Restart the garmin-fetch-data container to load the new profile.\n"
         f"  2. Run: python /app/scripts/compute_physiology_backfill.py --backfill\n"
